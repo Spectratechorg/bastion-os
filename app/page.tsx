@@ -8,7 +8,7 @@ import { authClient } from '@/lib/auth-client'
 type Dashboard = { guards: Array<{ id: string; name: string; initials: string; site: string | null; status: string; lastCheckIn: string | null; lastLatitude: number | null; lastLongitude: number | null }>; activities: Array<{ id: string; title: string; body: string; tone: string; createdAt: string }>; kpis: { activeGuards: number; registeredGuards: number; attendanceRate: number; openIncidents: number; unacknowledgedAlerts: number } }
 
 const toneClasses: Record<string, string> = { emerald: 'bg-[#e8f5f0] text-[#2d846d]', amber: 'bg-[#fff4dc] text-[#b77a20]', red: 'bg-[#fff0eb] text-[#cb6846]', blue: 'bg-[#edf3fb] text-[#5d82ad]' }
-const sectionPaths: Record<string, string> = { Overview: '/', Guards: '/guards', Sites: '/sites', Attendance: '/attendance', 'Live map': '/live-map', Incidents: '/incidents', Alerts: '/alerts' }
+const sectionPaths: Record<string, string> = { Overview: '/', Guards: '/guards', Sites: '/sites', Attendance: '/attendance', Patrols: '/patrols', 'Live map': '/live-map', Incidents: '/incidents', Alerts: '/alerts', Finances: '/finances' }
 
 function MapPanel({ guards }: { guards: Dashboard['guards'] }) {
   const positions = ['left-[29%] top-[38%]', 'left-[61%] top-[28%]', 'left-[72%] top-[62%]', 'left-[42%] top-[69%]']
@@ -19,7 +19,7 @@ export default function Page() {
   const router = useRouter()
   const { data: session, isPending } = authClient.useSession()
   useEffect(() => { if (!isPending && !session?.user) router.replace('/sign-in') }, [isPending, router, session?.user])
-  const navItems: Array<[string, LucideIcon]> = [['Overview', Activity], ['Guards', Users], ['Sites', Radar], ['Attendance', ScanLine], ['Live map', MapPin], ['Incidents', Siren], ['Alerts', Bell]]
+  const navItems: Array<[string, LucideIcon]> = [['Overview', Activity], ['Guards', Users], ['Sites', Radar], ['Attendance', ScanLine], ['Patrols', ScanLine], ['Live map', MapPin], ['Incidents', Siren], ['Alerts', Bell], ['Finances', Activity]]
   const [data, setData] = useState<Dashboard | null>(null)
   const [error, setError] = useState('')
   useEffect(() => { let active = true; const load = async () => { try { const response = await fetch('/api/dashboard', { cache: 'no-store' }); if (!response.ok) throw new Error('Dashboard API unavailable'); const next = await response.json(); if (active) setData(next) } catch (cause) { if (active) setError(cause instanceof Error ? cause.message : 'Unable to load dashboard') } }; load(); const timer = setInterval(load, 10000); return () => { active = false; clearInterval(timer) } }, [])
