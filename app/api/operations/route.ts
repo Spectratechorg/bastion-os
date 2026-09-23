@@ -10,8 +10,8 @@ const tables = { guards, sites, attendance, patrols, incidents, alerts, finances
 
 export async function GET(request: Request) {
   const userId = await owner(); if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const section = new URL(request.url).searchParams.get('section') as keyof typeof tables | null
-  const table = section === 'live-map' ? patrols : section ? tables[section] : undefined
+  const section = new URL(request.url).searchParams.get('section')
+  const table = section === 'live-map' ? patrols : section && section in tables ? tables[section as keyof typeof tables] : undefined
   if (!table) return NextResponse.json({ error: 'Unknown section' }, { status: 400 })
   const rows = await db.select().from(table).where(eq(table.userId, userId)).orderBy(desc(table.createdAt)).limit(250)
   return NextResponse.json(rows)
