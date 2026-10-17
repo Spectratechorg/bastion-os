@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { PageAction, PageHeader, StatStrip, WorkspaceShell } from '@/components/workspace-shell'
 import { NapoleonLivePage } from '@/components/napoleon-live-page'
+import { OperationsLivePage, OverviewLivePage } from '@/components/operations-live-pages'
 
 type TableRow = { cells: string[]; statusIndex?: number; initials?: string }
 
@@ -156,13 +157,14 @@ function BasicPage({ route }: { route: string }) {
 export function WorkspacePage({ route, financeTab = 'overview' }: { route: string; financeTab?: string }) {
   let content:React.ReactNode
   let active=route
-  if (route==='overview') content=<OverviewPage/>
+  if (route==='overview') content=<OverviewLivePage/>
   else if(route==='finance'){content=<FinancePage tab={financeTab}/>;active='finance'}
   else if(route==='alerts') content=<AlertsPage/>
   else if(route==='clients') content=<ClientsPage/>
   else if(route==='reports') content=<ReportsPage/>
   else if(route==='napoleon') content=<NapoleonLivePage/>
   else if(route==='settings') {content=<SettingsPage/>;active='Settings'}
+  else if (['guards','sites','attendance','patrols','incidents'].includes(route)) content=<OperationsLivePage section={route as 'guards'|'sites'|'attendance'|'patrols'|'incidents'}/>
   else content=<BasicPage route={route}/>
   return <WorkspaceShell active={active}>{content}</WorkspaceShell>
 }
