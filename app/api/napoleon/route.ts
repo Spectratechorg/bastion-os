@@ -1,25 +1,84 @@
 import { NextResponse } from 'next/server'
+import { headers } from 'next/headers'
+import { auth } from '@/lib/auth'
+
+async function isAuthenticated() {
+  const session = await auth.api.getSession({ headers: await headers() })
+  return Boolean(session?.user)
+}
+
+function configuration() {
+  const baseUrl = process.env.NAPOLEON_API_URL?.replace(/\/+$/, '')
+  const apiKey = process.env.NAPOLEON_API_KEY
+  return baseUrl && apiKey ? { baseUrl, apiKey } : null
+}
 
 export async function GET() {
-  const baseUrl = process.env.NAPOLEON_API_URL
-  const apiKey = process.env.NAPOLEON_API_KEY
-  if (!baseUrl || !apiKey) return NextResponse.json({ error: 'Napoleon is not configured' }, { status: 503 })
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/health`, { headers: { Authorization: `Bearer ${apiKey}`, 'x-api-key': apiKey }, cache: 'no-store' })
-  const text = await response.text()
-  return new NextResponse(text, { status: response.status, headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' } })
+  if (!(await isAuthenticated())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const config = configuration()
+  if (!config) return NextResponse.json({ error: 'Napoleon is not configured' }, { status: 503 })
+
+  try {
+    const response = await fetch(`${config.baseUrl}/health`, {
+      headers: { Authorization: `Bearer ${config.apiKey}`, 'x-api-key': config.apiKey },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    })
+    const text = await response.text()
+    return new NextResponse(text, {
+      status: response.status,
+      headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' },
+    })
+  } catch {
+    return NextResponse.json({ error: 'Napoleon service is unreachable' }, { status: 502 })
+  }
 }
 
 export async function POST(request: Request) {
-  const baseUrl = process.env.NAPOLEON_API_URL
-  const apiKey = process.env.NAPOLEON_API_KEY
-  if (!baseUrl || !apiKey) return NextResponse.json({ error: 'Napoleon is not configured' }, { status: 503 })
-  const body = await request.json()
-  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
+  if (!(await isAuthenticated())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const config = configuration()
+  if (!config) return NextResponse.json({ error: 'Napoleon is not configured' }, { status: 503 })
+
+  let body: { messages?: Array<{ role?: string; content?: string }>; model?: string }
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Request body must be valid JSON' }, { status: 400 })
+  }
+
+  if (!Array.isArray(body.messages) || body.messages.length === 0 || body.messages.length > 30) {
+    return NextResponse.json({ error: 'Provide between 1 and 30 chat messages' }, { status: 400 })
+  }
+
+  const messages = body.messages.map(({ role, content }) => {
+    if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string' || !content.trim() || content.length > 4000) {
+      return null
+    }
+    return { role, content: content.trim() }
   })
-  const text = await response.text()
-  return new NextResponse(text, { status: response.status, headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' } })
+
+  if (messages.some((message) => message === null)) {
+    return NextResponse.json({ error: 'Each message must have a user or assistant role and 1–4000 characters of content' }, { status: 400 })
+  }
+
+  try {
+    const response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'x-api-key': config.apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model: body.model ?? 'napoleon-1', messages }),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20000),
+    })
+    const text = await response.text()
+    return new NextResponse(text, {
+      status: response.status,
+      headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' },
+    })
+  } catch {
+    return NextResponse.json({ error: 'Napoleon service is unreachable' }, { status: 502 })
+  }
 }
