@@ -32,6 +32,7 @@ export async function GET(request: Request) {
 const guardCreate = z.object({ name: z.string().trim().min(2), nin: z.string().trim().min(4), phone: z.string().trim().min(7), site: z.string().trim().optional().nullable() })
 const siteCreate = z.object({ name: z.string().trim().min(2), address: z.string().trim().min(4), latitude: z.coerce.number(), longitude: z.coerce.number(), geofenceRadius: z.coerce.number().int().positive().default(100), dangerLevel: z.enum(['low', 'medium', 'high']).default('low') })
 const incidentCreate = z.object({ title: z.string().trim().min(2), description: z.string().trim().min(2), severity: z.enum(['low', 'medium', 'high', 'critical']).default('medium'), site: z.string().trim().min(2) })
+const patrolCreate = z.object({ guardId: z.string().uuid(), siteId: z.string().uuid().nullable().optional(), routeName: z.string().trim().min(2), checkpoint: z.string().trim().min(2) })
 
 export async function POST(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization before creating records.', 401)
@@ -53,10 +54,15 @@ export async function POST(request: Request) {
     const [row] = await db.insert(incidents).values({ ...current, ...data.data, status: 'open', comments: [], timeline: [`${now.toISOString()} Incident reported`], reportedAt: now, createdAt: now }).returning()
     await log(current, 'incident.created', `Incident reported: ${row.title}`, row.site); return NextResponse.json(row, { status: 201 })
   }
+  if (section.data === 'patrols') {
+    const data = patrolCreate.safeParse(payload); if (!data.success) return fail(data.error.issues[0]?.message ?? 'Invalid patrol')
+    const [row] = await db.insert(patrols).values({ ...current, ...data.data, loggedAt: now, latitude: 0, longitude: 0, method: 'manual', withinBounds: true, progress: 0, status: 'in_progress', createdAt: now }).returning()
+    await log(current, 'patrol.started', `Patrol started: ${row.routeName}`, row.checkpoint ?? ''); return NextResponse.json(row, { status: 201 })
+  }
   return fail('This record type is created by the guard check-in workflow.', 405)
 }
 
-const updateInput = z.object({ section: sectionSchema, id: z.string().uuid(), action: z.enum(['update', 'suspend', 'reactivate', 'reissue-nfc', 'deactivate', 'approve', 'flag', 'assign', 'comment', 'status', 'escalate', 'resolve', 'acknowledge']).optional(), status: z.string().max(32).optional(), site: z.string().max(150).nullable().optional(), assigneeId: z.string().uuid().nullable().optional(), comment: z.string().trim().min(1).max(1000).optional(), acknowledged: z.boolean().optional(), name: z.string().trim().min(2).optional(), phone: z.string().trim().min(7).optional(), address: z.string().trim().min(4).optional(), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional(), geofenceRadius: z.coerce.number().int().positive().optional(), dangerLevel: z.enum(['low', 'medium', 'high']).optional() })
+const updateInput = z.object({ section: sectionSchema, id: z.string().uuid(), action: z.enum(['update', 'suspend', 'reactivate', 'reissue-nfc', 'deactivate', 'approve', 'flag', 'assign', 'comment', 'status', 'escalate', 'resolve', 'acknowledge', 'complete']).optional(), status: z.string().max(32).optional(), progress: z.coerce.number().int().min(0).max(100).optional(), site: z.string().max(150).nullable().optional(), assigneeId: z.string().uuid().nullable().optional(), comment: z.string().trim().min(1).max(1000).optional(), acknowledged: z.boolean().optional(), name: z.string().trim().min(2).optional(), phone: z.string().trim().min(7).optional(), address: z.string().trim().min(4).optional(), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional(), geofenceRadius: z.coerce.number().int().positive().optional(), dangerLevel: z.enum(['low', 'medium', 'high']).optional() })
 
 export async function PATCH(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization before editing records.', 401)
@@ -76,6 +82,10 @@ export async function PATCH(request: Request) {
   if (section === 'attendance') {
     const [row] = await db.update(attendance).set({ reviewStatus: action === 'approve' ? 'approved' : action === 'flag' ? 'flagged' : changes.status }).where(where).returning(); if (!row) return fail('Attendance record not found', 404)
     await log(current, `attendance.${action}`, 'Attendance reviewed', action); return NextResponse.json(row)
+  }
+  if (section === 'patrols') {
+    const [row] = await db.update(patrols).set({ status: action === 'complete' ? 'completed' : changes.status, progress: action === 'complete' ? 100 : changes.progress }).where(where).returning(); if (!row) return fail('Patrol not found', 404)
+    await log(current, `patrol.${action}`, `Patrol updated: ${row.routeName ?? row.id}`, action); return NextResponse.json(row)
   }
   if (section === 'incidents') {
     const record = (await db.select().from(incidents).where(where).limit(1))[0]; if (!record) return fail('Incident not found', 404)

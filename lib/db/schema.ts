@@ -100,6 +100,7 @@ export const patrols = pgTable('patrols', {
   routeName: text('route_name'),
   checkpoint: text('checkpoint'),
   progress: integer('progress').notNull().default(0),
+  status: text('status').notNull().default('in_progress'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 

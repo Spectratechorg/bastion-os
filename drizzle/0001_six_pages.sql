@@ -7,3 +7,4 @@ ALTER TABLE "incidents" ADD COLUMN IF NOT EXISTS "timeline" text[] NOT NULL DEFA
 ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "route_name" text;
 ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "checkpoint" text;
 ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "progress" integer NOT NULL DEFAULT 0;
+ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "status" text NOT NULL DEFAULT 'in_progress';
