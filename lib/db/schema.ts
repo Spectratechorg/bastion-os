@@ -20,6 +20,7 @@ export const guards = pgTable('guards', {
   phone: text('phone').notNull(),
   initials: text('initials').notNull(),
   status: text('status').notNull(),
+  suspendedAt: timestamp('suspended_at', { withTimezone: true }),
   site: text('site'),
   nfcToken: text('nfc_token').unique(),
   lastCheckIn: timestamp('last_check_in', { withTimezone: true }),
@@ -38,6 +39,7 @@ export const sites = pgTable('sites', {
   longitude: doublePrecision('longitude').notNull(),
   geofenceRadius: integer('geofence_radius').notNull(),
   status: text('status').notNull(),
+  dangerLevel: text('danger_level').notNull().default('low'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
@@ -52,6 +54,7 @@ export const attendance = pgTable('attendance', {
   longitude: doublePrecision('longitude').notNull(),
   method: text('method').notNull(),
   withinGeofence: boolean('within_geofence').notNull(),
+  reviewStatus: text('review_status').notNull().default('pending'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
@@ -64,6 +67,9 @@ export const incidents = pgTable('incidents', {
   severity: text('severity').notNull(),
   status: text('status').notNull(),
   site: text('site').notNull(),
+  assigneeId: uuid('assignee_id'),
+  comments: text('comments').array().notNull().default([]),
+  timeline: text('timeline').array().notNull().default([]),
   reportedAt: timestamp('reported_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
@@ -91,6 +97,9 @@ export const patrols = pgTable('patrols', {
   longitude: doublePrecision('longitude').notNull(),
   method: text('method').notNull(),
   withinBounds: boolean('within_bounds').notNull(),
+  routeName: text('route_name'),
+  checkpoint: text('checkpoint'),
+  progress: integer('progress').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
