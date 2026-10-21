@@ -5,6 +5,6 @@ import { AuthForm } from '@/components/auth-form'
 
 export default async function SignUpPage() {
   const session = await auth.api.getSession({ headers: await headers() })
-  if (session?.user) redirect('/')
+  if (session?.user) redirect('/overview')
   return <AuthForm mode="sign-up" />
 }

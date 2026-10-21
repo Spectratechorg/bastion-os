@@ -1,38 +1,98 @@
-﻿import { NextResponse } from 'next/server'
-import { headers } from 'next/headers'
+import { NextResponse } from 'next/server'
 import { and, desc, eq } from 'drizzle-orm'
-import { auth } from '@/lib/auth'
+import { z } from 'zod'
+import { actor as sharedActor, fail, isModerator } from '@/lib/server'
 import { db } from '@/lib/db'
-import { alerts, attendance, finances, guards, incidents, patrols, sites } from '@/lib/db/schema'
+import { activityEvents, alerts, attendance, finances, guards, incidents, patrols, sites } from '@/lib/db/schema'
 
-async function owner() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) return null
-  const activeOrganizationId = (session.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId
-  return { userId: session.user.id, organizationId: activeOrganizationId ?? null }
+const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'activity'])
+const tables = { guards, sites, attendance, patrols, incidents, alerts, finances, activity: activityEvents } as const
+
+const actor = sharedActor
+const defined = <T extends Record<string, unknown>>(value: T) => Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined))
+async function log(current: { userId: string; organizationId: string }, type: string, title: string, body: string) {
+  await db.insert(activityEvents).values({ ...current, type, title, body, tone: 'neutral', createdAt: new Date() })
 }
 
-const tables = { guards, sites, attendance, patrols, incidents, alerts, finances } as const
-
 export async function GET(request: Request) {
-  const currentUser = await owner(); if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); if (!currentUser.organizationId) return NextResponse.json({ error: 'No active organization. Create or join an organization before loading records.' }, { status: 403 })
-  const section = new URL(request.url).searchParams.get('section')
-  const table = section === 'live-map' ? patrols : section && section in tables ? tables[section as keyof typeof tables] : undefined
-  if (!table) return NextResponse.json({ error: 'Unknown section' }, { status: 400 })
-  const rows = await db.select().from(table).where(and(eq(table.organizationId, currentUser.organizationId), eq(table.userId, currentUser.userId))).orderBy(desc(table.createdAt)).limit(250)
+  const current = await actor(); if (!current) return fail('Sign in and select an organization to load records.', 401)
+  const section = sectionSchema.safeParse(new URL(request.url).searchParams.get('section')); if (!section.success) return fail('Unknown section')
+  const table = tables[section.data]
+  const rows = await db.select().from(table).where(eq(table.organizationId, current.organizationId)).orderBy(desc(table.createdAt)).limit(250)
   return NextResponse.json(rows)
 }
 
+const guardCreate = z.object({ name: z.string().trim().min(2), nin: z.string().trim().min(4), phone: z.string().trim().min(7), site: z.string().trim().optional().nullable(), monthlySalary: z.coerce.number().int().min(0).max(100000000).default(150000), photoUrl: z.string().max(400000).startsWith('data:image/').optional().nullable() })
+const siteCreate = z.object({ name: z.string().trim().min(2), address: z.string().trim().min(4), latitude: z.coerce.number(), longitude: z.coerce.number(), geofenceRadius: z.coerce.number().int().positive().default(100), dangerLevel: z.enum(['low', 'medium', 'high']).default('low'), clientName: z.string().trim().max(120).optional().nullable() })
+const incidentCreate = z.object({ title: z.string().trim().min(2), description: z.string().trim().min(2), severity: z.enum(['low', 'medium', 'high', 'critical']).default('medium'), site: z.string().trim().min(2) })
+const patrolCreate = z.object({ guardId: z.string().uuid(), siteId: z.string().uuid().nullable().optional(), routeName: z.string().trim().min(2), checkpoint: z.string().trim().min(2) })
+
 export async function POST(request: Request) {
-  const currentUser = await owner(); if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); if (!currentUser.organizationId) return NextResponse.json({ error: 'No active organization. Create or join an organization before creating records.' }, { status: 403 })
-  const body = await request.json(); const now = new Date(); const section = String(body.section)
-  if (section === 'guards') { const name = String(body.name ?? '').trim(), nin = String(body.nin ?? '').trim(), phone = String(body.phone ?? '').trim(); if (!name || !nin || !phone) return NextResponse.json({ error: 'Name, NIN and phone are required' }, { status: 400 }); const [row] = await db.insert(guards).values({ userId: currentUser.userId, organizationId: currentUser.organizationId, name, nin, phone, site: body.site ? String(body.site) : null, initials: name.split(/\s+/).map((p: string) => p[0]).join('').slice(0, 2).toUpperCase(), status: 'active', nfcToken: `BOS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, createdAt: now }).returning(); return NextResponse.json(row) }
-  if (section === 'sites') { const [row] = await db.insert(sites).values({ userId: currentUser.userId, organizationId: currentUser.organizationId, name: String(body.name), address: String(body.address), latitude: Number(body.latitude), longitude: Number(body.longitude), geofenceRadius: Number(body.geofenceRadius || 100), status: 'active', createdAt: now }).returning(); return NextResponse.json(row) }
-  if (section === 'incidents') { const [row] = await db.insert(incidents).values({ userId: currentUser.userId, organizationId: currentUser.organizationId, title: String(body.title), description: String(body.description), severity: String(body.severity || 'medium'), status: 'open', site: String(body.site), reportedAt: now, createdAt: now }).returning(); return NextResponse.json(row) }
-  if (section === 'finances') { const [row] = await db.insert(finances).values({ userId: currentUser.userId, organizationId: currentUser.organizationId, kind: String(body.kind || 'revenue'), label: String(body.label), amount: Number(body.amount || 0), status: String(body.status || 'pending'), dueDate: body.dueDate ? new Date(body.dueDate) : null, notes: body.notes ? String(body.notes) : null, createdAt: now }).returning(); return NextResponse.json(row) }
-  if (section === 'patrols') return NextResponse.json({ error: 'Patrol records are created by the guard check-in API and are read-only for moderators' }, { status: 405 })
-  return NextResponse.json({ error: 'This module is read-only here' }, { status: 400 })
+  const current = await actor(); if (!current) return fail('Sign in and select an organization before creating records.', 401)
+  const payload: unknown = await request.json().catch(() => null)
+  const section = sectionSchema.safeParse((payload as { section?: unknown } | null)?.section); if (!section.success) return fail('Unknown section')
+  const now = new Date()
+  if (section.data === 'guards') {
+    const data = guardCreate.safeParse(payload); if (!data.success) return fail(data.error.issues[0]?.message ?? 'Invalid guard')
+    const [row] = await db.insert(guards).values({ ...current, ...data.data, initials: data.data.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(), status: 'active', nfcToken: `BOS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`, createdAt: now }).returning()
+    await log(current, 'guard.created', `Guard added: ${row.name}`, 'A new guard was added to the roster.'); return NextResponse.json(row, { status: 201 })
+  }
+  if (section.data === 'sites') {
+    const data = siteCreate.safeParse(payload); if (!data.success) return fail(data.error.issues[0]?.message ?? 'Invalid site')
+    const [row] = await db.insert(sites).values({ ...current, ...data.data, status: 'active', createdAt: now }).returning()
+    await log(current, 'site.created', `Site added: ${row.name}`, row.address); return NextResponse.json(row, { status: 201 })
+  }
+  if (section.data === 'incidents') {
+    const data = incidentCreate.safeParse(payload); if (!data.success) return fail(data.error.issues[0]?.message ?? 'Invalid incident')
+    const [row] = await db.insert(incidents).values({ ...current, ...data.data, status: 'open', comments: [], timeline: [`${now.toISOString()} Incident reported`], reportedAt: now, createdAt: now }).returning()
+    await log(current, 'incident.created', `Incident reported: ${row.title}`, row.site); return NextResponse.json(row, { status: 201 })
+  }
+  if (section.data === 'patrols') {
+    const data = patrolCreate.safeParse(payload); if (!data.success) return fail(data.error.issues[0]?.message ?? 'Invalid patrol')
+    const [row] = await db.insert(patrols).values({ ...current, ...data.data, loggedAt: now, latitude: 0, longitude: 0, method: 'manual', withinBounds: true, progress: 0, status: 'in_progress', createdAt: now }).returning()
+    await log(current, 'patrol.started', `Patrol started: ${row.routeName}`, row.checkpoint ?? ''); return NextResponse.json(row, { status: 201 })
+  }
+  return fail('This record type is created by the guard check-in workflow.', 405)
 }
 
-export async function PATCH(request: Request) { const currentUser = await owner(); if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); if (!currentUser.organizationId) return NextResponse.json({ error: 'No active organization. Create or join an organization before editing records.' }, { status: 403 }); const { section, id, ...changes } = await request.json(); const table = tables[section as keyof typeof tables]; if (!table) return NextResponse.json({ error: 'Unknown section' }, { status: 400 }); const [row] = await db.update(table).set(changes).where(and(eq(table.id, id), eq(table.organizationId, currentUser.organizationId), eq(table.userId, currentUser.userId))).returning(); return NextResponse.json(row) }
-export async function DELETE(request: Request) { const currentUser = await owner(); if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 }); if (!currentUser.organizationId) return NextResponse.json({ error: 'No active organization. Create or join an organization before deleting records.' }, { status: 403 }); const { section, id } = await request.json(); const table = tables[section as keyof typeof tables]; if (!table) return NextResponse.json({ error: 'Unknown section' }, { status: 400 }); await db.delete(table).where(and(eq(table.id, id), eq(table.organizationId, currentUser.organizationId), eq(table.userId, currentUser.userId))); return NextResponse.json({ ok: true }) }
+const updateInput = z.object({ section: sectionSchema, id: z.string().uuid(), action: z.enum(['update', 'suspend', 'reactivate', 'reissue-nfc', 'deactivate', 'approve', 'flag', 'assign', 'comment', 'status', 'escalate', 'resolve', 'acknowledge', 'complete']).optional(), status: z.string().max(32).optional(), progress: z.coerce.number().int().min(0).max(100).optional(), site: z.string().max(150).nullable().optional(), assigneeId: z.string().uuid().nullable().optional(), comment: z.string().trim().min(1).max(1000).optional(), acknowledged: z.boolean().optional(), name: z.string().trim().min(2).optional(), phone: z.string().trim().min(7).optional(), address: z.string().trim().min(4).optional(), latitude: z.coerce.number().optional(), longitude: z.coerce.number().optional(), geofenceRadius: z.coerce.number().int().positive().optional(), dangerLevel: z.enum(['low', 'medium', 'high']).optional(), clientName: z.string().trim().max(120).nullable().optional(), monthlySalary: z.coerce.number().int().min(0).max(100000000).optional(), photoUrl: z.string().max(400000).startsWith('data:image/').nullable().optional() })
+
+export async function PATCH(request: Request) {
+  const current = await actor(); if (!current) return fail('Sign in and select an organization before editing records.', 401)
+  const parsed = updateInput.safeParse(await request.json().catch(() => null)); if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid update')
+  const { section, id, action = 'update', comment, ...changes } = parsed.data
+  if (['suspend', 'reactivate', 'reissue-nfc', 'deactivate'].includes(action) && !(await isModerator(current))) return fail('Only an owner, admin or moderator can do this.', 403)
+  if (section === 'guards' && changes.monthlySalary !== undefined && !(await isModerator(current))) return fail('Only an owner, admin or moderator can change salaries.', 403)
+  const where = and(eq(tables[section].id, id), eq(tables[section].organizationId, current.organizationId))
+  if (section === 'guards') {
+    const values = action === 'suspend' ? { status: 'suspended', suspendedAt: new Date() } : action === 'reactivate' ? { status: 'active', suspendedAt: null } : action === 'reissue-nfc' ? { nfcToken: `BOS-${crypto.randomUUID().slice(0, 8).toUpperCase()}` } : defined({ name: changes.name, phone: changes.phone, site: changes.site, monthlySalary: changes.monthlySalary, photoUrl: changes.photoUrl })
+    const [row] = await db.update(guards).set(values).where(where).returning(); if (!row) return fail('Guard not found', 404)
+    await log(current, `guard.${action}`, `Guard updated: ${row.name}`, action); return NextResponse.json(row)
+  }
+  if (section === 'sites') {
+    const values = action === 'deactivate' ? { status: 'inactive' } : defined({ clientName: changes.clientName, address: changes.address, latitude: changes.latitude, longitude: changes.longitude, geofenceRadius: changes.geofenceRadius, dangerLevel: changes.dangerLevel })
+    const [row] = await db.update(sites).set(values).where(where).returning(); if (!row) return fail('Site not found', 404)
+    await log(current, `site.${action}`, `Site updated: ${row.name}`, action); return NextResponse.json(row)
+  }
+  if (section === 'attendance') {
+    const [row] = await db.update(attendance).set({ reviewStatus: action === 'approve' ? 'approved' : action === 'flag' ? 'flagged' : changes.status }).where(where).returning(); if (!row) return fail('Attendance record not found', 404)
+    await log(current, `attendance.${action}`, 'Attendance reviewed', action); return NextResponse.json(row)
+  }
+  if (section === 'patrols') {
+    const [row] = await db.update(patrols).set({ status: action === 'complete' ? 'completed' : changes.status, progress: action === 'complete' ? 100 : changes.progress }).where(where).returning(); if (!row) return fail('Patrol not found', 404)
+    await log(current, `patrol.${action}`, `Patrol updated: ${row.routeName ?? row.id}`, action); return NextResponse.json(row)
+  }
+  if (section === 'incidents') {
+    const record = (await db.select().from(incidents).where(where).limit(1))[0]; if (!record) return fail('Incident not found', 404)
+    const timeline = [...(record.timeline ?? []), `${new Date().toISOString()} ${action === 'comment' ? `Comment: ${comment}` : action}`]
+    const values = action === 'assign' ? { assigneeId: changes.assigneeId, timeline } : action === 'comment' ? { comments: [...(record.comments ?? []), comment!], timeline } : { status: action === 'escalate' ? 'escalated' : action === 'resolve' ? 'resolved' : changes.status ?? record.status, timeline }
+    const [row] = await db.update(incidents).set(values).where(where).returning(); await log(current, `incident.${action}`, `Incident updated: ${row.title}`, action); return NextResponse.json(row)
+  }
+  if (section === 'alerts') {
+    const [row] = await db.update(alerts).set({ acknowledged: action === 'acknowledge' ? true : changes.acknowledged ?? false }).where(where).returning(); if (!row) return fail('Alert not found', 404)
+    await log(current, 'alert.acknowledged', `Alert acknowledged: ${row.title}`, 'Alert acknowledged'); return NextResponse.json(row)
+  }
+  return fail('This record is read-only here', 405)
+}
+
+export async function DELETE() { return fail('Destructive deletion is disabled. Deactivate a site or suspend a guard instead.', 405) }

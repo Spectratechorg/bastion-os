@@ -7,7 +7,6 @@ const sections = new Set([
   'sites',
   'attendance',
   'patrols',
-  'live-map',
   'incidents',
   'alerts',
   'clients',

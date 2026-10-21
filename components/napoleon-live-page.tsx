@@ -97,7 +97,7 @@ export function NapoleonLivePage() {
             <p className="mt-2 text-xs text-zinc-500">Ask about attendance, incidents, patrols, sites or guard performance.</p>
             <div className="mt-4 flex w-full max-w-2xl flex-col gap-3">
               {messages.map((message, index) => (
-                <p key={`${message.role}-${index}`} className={`rounded-xl px-4 py-3 text-left text-xs leading-5 ${message.role === 'user' ? 'ml-auto max-w-[85%] bg-zinc-100' : 'mr-auto max-w-[95%] whitespace-pre-wrap bg-[#f2f5f3]'}`}>
+                <p key={`${message.role}-${index}`} className={`rounded-xl px-4 py-3 text-left text-xs leading-5 ${message.role === 'user' ? 'ml-auto max-w-[85%] bg-zinc-100' : 'mr-auto max-w-[95%] whitespace-pre-wrap bg-[#F5F5F6]'}`}>
                   {message.content}
                 </p>
               ))}
@@ -114,7 +114,7 @@ export function NapoleonLivePage() {
           </div>
           <form onSubmit={submit} className="mx-4 mb-1 flex h-[50px] items-center rounded-xl border border-zinc-200 px-2">
             <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask Napoleon anything about your operation…" className="min-w-0 flex-1 px-2 text-xs outline-none" />
-            <button disabled={loading || !input.trim()} aria-label="Send message" className="flex size-10 items-center justify-center rounded-lg bg-[#111113] text-white disabled:opacity-50"><Send className="size-4" /></button>
+            <button disabled={loading || !input.trim()} aria-label="Send message" className="flex size-10 items-center justify-center rounded-lg bg-[#2A2B2E] text-white disabled:opacity-50"><Send className="size-4" /></button>
           </form>
           <p className="pb-3 text-center text-[9px] text-zinc-400">Napoleon's output is deterministic operational analysis. Review findings before acting.</p>
         </section>

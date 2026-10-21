@@ -47,9 +47,9 @@
 
 :root {
   color-scheme: light;
-  --ws-sidebar: #0B0B0C;
+  --ws-sidebar: #2A2B2E;
   --ws-sidebar-muted: #A1A1A6;
-  --ws-page: #F4F4F5;
+  --ws-page: #F5F5F6;
   --ws-card: #FFFFFF;
   --ws-border: #E4E4E7;
   --ws-table-header: #F4F4F5;
@@ -57,7 +57,7 @@
   --ws-text: #0A0A0B;
   --ws-secondary: #6B6B72;
   --ws-tertiary: #9A9AA1;
-  --ws-primary: #111113;
+  --ws-primary: #2A2B2E;
   --ws-success-bg: #E8E8EA;
   --ws-success-text: #18181B;
   --ws-neutral-bg: #EFEFF1;

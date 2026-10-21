@@ -1,0 +1,10 @@
+ALTER TABLE "guards" ADD COLUMN IF NOT EXISTS "suspended_at" timestamptz;
+ALTER TABLE "sites" ADD COLUMN IF NOT EXISTS "danger_level" text NOT NULL DEFAULT 'low';
+ALTER TABLE "attendance" ADD COLUMN IF NOT EXISTS "review_status" text NOT NULL DEFAULT 'pending';
+ALTER TABLE "incidents" ADD COLUMN IF NOT EXISTS "assignee_id" uuid;
+ALTER TABLE "incidents" ADD COLUMN IF NOT EXISTS "comments" text[] NOT NULL DEFAULT '{}';
+ALTER TABLE "incidents" ADD COLUMN IF NOT EXISTS "timeline" text[] NOT NULL DEFAULT '{}';
+ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "route_name" text;
+ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "checkpoint" text;
+ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "progress" integer NOT NULL DEFAULT 0;
+ALTER TABLE "patrols" ADD COLUMN IF NOT EXISTS "status" text NOT NULL DEFAULT 'in_progress';

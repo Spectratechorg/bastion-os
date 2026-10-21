@@ -1,13 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, Bell, BriefcaseBusiness, ChevronDown, ChevronRight,
-  Clock3, FileText, Grid2X2, MapPin, Moon, MoreHorizontal, Phone, Route,
-  Search, Settings, Shield, Sparkles, Users, Wallet, X,
+  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
+  Search, Settings, Sparkles, Users, Wallet, X,
 } from 'lucide-react'
+import { authClient } from '@/lib/auth-client'
+import { Logo, Wordmark } from '@/components/brand'
 
 const navigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
@@ -16,113 +17,126 @@ const navigation = [
   { label: 'Attendance', href: '/attendance', icon: Clock3 },
   { label: 'Patrols', href: '/patrols', icon: Route },
   { label: 'Incidents', href: '/incidents', icon: FileText },
-  { label: 'Alerts', href: '/alerts', icon: Bell, badge: '3' },
+  { label: 'Alerts', href: '/alerts', icon: Bell },
   { label: 'Clients', href: '/clients', icon: BriefcaseBusiness },
   { label: 'Finance', href: '/finance', icon: Wallet },
   { label: 'Reports', href: '/reports', icon: Activity },
   { label: 'Napoleon AI', href: '/napoleon', icon: Sparkles, tag: 'AI' },
   { label: 'Settings', href: '/settings/roles', icon: Settings },
 ]
+const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', 'Finance']
 
-function GuardDrawer({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(0)
-  const steps = ['Personal', 'Identity', 'Assignment', 'Review']
-  const fields = [
-    [['First name', 'e.g. Adewale'], ['Last name', 'e.g. Johnson']],
-    [['Phone number', '+234 800 000 0000'], ['Email address', 'name@example.com']],
-    [['Residential address', 'Street, city, state']],
-  ]
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/35 backdrop-blur-[5px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section aria-label="Add guard" className="flex h-full w-full max-w-[521px] flex-col bg-white shadow-2xl">
-        <header className="flex h-[82px] items-center justify-between border-b border-zinc-200 px-6">
-          <div><p className="text-[10px] font-semibold tracking-[0.16em] text-zinc-500">NEW GUARD</p><h2 className="mt-1 text-[22px] font-normal">Add guard</h2></div>
-          <button onClick={onClose} aria-label="Close drawer" className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"><X className="size-5" /></button>
-        </header>
-        <nav aria-label="Guard setup steps" className="flex justify-between border-b border-zinc-200 px-6 py-5">
-          {steps.map((label, index) => <div key={label} className="flex items-center gap-2 text-xs">
-            <span className={`flex size-[22px] items-center justify-center rounded-full border text-[10px] ${step === index ? 'border-[#111113] bg-[#111113] font-semibold text-white' : 'border-zinc-300 text-zinc-500'}`}>{index + 1}</span>
-            <span className={step === index ? 'font-semibold text-zinc-900' : 'text-zinc-500'}>{label}</span>
-          </div>)}
-        </nav>
-        <div className="flex-1 overflow-auto p-6">
-          <h3 className="text-[17px] font-semibold">Personal information</h3>
-          <p className="mt-1 text-xs text-zinc-500">Add the guard&apos;s legal details as shown on their government ID.</p>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            {fields.flat().map(([label, placeholder]) => <label key={label} className={`flex flex-col gap-2 text-[11px] font-semibold ${label === 'Residential address' ? 'sm:col-span-2' : ''}`}>
-              {label}<input placeholder={placeholder} className="h-[38px] rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-xs font-normal outline-none placeholder:text-zinc-400 focus:border-zinc-500" />
-            </label>)}
-          </div>
-        </div>
-        <footer className="flex h-16 items-center justify-end gap-2 border-t border-zinc-200 px-6">
-          <button onClick={onClose} className="rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-xs font-semibold">Cancel</button>
-          <button onClick={() => setStep((current) => Math.min(current + 1, 3))} className="rounded-lg bg-[#111113] px-4 py-2.5 text-xs font-semibold text-white">{step === 3 ? 'Save guard' : 'Continue ›'}</button>
-        </footer>
-      </section>
-    </div>
-  )
+function initials(name?: string | null) {
+  return (name ?? 'B').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
 }
 
 export function WorkspaceShell({ active, children }: { active: string; children: React.ReactNode }) {
   const pathname = usePathname()
-  const showGuardDrawer = pathname === '/guards/new'
+  const router = useRouter()
+  const session = authClient.useSession()
+  const organization = authClient.useActiveOrganization()
+  const [more, setMore] = useState(false)
+  const [unread, setUnread] = useState(0)
+  const search = useRef<HTMLInputElement>(null)
+  const user = session.data?.user
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); search.current?.focus() } }
+    window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  useEffect(() => { setMore(false) }, [pathname])
+  useEffect(() => {
+    if (session.isPending) return
+    if (!session.data?.user) router.replace('/sign-in')
+    else if (!(session.data.session as { activeOrganizationId?: string | null }).activeOrganizationId) router.replace('/onboarding')
+  }, [session.isPending, session.data, router])
+  useEffect(() => {
+    let live = true
+    const load = () => fetch('/api/operations?section=alerts', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).then((rows: { acknowledged: boolean }[]) => { if (live) setUnread(rows.filter((row) => !row.acknowledged).length) }).catch(() => undefined)
+    void load(); const timer = window.setInterval(load, 20000); return () => { live = false; window.clearInterval(timer) }
+  }, [pathname])
+
+  const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
+  function runSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const query = (search.current?.value ?? '').trim(); if (!query) return
+    const page = navigation.find((item) => item.label.toLowerCase().startsWith(query.toLowerCase()))
+    router.push(page ? page.href : `/guards?q=${encodeURIComponent(query)}`)
+  }
+  async function signOut() { await authClient.signOut(); router.push('/sign-in'); router.refresh() }
+
   return (
-    <div className="workspace-theme min-h-screen bg-[#F4F4F5] text-[#0A0A0B]">
-      <aside className="workspace-sidebar fixed inset-y-0 left-0 z-20 hidden w-[239px] flex-col bg-[#0B0B0C] text-white lg:flex">
-        <Link href="/overview" className="flex h-[64px] items-center gap-2 px-6">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-black">B</span><span className="text-[18px] font-bold">Bastion<small className="ml-0.5 align-baseline text-[11px] font-semibold text-zinc-400">os</small></span>
-        </Link>
+    <div className="workspace-theme min-h-screen bg-[#F5F5F6] text-[#18181B]">
+      <aside className="workspace-sidebar fixed inset-y-0 left-0 z-20 hidden w-[239px] flex-col bg-[#2A2B2E] text-white lg:flex">
+        <Link href="/overview" className="flex h-[64px] items-center px-5"><Wordmark /></Link>
         <div className="mx-3 mb-4 flex h-[52px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-[#EBEBED] text-[9px] font-bold text-zinc-800">BG</span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">Bastion Guards Ltd.</span><span className="block text-[10px] text-[#A1A1A6]">Enterprise</span></span><ChevronDown className="size-3.5 text-zinc-400" />
+          <span className="flex size-7 items-center justify-center rounded-lg bg-[#E4E4E7] text-[9px] font-bold text-zinc-800">{initials(organization.data?.name)}</span>
+          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organization.data?.name ?? 'Your company'}</span><span className="block text-[10px] text-[#A1A1AA]">Security operations</span></span>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-2.5">
-          {navigation.map(({ label, href, icon: Icon, badge, tag }) => {
-            const selected = label.toLowerCase() === active.toLowerCase()
-              || (label === 'Finance' && pathname.startsWith('/finance'))
-              || (label === 'Settings' && pathname.startsWith('/settings'))
-            return <Link key={label} href={href} className={`relative flex h-9 items-center gap-3 rounded-[10px] px-3 text-[12px] transition-colors ${selected ? 'bg-white/[0.08] font-semibold text-white before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-[3px] before:rounded-full before:bg-white' : 'text-[#A1A1A6] hover:bg-white/[0.05] hover:text-white'}`}>
-              <Icon className="size-4" /><span className="flex-1">{label}</span>{badge && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white">{badge}</span>}{tag && <span className="rounded border border-white/25 px-1 text-[9px]">{tag}</span>}
+          {navigation.map(({ label, href, icon: Icon, tag }) => (
+            <Link key={label} href={href} className={`relative flex h-9 items-center gap-3 rounded-[10px] px-3 text-[12px] transition-colors ${isActive(label) ? 'bg-white/[0.1] font-semibold text-white before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-[3px] before:rounded-full before:bg-white' : 'text-[#B4B4BB] hover:bg-white/[0.06] hover:text-white'}`}>
+              <Icon className="size-4" /><span className="flex-1">{label}</span>
+              {label === 'Alerts' && unread > 0 && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white">{unread}</span>}
+              {tag && <span className="rounded border border-white/25 px-1 text-[9px]">{tag}</span>}
             </Link>
-          })}
+          ))}
         </nav>
         <div className="border-t border-white/10 px-3 pb-3 pt-2">
-          <Link href="/guard-app" className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left text-xs text-[#A1A1A6] hover:bg-white/[0.06] hover:text-white"><Phone className="size-4" />Guard mobile app<ChevronRight className="ml-auto size-4" /></Link>
+          <Link href="/guard-app" className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-xs text-[#B4B4BB] hover:bg-white/[0.06] hover:text-white"><Phone className="size-4" />Guard mobile app</Link>
           <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-3">
-            <span className="relative flex size-8 items-center justify-center rounded-full bg-[#EBEBED] text-[10px] font-bold text-zinc-800">TB<span className="absolute bottom-0 right-0 size-2 rounded-full border border-[#0B0B0C] bg-emerald-500" /></span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">Tunde Balogun</span><span className="block text-[10px] text-[#A1A1A6]">Administrator</span></span><button aria-label="User menu"><MoreHorizontal className="size-4 text-zinc-400" /></button>
+            <span className="flex size-8 items-center justify-center rounded-full bg-[#E4E4E7] text-[10px] font-bold text-zinc-800">{initials(user?.name)}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{user?.name ?? 'Signed in'}</span><span className="block truncate text-[10px] text-[#A1A1AA]">{user?.email}</span></span>
+            <button onClick={() => void signOut()} aria-label="Sign out" title="Sign out" className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"><LogOut className="size-4" /></button>
           </div>
         </div>
       </aside>
+
       <div className="lg:pl-[239px]">
-        <header className="workspace-topbar sticky top-0 z-10 flex h-[65px] items-center gap-4 border-b border-[#E4E4E7] bg-white px-5 lg:px-7">
-          <div className="flex min-w-0 flex-1 items-center gap-3 text-[#9A9AA1]">
-            <Search className="size-4 shrink-0" /><input aria-label="Search workspace" placeholder="Search guards, sites, incidents..." className="w-full max-w-[350px] bg-transparent text-[13px] outline-none placeholder:text-[#9A9AA1]" /><kbd className="hidden whitespace-nowrap rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">Ctrl K</kbd>
-          </div>
-          <button className="hidden items-center gap-1 text-xs text-zinc-600 sm:flex">All sites<ChevronDown className="size-3.5" /></button><span className="hidden h-8 w-px bg-zinc-200 sm:block" />
-          <button aria-label="Toggle dark mode" className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"><Moon className="size-4" /></button>
-          <button aria-label="Notifications" className="relative rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-red-500" /></button>
-          <Link href="/napoleon" className="flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] bg-[#111113] px-3 text-xs font-semibold text-white"><Sparkles className="size-3.5" /><span className="hidden sm:inline">Ask Napoleon</span></Link>
+        <header className="workspace-topbar sticky top-0 z-10 flex h-[60px] items-center gap-3 border-b border-[#E4E4E7] bg-white px-4 lg:h-[65px] lg:px-7">
+          <Link href="/overview" className="lg:hidden"><Logo size={32} /></Link>
+          <form onSubmit={runSearch} className="flex min-w-0 flex-1 items-center gap-3 text-[#9A9AA1]">
+            <Search className="size-4 shrink-0" />
+            <input ref={search} aria-label="Search workspace" placeholder="Search guards, or jump to a page..." className="w-full max-w-[350px] bg-transparent text-[13px] text-[#18181B] outline-none placeholder:text-[#9A9AA1]" />
+            <kbd className="hidden whitespace-nowrap rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">Ctrl K</kbd>
+          </form>
+          <Link href="/alerts" aria-label={`${unread} unacknowledged alerts`} className="relative flex size-10 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"><Bell className="size-4" />{unread > 0 && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-red-500" />}</Link>
+          <Link href="/napoleon" className="flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white"><Sparkles className="size-3.5" /><span className="hidden sm:inline">Ask Napoleon</span></Link>
         </header>
-        <nav aria-label="Workspace sections" className="flex gap-1 overflow-x-auto bg-[#0B0B0C] px-3 py-2 text-white lg:hidden">
-          {navigation.map(({ label, href, icon: Icon }) => <Link key={label} href={href} aria-current={label.toLowerCase() === active.toLowerCase() ? 'page' : undefined} className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-[11px] ${label.toLowerCase() === active.toLowerCase() ? 'bg-white/10 text-white' : 'text-[#A1A1A6]'}`}><Icon className="size-3.5" />{label}</Link>)}
-        </nav>
-        <main className="mx-auto max-w-[1600px] px-5 py-7 lg:px-7">{children}</main>
+        <main className="mx-auto max-w-[1600px] px-4 py-5 pb-28 sm:px-5 lg:px-7 lg:py-7 lg:pb-10">{children}</main>
       </div>
-      {showGuardDrawer && <GuardDrawer onClose={() => { window.location.href = '/guards' }} />}
+
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-white/10 bg-[#2A2B2E] pb-[env(safe-area-inset-bottom)] text-white lg:hidden">
+        {navigation.filter((item) => bottomNav.includes(item.label)).map(({ label, href, icon: Icon }) => (
+          <Link key={label} href={href} className={`flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] ${isActive(label) ? 'font-semibold text-white' : 'text-[#B4B4BB]'}`}><Icon className="size-[18px]" />{label}</Link>
+        ))}
+        <button onClick={() => setMore(true)} className="flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] text-[#B4B4BB]"><MoreHorizontal className="size-[18px]" />More</button>
+      </nav>
+      {more && (
+        <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onMouseDown={(event) => { if (event.target === event.currentTarget) setMore(false) }}>
+          <div className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-[#2A2B2E] p-4 pb-8 text-white">
+            <div className="mb-3 flex items-center justify-between"><Wordmark size={28} /><button onClick={() => setMore(false)} aria-label="Close menu" className="flex size-11 items-center justify-center rounded-lg hover:bg-white/10"><X className="size-5" /></button></div>
+            <div className="grid grid-cols-3 gap-2">
+              {navigation.map(({ label, href, icon: Icon }) => <Link key={label} href={href} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Icon className="size-5" />{label}</Link>)}
+              <Link href="/guard-app" className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Phone className="size-5" />Guard app</Link>
+              <button onClick={() => void signOut()} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><LogOut className="size-5" />Sign out</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export function PageHeader({ title, subtitle, action, children }: { title: string; subtitle: string; action?: React.ReactNode; children?: React.ReactNode }) {
-  return <header className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-[28px] font-normal leading-tight tracking-[-0.02em]">{title}</h1><p className="mt-1 text-[13px] text-[#6B6B72]">{subtitle}</p></div><div className="flex items-center gap-2">{children}{action}</div></header>
+  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h1 className="text-[24px] font-normal leading-tight tracking-[-0.02em] sm:text-[28px]">{title}</h1><p className="mt-1 text-[13px] text-[#6B6B72]">{subtitle}</p></div><div className="flex flex-wrap items-center gap-2">{children}{action}</div></header>
 }
 
-export function PageAction({ children, primary = false, href }: { children: React.ReactNode; primary?: boolean; href?: string }) {
-  const classes = `inline-flex h-10 items-center justify-center gap-2 rounded-[10px] px-3.5 text-xs font-semibold ${primary ? 'workspace-primary-action bg-[#111113] text-white' : 'border border-[#E4E4E7] bg-white text-zinc-700 hover:bg-zinc-50'}`
-  return href ? <Link href={href} className={classes}>{children}</Link> : <button className={classes}>{children}</button>
+export function PageAction({ children, primary = false, href, onClick }: { children: React.ReactNode; primary?: boolean; href?: string; onClick?: () => void }) {
+  const classes = `inline-flex h-11 items-center justify-center gap-2 rounded-[10px] px-3.5 text-xs font-semibold sm:h-10 ${primary ? 'workspace-primary-action bg-[#2A2B2E] text-white hover:bg-[#3F4045]' : 'border border-[#E4E4E7] bg-white text-zinc-700 hover:bg-zinc-50'}`
+  return href ? <Link href={href} className={classes}>{children}</Link> : <button onClick={onClick} className={classes}>{children}</button>
 }
 
 export function StatStrip({ stats }: { stats: [string, string][] }) {
-  return <section className="mb-5 grid grid-cols-2 divide-x divide-y divide-[#E4E4E7] overflow-hidden rounded-[18px] border border-[#E4E4E7] bg-white sm:grid-cols-4 sm:divide-y-0">{stats.map(([value, label]) => <div key={label} className="px-4 py-3.5"><p className="text-[19px] font-semibold">{value}</p><p className="mt-0.5 text-[11px] text-[#6B6B72]">{label}</p></div>)}</section>
+  return <section className="mb-5 grid grid-cols-2 divide-x divide-y divide-[#E4E4E7] overflow-hidden rounded-[18px] border border-[#E4E4E7] bg-white sm:grid-cols-4 sm:divide-y-0">{stats.map(([value, label]) => <div key={label} className="px-4 py-3.5"><p className="font-mono text-[19px] font-semibold">{value}</p><p className="mt-0.5 text-[11px] text-[#6B6B72]">{label}</p></div>)}</section>
 }
