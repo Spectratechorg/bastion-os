@@ -35,7 +35,7 @@ export function ReportsPage() {
   const cards: [string, string, string, number | undefined][] = [
     ['guards', 'Guard roster', 'Names, sites, NFC tags and salaries.', data?.guards.length], ['attendance', 'Attendance log', 'Every check-in with geofence and review status.', data?.attendance.length],
     ['patrols', 'Patrol log', 'Daily patrols and their checkpoint progress.', undefined], ['incidents', 'Incident register', 'Severity, status, assignee and timeline.', data?.incidents.length],
-    ['payroll', 'Payroll', 'Days absent, pension, net pay and paid status.', undefined], ['sites', 'Sites', 'Locations, geofences and client assignments.', data?.sites.length], ['alerts', 'Alerts', 'Raised alerts and acknowledgements.', data?.alerts.length],
+    ['payroll', 'Payroll', 'Days present, absences, net pay and paid status.', undefined], ['sites', 'Sites', 'Locations, geofences and client assignments.', data?.sites.length], ['alerts', 'Alerts', 'Raised alerts and acknowledgements.', data?.alerts.length],
   ]
   return <>
     <PageHeader title="Reports" subtitle="Download your live data as CSV for any section." />

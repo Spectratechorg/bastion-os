@@ -12,7 +12,7 @@ BastionOS uses Neon PostgreSQL, Drizzle Kit for schema migrations, and Better Au
    notepad .env.local
    ```
 
-3. In `.env.local`, replace `DATABASE_URL` with the Neon connection string. Set `BETTER_AUTH_URL` to the HTTPS origin used by the phone, for example `https://192.168.1.156:3000`. Generate a private auth secret locally:
+3. In `.env.local`, replace `DATABASE_URL` with the Neon connection string. Set `BETTER_AUTH_URL` to the exact origin you open in the browser — `http://localhost:3000` for desktop, or your HTTPS LAN origin such as `https://192.168.1.156:3000` when testing NFC on a phone. If you need both, keep one in `BETTER_AUTH_URL` and list the other in `BETTER_AUTH_TRUSTED_ORIGINS` (comma separated). Sign-in succeeds only for origins listed there, otherwise every page reports `Unauthorized`. Generate a private auth secret locally:
 
    ```powershell
    node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"

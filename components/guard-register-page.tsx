@@ -13,9 +13,17 @@ type Created = { id: string; name: string; nfcToken: string }
 export function GuardRegisterPage() {
   const [sites, setSites] = useState<Site[]>([]); const [photo, setPhoto] = useState<string | null>(null)
   const [v, setV] = useState({ name: '', nin: '', phone: '', site: '', monthlySalary: '150000' })
-  const [error, setError] = useState(''); const [saving, setSaving] = useState(false); const [created, setCreated] = useState<Created | null>(null)
+  const [error, setError] = useState(''); const [sitesError, setSitesError] = useState(''); const [saving, setSaving] = useState(false); const [created, setCreated] = useState<Created | null>(null)
   const file = useRef<HTMLInputElement>(null)
-  useEffect(() => { api<Site[]>('/api/operations?section=sites').then(setSites).catch(() => undefined) }, [])
+  async function loadSites() {
+    try {
+      setSites(await api<Site[]>('/api/operations?section=sites'))
+      setSitesError('')
+    } catch (cause) {
+      setSitesError(cause instanceof Error ? cause.message : 'Unable to load sites.')
+    }
+  }
+  useEffect(() => { void loadSites() }, [])
 
   async function pick(event: React.ChangeEvent<HTMLInputElement>) {
     const f = event.target.files?.[0]; if (!f) return
@@ -23,7 +31,6 @@ export function GuardRegisterPage() {
   }
   async function submit(event: FormEvent) {
     event.preventDefault(); setError('')
-    if (!photo) return setError('Take or upload the guard’s photo before saving.')
     if (!/^\d{11}$/.test(v.nin)) return setError('NIN must be exactly 11 digits.')
     setSaving(true)
     try { setCreated(await api<Created>('/api/operations', { method: 'POST', json: { section: 'guards', ...v, site: v.site || null, photoUrl: photo } })) }
@@ -44,11 +51,12 @@ export function GuardRegisterPage() {
     <PageHeader title="Register guard" subtitle="Add the guard’s details, photo and site. An NFC tag is issued automatically."><Link href="/guards" className={btn}><ChevronLeft className="size-4" />Back</Link></PageHeader>
     <form onSubmit={submit} className="grid max-w-3xl gap-5 rounded-[18px] border border-zinc-200 bg-white p-5 sm:p-6">
       <ErrorBanner message={error} />
+      <ErrorBanner message={sitesError} retry={() => void loadSites()} />
       <div className="flex items-center gap-4">
         <button type="button" onClick={() => file.current?.click()} aria-label="Add guard photo" className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-zinc-300 bg-zinc-50 text-zinc-500 hover:border-zinc-500">
           {photo ? <Avatar name={v.name || 'Guard'} src={photo} size={96} /> : <Camera className="size-6" />}
         </button>
-        <div className="text-xs"><b className="block text-sm font-semibold">Guard photo</b><span className="text-zinc-500">Take a clear, front-facing photo or upload one.</span><button type="button" onClick={() => file.current?.click()} className={`${btn} mt-2 block`}>{photo ? 'Retake photo' : 'Take or upload photo'}</button></div>
+        <div className="text-xs"><b className="block text-sm font-semibold">Guard photo (optional)</b><span className="text-zinc-500">Take a clear, front-facing photo or upload one.</span><button type="button" onClick={() => file.current?.click()} className={`${btn} mt-2 block`}>{photo ? 'Retake photo' : 'Take or upload photo'}</button></div>
         <input ref={file} type="file" accept="image/*" capture="user" onChange={pick} className="hidden" />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">

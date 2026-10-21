@@ -36,6 +36,7 @@ export function GuardMobilePage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [manualToken, setManualToken] = useState('')
   const controller = useRef<AbortController | null>(null)
 
   useEffect(() => {
@@ -47,6 +48,53 @@ export function GuardMobilePage() {
     controller.current?.abort()
     controller.current = null
     setActiveScan(null)
+  }
+
+  const verifyToken = async (action: ScanAction, rawToken: string) => {
+    const token = rawToken.trim()
+    if (!token) {
+      setError('Enter the guard NFC token from the roster.')
+      return
+    }
+    setError('')
+    setMessage('Checking the guard token and current location…')
+    setSubmitting(true)
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        if (!navigator.geolocation) {
+          reject(new Error('Location is unavailable in this browser. Allow location access to verify the site boundary.'))
+          return
+        }
+        navigator.geolocation.getCurrentPosition(resolve, () => {
+          reject(new Error('Location access is required to verify the assigned site. Allow location access and try again.'))
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
+      })
+      const response = await fetch('/api/guard/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: action,
+          token,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok || payload.error) throw new Error(payload.error ?? 'Unable to verify the NFC token.')
+
+      setMessage(payload.withinBounds ? payload.message : `${payload.message} The scan was saved but is outside the assigned site geofence.`)
+      setGuardName(payload.guardName ?? '')
+      setSiteName(payload.siteName ?? '')
+      setWithinBounds(Boolean(payload.withinBounds))
+      if (action === 'attendance') setCheckedIn(Boolean(payload.checkedIn))
+      if (action === 'patrol') setPatrolCount(Number(payload.patrolCount ?? patrolCount + 1))
+      setLastScan(payload.message ?? 'NFC verification succeeded.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to verify the NFC token.')
+      setMessage('The guard token was not verified.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const scanNfc = async (action: ScanAction) => {
@@ -92,47 +140,9 @@ export function GuardMobilePage() {
 
       setLastScan(`NDEF text token read · ${record.lang || 'text'}`)
       setMessage('NFC tag read successfully. Checking whether the token is registered…')
-      setSubmitting(true)
-
       try {
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          if (!navigator.geolocation) {
-            reject(new Error('Location is unavailable in this browser. Allow location access to verify the site boundary.'))
-            return
-          }
-          navigator.geolocation.getCurrentPosition(resolve, () => {
-            reject(new Error('Location access is required to verify the assigned site. Allow location access and scan again.'))
-          }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
-        })
-        const response = await fetch('/api/guard/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: action,
-            token,
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          }),
-        })
-        const payload = await response.json()
-
-        if (!response.ok || payload.error) {
-          throw new Error(payload.error ?? 'Unable to verify the NFC token.')
-        }
-
-        setMessage(payload.withinBounds ? payload.message : `${payload.message} The scan was saved but is outside the assigned site geofence.`)
-        setGuardName(payload.guardName ?? '')
-        setSiteName(payload.siteName ?? '')
-        setWithinBounds(Boolean(payload.withinBounds))
-        if (action === 'attendance') setCheckedIn(Boolean(payload.checkedIn))
-        if (action === 'patrol') setPatrolCount(Number(payload.patrolCount ?? patrolCount + 1))
-        setLastScan(payload.message ?? 'NFC verification succeeded.')
-      } catch (cause) {
-        const reason = cause instanceof Error ? cause.message : 'Unable to verify the NFC token.'
-        setError(reason)
-        setMessage('The phone read the NFC text token, but the server did not verify it.')
+        await verifyToken(action, token)
       } finally {
-        setSubmitting(false)
         abortController.abort()
         controller.current = null
         setActiveScan(null)
@@ -192,9 +202,13 @@ export function GuardMobilePage() {
             disabled={activeScan !== null}
             className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-[#111113] px-3 text-xs font-semibold text-white disabled:opacity-70"
           >
-            {submitting || activeScan === 'attendance' ? <><span className="size-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />Verifying tag…</> : '▣ Scan NFC for check-in or check-out'}
+            {submitting || activeScan === 'attendance' ? <><span className="size-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />Verifying tag…</> : checkedIn ? '▣ Scan NFC to clock out' : checkedIn === false ? '▣ Scan NFC to clock in' : '▣ Scan NFC to clock in or out'}
           </button>
           {activeScan === 'attendance' && <button onClick={stopScan} className="mt-2 flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-zinc-200 text-[11px] font-semibold text-zinc-700"><X className="size-3.5" />Cancel scan</button>}
+          <form onSubmit={(event) => { event.preventDefault(); void verifyToken('attendance', manualToken) }} className="mt-3 flex gap-2">
+            <input aria-label="Guard NFC token" value={manualToken} onChange={(event) => setManualToken(event.target.value)} placeholder="Or enter guard tag code" className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 text-xs" />
+            <button disabled={submitting} className="rounded-lg border border-zinc-200 px-3 text-xs font-semibold disabled:opacity-60">{checkedIn ? 'Clock out' : 'Clock in/out'}</button>
+          </form>
         </section>
 
         <div className="my-6 flex flex-col items-center">
@@ -206,7 +220,7 @@ export function GuardMobilePage() {
 
         <section className="rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,.03)]">
           <div className="flex items-center justify-between"><h2 className="text-[15px] font-semibold">Patrol activity</h2><span className="text-[11px] font-semibold">{patrolCount} today</span></div>
-          <p className="mt-3 text-[9px] text-zinc-500">Each scan records the guard, time, location and assigned site.</p>
+          <p className="mt-3 text-[9px] text-zinc-500">Each scan records the guard, time, location and assigned site. Patrols require NFC.</p>
           <button
             onClick={() => void scanNfc('patrol')}
             disabled={activeScan !== null}

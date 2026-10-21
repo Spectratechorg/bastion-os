@@ -57,7 +57,7 @@ Total time: about 30 minutes. You need a GitHub account, a Neon account and a Ve
 | Security review | Before enterprise customers | Penetration test; two-factor sign-in for owners (Better Auth `twoFactor` plugin) |
 
 ## Troubleshooting
-- **"Sign in and select an organization"** – sign out and back in once.
+- **"Unauthorized" on every page** – sign in again at the exact address you are browsing. `BETTER_AUTH_URL` (plus anything in `BETTER_AUTH_TRUSTED_ORIGINS`) must contain that origin, e.g. browsing `http://127.0.0.1:3100` while `BETTER_AUTH_URL` says `https://192.168.1.156:3000` blocks the session.
 - **NFC does nothing** – Android + Chrome + HTTPS only; iPhones cannot read NFC in a web page. Use the tag-code box instead.
 - **Map blank** – no internet to the tile server; check `NEXT_PUBLIC_MAP_TILES_URL`.
 - **Migration error** – check that `DATABASE_URL` points to the intended Neon branch, then use `pnpm db:migrate` rather than manually replaying SQL files.
