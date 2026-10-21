@@ -47,7 +47,7 @@ export async function GET() {
 
   if (!organization) return NextResponse.json({ error: 'Organization not found.' }, { status: 404 })
   return NextResponse.json({
-    user: { id: session.user.id, name: session.user.name, email: session.user.email, role: membership.role },
+    user: { id: session.user.id, name: session.user.name, email: session.user.email, image: session.user.image, role: membership.role },
     organization,
     members: team,
     activity,

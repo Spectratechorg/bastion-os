@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { authClient } from '@/lib/auth-client'
+import { Avatar } from '@/components/ui-bits'
+import { Wordmark } from '@/components/brand'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity, Bell, BriefcaseBusiness, ChevronDown, ChevronRight,
@@ -28,7 +30,7 @@ const navigation: { label: string; href: string; icon: LucideIcon; badge?: strin
 
 export function WorkspaceShell({ active, children }: { active: string; children: React.ReactNode }) {
   const pathname = usePathname()
-  const [identity, setIdentity] = useState<{ user: { name: string; email: string; role: string }; organization: { name: string } } | null>(null)
+  const [identity, setIdentity] = useState<{ user: { name: string; email: string; image: string | null; role: string }; organization: { name: string } } | null>(null)
   const [signOutError, setSignOutError] = useState('')
 
   useEffect(() => {
@@ -57,7 +59,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     <div className="workspace-theme min-h-screen bg-[#F4F4F5] text-[#0A0A0B]">
       <aside className="workspace-sidebar fixed inset-y-0 left-0 z-20 hidden w-[239px] flex-col bg-[#0B0B0C] text-white lg:flex">
         <Link href="/overview" className="flex h-[64px] items-center gap-2 px-6">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-black">B</span><span className="text-[18px] font-bold">Bastion<small className="ml-0.5 align-baseline text-[11px] font-semibold text-zinc-400">os</small></span>
+          <Wordmark size={32} />
         </Link>
         <div className="mx-3 mb-4 flex h-[52px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5">
           <span className="flex size-7 items-center justify-center rounded-lg bg-[#EBEBED] text-[9px] font-bold text-zinc-800">{organizationName.slice(0, 2).toUpperCase()}</span>
@@ -76,8 +78,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
         <div className="border-t border-white/10 px-3 pb-3 pt-2">
           <Link href="/guard-app" className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left text-xs text-[#A1A1A6] hover:bg-white/[0.06] hover:text-white"><Phone className="size-4" />Guard mobile app<ChevronRight className="ml-auto size-4" /></Link>
           <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-3">
-            <span className="flex size-8 items-center justify-center rounded-full bg-[#EBEBED] text-[10px] font-bold text-zinc-800">{initials}</span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{userName}</span><span className="block truncate text-[10px] text-[#A1A1A6]">{identity?.user.email ?? ''}</span></span><button onClick={() => void signOut()} className="rounded border border-white/15 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/10">Sign out</button>
+            <Link href="/profile" aria-label="Your profile"><Avatar name={userName} src={identity?.user.image} size={32} /></Link>
+            <Link href="/profile" className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{userName}</span><span className="block truncate text-[10px] text-[#A1A1A6]">{identity?.user.email ?? ''}</span></Link><button onClick={() => void signOut()} className="rounded border border-white/15 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/10">Sign out</button>
           </div>
           {signOutError && <p role="alert" className="px-1 pt-1 text-[10px] text-red-300">{signOutError}</p>}
         </div>

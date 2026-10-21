@@ -5,6 +5,7 @@ import { OperationsLivePage, OverviewLivePage } from '@/components/operations-li
 import { OperationsWorkspace } from '@/components/operations-workspace'
 import { FinancePage } from '@/components/finance-page'
 import { PatrolsPage } from '@/components/patrols-page'
+import { ProfilePage } from '@/components/profile-page'
 
 type OperationalSection = 'guards' | 'sites' | 'attendance' | 'patrols' | 'incidents'
 
@@ -21,6 +22,7 @@ export function WorkspacePage({ route, financeTab = 'overview' }: { route: strin
   if (route === 'finance') return <WorkspaceShell active={route}>{financeTab === 'payroll' ? <FinancePage tab="payroll" /> : <FinanceDataPage tab={financeTab} />}</WorkspaceShell>
   if (route === 'reports') return <WorkspaceShell active={route}><ReportsDataPage /></WorkspaceShell>
   if (route === 'settings') return <WorkspaceShell active="Settings"><SettingsDataPage /></WorkspaceShell>
+  if (route === 'profile') return <WorkspaceShell active={route}><ProfilePage /></WorkspaceShell>
   if (route === 'napoleon') return <WorkspaceShell active={route}><NapoleonLivePage /></WorkspaceShell>
   return null
 }
