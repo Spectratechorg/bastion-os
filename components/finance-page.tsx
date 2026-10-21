@@ -69,7 +69,7 @@ export function FinancePage({ tab }: { tab: 'overview' | 'payroll' }) {
           <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">{([['Present', `${r.daysPresent} day${r.daysPresent === 1 ? '' : 's'}`], ['Absent', `${r.daysAbsent} day${r.daysAbsent === 1 ? '' : 's'}`], ['Base', naira(r.baseSalary)], ['Absence', `−${naira(r.absenceDeduction)}`], ['Net pay', naira(r.netPay)]] as const).map(([k, val]) => <div key={k}><dt className="text-[10px] uppercase tracking-wide text-zinc-500">{k}</dt><dd className="font-mono">{val}</dd></div>)}</dl>
           <label className="mt-3 flex min-h-[44px] items-center gap-3 rounded-lg bg-zinc-50 px-3 font-semibold"><input type="checkbox" className="size-5 accent-[#2A2B2E]" checked={r.status === 'paid'} disabled={!data?.isModerator || busy === r.id} onChange={() => void toggle(r)} />Mark as paid</label></li>)}</ul>
       </div>
-      <p className="mt-3 text-[11px] text-zinc-500">Net pay = base salary − (daily rate × days absent). Days absent are counted from the guard’s start date through today (or month-end) when no attendance record exists. There is no pension deduction or overtime.</p>
+      <p className="mt-3 text-[11px] text-zinc-500">Whole-month guards earn the full monthly salary minus a day’s pay for each day with no attendance record. Guards who joined mid-month are paid pro-rata from their start date. There is no pension deduction or overtime.</p>
     </>}
   </>
 }

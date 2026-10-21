@@ -45,7 +45,16 @@ export async function GET(request: Request) {
     if (start > upTo) continue
     const daysCounted = Number(upTo.slice(8)) - Number(start.slice(8)) + 1
     const daysPresent = [...(presentDays.get(guard.id) ?? [])].filter((key) => key >= start && key <= upTo).length
-    const values = { baseSalary: guard.monthlySalary, daysInPeriod: daysInMonth, pension: 0, ...computePayroll({ baseSalary: guard.monthlySalary, daysInMonth, daysCounted, daysPresent }) }
+    const computed = computePayroll({ baseSalary: guard.monthlySalary, daysInMonth, daysCounted, daysPresent, prorated: created > first })
+    const values = {
+      baseSalary: computed.basePay,
+      daysInPeriod: daysInMonth,
+      daysPresent: computed.daysPresent,
+      daysAbsent: computed.daysAbsent,
+      absenceDeduction: computed.absenceDeduction,
+      pension: 0,
+      netPay: computed.netPay,
+    }
     const [row] = await db.insert(payrollRecords).values({ ...current, guardId: guard.id, period: period.data, status: 'pending', createdAt: new Date(), ...values })
       .onConflictDoUpdate({ target: [payrollRecords.guardId, payrollRecords.period], set: values, setWhere: eq(payrollRecords.status, 'pending') }).returning()
     output.push({ ...(row ?? stored), ...extra })
