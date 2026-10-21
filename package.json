@@ -10,10 +10,13 @@
     "lint": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
+    "@neon/config": "^1.9.2",
+    "@neon/env": "^1.6.3",
     "@vercel/analytics": "1.6.1",
     "better-auth": "^1.7.5",
     "class-variance-authority": "^0.7.1",

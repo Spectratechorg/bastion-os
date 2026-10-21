@@ -1,15 +1,82 @@
-﻿import { pgTable, text, uuid, timestamp, doublePrecision, integer, boolean } from 'drizzle-orm/pg-core'
+import { pgTable, text, uuid, timestamp, doublePrecision, integer, boolean, uniqueIndex } from 'drizzle-orm/pg-core'
 
-const owner = { userId: text('user_id').notNull() }
-const orgScoped = { organizationId: uuid('organization_id').notNull() }
+export const users = pgTable('user', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  emailVerified: boolean('email_verified').notNull().default(false),
+  image: text('image'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
 
-export const organizations = pgTable('organizations', {
-  id: uuid('id').defaultRandom().primaryKey(),
+export const authSessions = pgTable('session', {
+  id: text('id').primaryKey(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  token: text('token').notNull().unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  ipAddress: text('ip_address'),
+  userAgent: text('user_agent'),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  activeOrganizationId: text('active_organization_id'),
+})
+
+export const accounts = pgTable('account', {
+  id: text('id').primaryKey(),
+  accountId: text('account_id').notNull(),
+  providerId: text('provider_id').notNull(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  accessToken: text('access_token'),
+  refreshToken: text('refresh_token'),
+  idToken: text('id_token'),
+  accessTokenExpiresAt: timestamp('access_token_expires_at', { withTimezone: true }),
+  refreshTokenExpiresAt: timestamp('refresh_token_expires_at', { withTimezone: true }),
+  scope: text('scope'),
+  password: text('password'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const verifications = pgTable('verification', {
+  id: text('id').primaryKey(),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const organizations = pgTable('organization', {
+  id: text('id').primaryKey(),
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   logo: text('logo'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  metadata: text('metadata'),
 })
+
+export const members = pgTable('member', {
+  id: text('id').primaryKey(),
+  organizationId: text('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text('role').notNull().default('member'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('member_organization_user_unique').on(table.organizationId, table.userId)])
+
+export const invitations = pgTable('invitation', {
+  id: text('id').primaryKey(),
+  organizationId: text('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  email: text('email').notNull(),
+  role: text('role'),
+  status: text('status').notNull().default('pending'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  inviterId: text('inviter_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+})
+
+const owner = { userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }) }
+const orgScoped = { organizationId: text('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }) }
 
 export const guards = pgTable('guards', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -41,7 +108,7 @@ export const sites = pgTable('sites', {
   status: text('status').notNull(),
   dangerLevel: text('danger_level').notNull().default('low'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
-})
+}, (table) => [uniqueIndex('sites_organization_name_unique').on(table.organizationId, table.name)])
 
 export const attendance = pgTable('attendance', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -50,6 +117,7 @@ export const attendance = pgTable('attendance', {
   guardId: uuid('guard_id').notNull(),
   siteId: uuid('site_id'),
   checkedInAt: timestamp('checked_in_at', { withTimezone: true }).notNull(),
+  checkedOutAt: timestamp('checked_out_at', { withTimezone: true }),
   latitude: doublePrecision('latitude').notNull(),
   longitude: doublePrecision('longitude').notNull(),
   method: text('method').notNull(),
@@ -117,6 +185,21 @@ export const finances = pgTable('finances', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
+export const clients = pgTable('clients', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ...owner,
+  ...orgScoped,
+  name: text('name').notNull(),
+  contactName: text('contact_name'),
+  email: text('email'),
+  phone: text('phone'),
+  status: text('status').notNull().default('active'),
+  monthlyValue: doublePrecision('monthly_value').notNull().default(0),
+  slaScore: doublePrecision('sla_score'),
+  renewalDate: timestamp('renewal_date', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+})
+
 export const activityEvents = pgTable('activity_events', {
   id: uuid('id').defaultRandom().primaryKey(),
   ...owner,
@@ -128,4 +211,21 @@ export const activityEvents = pgTable('activity_events', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
-export const schema = { organizations, guards, sites, attendance, incidents, alerts, patrols, finances, activityEvents }
+export const schema = {
+  users,
+  authSessions,
+  accounts,
+  verifications,
+  organizations,
+  members,
+  invitations,
+  guards,
+  sites,
+  attendance,
+  incidents,
+  alerts,
+  patrols,
+  finances,
+  clients,
+  activityEvents,
+}

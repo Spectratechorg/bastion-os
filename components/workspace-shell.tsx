@@ -1,22 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { authClient } from '@/lib/auth-client'
+import type { LucideIcon } from 'lucide-react'
 import {
   Activity, Bell, BriefcaseBusiness, ChevronDown, ChevronRight,
-  Clock3, FileText, Grid2X2, MapPin, Moon, MoreHorizontal, Phone, Route,
-  Search, Settings, Shield, Sparkles, Users, Wallet, X,
+  Clock3, FileText, Grid2X2, MapPin, Moon, Phone, Route,
+  Search, Settings, Sparkles, Users, Wallet, X,
 } from 'lucide-react'
 
-const navigation = [
+const navigation: { label: string; href: string; icon: LucideIcon; badge?: string; tag?: string }[] = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
   { label: 'Guards', href: '/guards', icon: Users },
   { label: 'Sites', href: '/sites', icon: MapPin },
   { label: 'Attendance', href: '/attendance', icon: Clock3 },
   { label: 'Patrols', href: '/patrols', icon: Route },
   { label: 'Incidents', href: '/incidents', icon: FileText },
-  { label: 'Alerts', href: '/alerts', icon: Bell, badge: '3' },
+  { label: 'Alerts', href: '/alerts', icon: Bell },
   { label: 'Clients', href: '/clients', icon: BriefcaseBusiness },
   { label: 'Finance', href: '/finance', icon: Wallet },
   { label: 'Reports', href: '/reports', icon: Activity },
@@ -66,6 +68,31 @@ function GuardDrawer({ onClose }: { onClose: () => void }) {
 export function WorkspaceShell({ active, children }: { active: string; children: React.ReactNode }) {
   const pathname = usePathname()
   const showGuardDrawer = pathname === '/guards/new'
+  const [identity, setIdentity] = useState<{ user: { name: string; email: string; role: string }; organization: { name: string } } | null>(null)
+  const [signOutError, setSignOutError] = useState('')
+
+  useEffect(() => {
+    fetch('/api/workspace', { cache: 'no-store' })
+      .then(async (response) => {
+        const body = await response.json()
+        if (!response.ok) throw new Error(body.error ?? 'Unable to load workspace identity.')
+        setIdentity(body)
+      })
+      .catch(() => setIdentity(null))
+  }, [])
+
+  async function signOut() {
+    const result = await authClient.signOut()
+    if (result.error) {
+      setSignOutError(result.error.message ?? 'Unable to sign out.')
+      return
+    }
+    window.location.assign('/sign-in')
+  }
+
+  const organizationName = identity?.organization.name ?? 'Organization not loaded'
+  const userName = identity?.user.name ?? 'Account not loaded'
+  const initials = userName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
   return (
     <div className="workspace-theme min-h-screen bg-[#F4F4F5] text-[#0A0A0B]">
       <aside className="workspace-sidebar fixed inset-y-0 left-0 z-20 hidden w-[239px] flex-col bg-[#0B0B0C] text-white lg:flex">
@@ -73,8 +100,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
           <span className="flex size-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-black">B</span><span className="text-[18px] font-bold">Bastion<small className="ml-0.5 align-baseline text-[11px] font-semibold text-zinc-400">os</small></span>
         </Link>
         <div className="mx-3 mb-4 flex h-[52px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-[#EBEBED] text-[9px] font-bold text-zinc-800">BG</span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">Bastion Guards Ltd.</span><span className="block text-[10px] text-[#A1A1A6]">Enterprise</span></span><ChevronDown className="size-3.5 text-zinc-400" />
+          <span className="flex size-7 items-center justify-center rounded-lg bg-[#EBEBED] text-[9px] font-bold text-zinc-800">{organizationName.slice(0, 2).toUpperCase()}</span>
+          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organizationName}</span><span className="block text-[10px] capitalize text-[#A1A1A6]">{identity?.user.role ?? 'Loading account'}</span></span><ChevronDown className="size-3.5 text-zinc-400" />
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-2.5">
           {navigation.map(({ label, href, icon: Icon, badge, tag }) => {
@@ -89,9 +116,10 @@ export function WorkspaceShell({ active, children }: { active: string; children:
         <div className="border-t border-white/10 px-3 pb-3 pt-2">
           <Link href="/guard-app" className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left text-xs text-[#A1A1A6] hover:bg-white/[0.06] hover:text-white"><Phone className="size-4" />Guard mobile app<ChevronRight className="ml-auto size-4" /></Link>
           <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-3">
-            <span className="relative flex size-8 items-center justify-center rounded-full bg-[#EBEBED] text-[10px] font-bold text-zinc-800">TB<span className="absolute bottom-0 right-0 size-2 rounded-full border border-[#0B0B0C] bg-emerald-500" /></span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">Tunde Balogun</span><span className="block text-[10px] text-[#A1A1A6]">Administrator</span></span><button aria-label="User menu"><MoreHorizontal className="size-4 text-zinc-400" /></button>
+            <span className="flex size-8 items-center justify-center rounded-full bg-[#EBEBED] text-[10px] font-bold text-zinc-800">{initials}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{userName}</span><span className="block truncate text-[10px] text-[#A1A1A6]">{identity?.user.email ?? ''}</span></span><button onClick={() => void signOut()} className="rounded border border-white/15 px-2 py-1 text-[10px] text-zinc-300 hover:bg-white/10">Sign out</button>
           </div>
+          {signOutError && <p role="alert" className="px-1 pt-1 text-[10px] text-red-300">{signOutError}</p>}
         </div>
       </aside>
       <div className="lg:pl-[239px]">

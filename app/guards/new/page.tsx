@@ -1,5 +1,5 @@
-import { WorkspacePage } from '@/components/workspace-pages'
+import { redirect } from 'next/navigation'
 
-export default function AddGuardPage() {
-  return <WorkspacePage route="guards" />
+export default function AddGuardPage(): never {
+  redirect('/guards')
 }

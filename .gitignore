@@ -16,3 +16,7 @@ node_modules
 .next/
 .DS_Store
 *.tsbuildinfo
+
+# Local HTTPS certificate shared with a development phone
+/public/bastion-local-rootCA.crt
+.neon

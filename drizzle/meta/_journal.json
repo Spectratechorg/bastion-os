@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1792319769802,
+      "tag": "0000_bizarre_blizzard",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792320388575,
+      "tag": "0001_wealthy_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792322286761,
+      "tag": "0002_motionless_kingpin",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792327317717,
+      "tag": "0003_ancient_forgotten_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792407640265,
+      "tag": "0004_clammy_the_captain",
+      "breakpoints": true
+    }
+  ]
+}

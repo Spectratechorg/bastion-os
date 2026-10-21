@@ -8,7 +8,7 @@ type Config = { title: string; description: string; fields: string[]; columns: s
 
 const configs: Record<string, Config> = {
   guards: { title: 'Guard registry', description: 'Enroll personnel, issue NFC credentials, assign sites, and manage status.', fields: ['name', 'nin', 'phone', 'site'], columns: ['name', 'nin', 'phone', 'site', 'status', 'nfcToken'] },
-  sites: { title: 'Site command', description: 'Manage operational sites, geofences, and ML risk intelligence.', fields: ['name', 'address', 'dangerLevel', 'geofenceRadius'], columns: ['name', 'address', 'dangerLevel', 'status'] },
+  sites: { title: 'Site command', description: 'Manage operational sites and attendance geofences.', fields: ['name', 'address', 'latitude', 'longitude', 'geofenceRadius'], columns: ['name', 'address', 'latitude', 'longitude', 'geofenceRadius', 'status'] },
   attendance: { title: 'Attendance ledger', description: 'Every check-in, exact time, method, and boundary result.', fields: [], columns: ['guardId', 'siteId', 'checkedInAt', 'method', 'withinGeofence'] },
   patrols: { title: 'Patrol repository', description: 'Read-only hourly patrol evidence from 21:00 to 00:00. Missed windows become alerts.', fields: [], columns: ['guardId', 'siteId', 'loggedAt', 'method', 'withinBounds'] },
   'live-map': { title: 'Live map', description: 'Only persisted patrol coordinates appear here. No synthetic markers.', fields: [], columns: [] },
@@ -33,28 +33,56 @@ export function OperationsWorkspace({ section }: { section: string }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<Row | null>(null)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const load = async () => {
     setLoading(true)
-    const response = await fetch(`/api/operations?section=${section}`, { cache: 'no-store' })
-    const data = await response.json()
-    setRows(Array.isArray(data) ? data : [])
-    setLoading(false)
+    setError('')
+    try {
+      const response = await fetch(`/api/operations?section=${section}`, { cache: 'no-store' })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Unable to load records.')
+      setRows(Array.isArray(data) ? data : [])
+    } catch (cause) {
+      setRows([])
+      setError(cause instanceof Error ? cause.message : 'Unable to load records.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
     load()
-    if (section === 'guards') fetch('/api/operations?section=sites', { cache: 'no-store' }).then((response) => response.json()).then((data) => setSites(Array.isArray(data) ? data : []))
+    if (section === 'guards') {
+      fetch('/api/operations?section=sites', { cache: 'no-store' })
+        .then(async (response) => {
+          const data = await response.json()
+          if (!response.ok) throw new Error(data.error ?? 'Unable to load sites.')
+          setSites(Array.isArray(data) ? data : [])
+        })
+        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Unable to load sites.'))
+    }
   }, [section])
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
-    const payload = { section, ...form }
-    await fetch('/api/operations', { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editing ? { ...payload, id: editing.id } : payload) })
-    setForm({})
-    setEditing(null)
-    setOpen(false)
-    load()
+    setSaving(true)
+    setError('')
+    try {
+      const payload = { section, ...form }
+      const response = await fetch('/api/operations', { method: editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editing ? { ...payload, id: editing.id } : payload) })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Unable to save the record.')
+      setForm({})
+      setEditing(null)
+      setOpen(false)
+      await load()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to save the record.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const guardStats = useMemo(() => ({ active: rows.filter((row) => row.status === 'active').length, assigned: rows.filter((row) => row.site).length }), [rows])
@@ -88,7 +116,8 @@ export function OperationsWorkspace({ section }: { section: string }) {
         {section === 'guards' && <div className="mb-6 grid gap-3 md:grid-cols-3"><Metric label="Total guards" value={String(rows.length)} /><Metric label="Active" value={String(guardStats.active)} tone="text-[#2d846d]" /><Metric label="Assigned to site" value={String(guardStats.assigned)} /></div>}
         {section === 'finances' && <div className="mb-6 grid gap-3 md:grid-cols-3"><Metric label="Total revenue" value={`₦${financeStats.revenue.toLocaleString()}`} tone="text-[#2d846d]" /><Metric label="Operating costs" value={`₦${financeStats.costs.toLocaleString()}`} tone="text-[#cb6846]" /><Metric label="Pending payments" value={String(financeStats.pending)} tone="text-[#b77a20]" /></div>}
         {section === 'patrols' && <div className="mb-6 flex gap-3"><Metric label="Logged patrols" value={String(patrolStats.total)} /><Metric label="Within bounds" value={String(patrolStats.inBounds)} tone="text-[#2d846d]" /></div>}
-        {open && <form onSubmit={save} className="mb-6 grid gap-4 rounded-2xl border border-[#dce6e1] bg-white p-5 md:grid-cols-2">{current.fields.map((field) => <label key={field} className="flex flex-col gap-2 text-xs font-semibold capitalize text-[#536b64]">{field}{field === 'site' ? <select value={form[field] ?? ''} onChange={(event) => setForm({ ...form, [field]: event.target.value })} className="rounded-lg border border-[#d5e0db] px-3 py-2 text-sm font-normal"><option value="">Unassigned</option>{sites.map((site) => <option key={site.id} value={String(site.name ?? site.id)}>{String(site.name ?? site.id)}</option>)}</select> : <input required={['name', 'label', 'amount'].includes(field)} type={field === 'amount' || field === 'geofenceRadius' ? 'number' : 'text'} value={form[field] ?? ''} onChange={(event) => setForm({ ...form, [field]: event.target.value })} className="rounded-lg border border-[#d5e0db] px-3 py-2 text-sm font-normal" />}</label>)}<div className="flex gap-2 md:col-span-2"><button type="submit" className="rounded-lg bg-[#173f37] px-4 py-2 text-sm font-bold text-white">{editing ? 'Save changes' : 'Create record'}</button><button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-[#d5e0db] px-4 py-2 text-sm font-semibold">Cancel</button></div></form>}
+        {open && <form onSubmit={save} className="mb-6 grid gap-4 rounded-2xl border border-[#dce6e1] bg-white p-5 md:grid-cols-2">{current.fields.map((field) => <label key={field} className="flex flex-col gap-2 text-xs font-semibold capitalize text-[#536b64]">{field}{field === 'site' ? <select value={form[field] ?? ''} onChange={(event) => setForm({ ...form, [field]: event.target.value })} className="rounded-lg border border-[#d5e0db] px-3 py-2 text-sm font-normal"><option value="">Unassigned</option>{sites.map((site) => <option key={site.id} value={String(site.name ?? site.id)}>{String(site.name ?? site.id)}</option>)}</select> : <input required={['name', 'nin', 'phone', 'label', 'amount', 'latitude', 'longitude', 'geofenceRadius'].includes(field)} type={['amount', 'latitude', 'longitude', 'geofenceRadius'].includes(field) ? 'number' : 'text'} step={['latitude', 'longitude'].includes(field) ? 'any' : undefined} value={form[field] ?? ''} onChange={(event) => setForm({ ...form, [field]: event.target.value })} className="rounded-lg border border-[#d5e0db] px-3 py-2 text-sm font-normal" />}</label>)}<div className="flex gap-2 md:col-span-2"><button type="submit" disabled={saving} className="rounded-lg bg-[#173f37] px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{saving ? 'Saving…' : editing ? 'Save changes' : 'Create record'}</button><button type="button" onClick={() => setOpen(false)} className="rounded-lg border border-[#d5e0db] px-4 py-2 text-sm font-semibold">Cancel</button></div></form>}
+        {error && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
         {section === 'live-map' ? <div className="rounded-2xl border border-[#dce6e1] bg-white p-10 text-center text-sm text-[#71817c]">No persisted locations have been reported yet.</div> : <div className="overflow-x-auto rounded-2xl border border-[#dce6e1] bg-white"><table className="w-full text-left text-sm"><thead className="border-b border-[#dce6e1] bg-[#f8faf9] text-xs uppercase tracking-wider text-[#71817c]"><tr>{current.columns.map((column) => <th key={column} className="px-5 py-4">{column}</th>)}{current.fields.length > 0 && <th className="px-5 py-4">Action</th>}</tr></thead><tbody>{loading ? <tr><td colSpan={current.columns.length + 1} className="px-5 py-10 text-center text-[#71817c]">Loading live records…</td></tr> : rows.length === 0 ? <tr><td colSpan={current.columns.length + 1} className="px-5 py-10 text-center text-[#71817c]">No records yet.</td></tr> : rows.map((row) => <tr key={row.id} className="border-b border-[#edf2ef] last:border-0">{current.columns.map((column) => <td key={column} className="px-5 py-4">{display(row, column)}</td>)}{current.fields.length > 0 && <td className="px-5 py-4"><button onClick={() => startEdit(row)} className="inline-flex items-center gap-1 text-xs font-bold text-[#2d846d]"><Edit3 className="size-3.5" /> Edit</button></td>}</tr>)}</tbody></table></div>}
       </main>
     </div>
