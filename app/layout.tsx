@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'BastionOS — Security Operations',
+  title: 'BastionOS · Fortewings Security',
   description: 'Real-time security operations, guard attendance, incidents, and live site monitoring.',
   
   icons: {

@@ -7,6 +7,7 @@ import { RecordsPage } from '@/components/records-page'
 import { PatrolsPage } from '@/components/patrols-page'
 import { FinancePage } from '@/components/finance-page'
 import { GuardRegisterPage } from '@/components/guard-register-page'
+import { ProfilePage } from '@/components/profile-page'
 import { ClientsPage, ReportsPage, SettingsPage } from '@/components/more-pages'
 
 export function WorkspacePage({ route, financeTab = 'overview' }: { route: string; financeTab?: string }) {
@@ -23,6 +24,7 @@ export function WorkspacePage({ route, financeTab = 'overview' }: { route: strin
     case 'finance': content = <FinancePage tab={financeTab === 'payroll' ? 'payroll' : 'overview'} />; break
     case 'clients': content = <ClientsPage />; break
     case 'reports': content = <ReportsPage />; break
+    case 'profile': content = <ProfilePage />; active = 'profile'; break
     case 'napoleon': content = <NapoleonLivePage />; break
     case 'settings': content = <SettingsPage />; active = 'Settings'; break
     default: content = <OverviewPage />

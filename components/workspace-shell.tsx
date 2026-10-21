@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { Logo, Wordmark } from '@/components/brand'
+import { Avatar } from '@/components/ui-bits'
 
 const navigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
@@ -71,7 +72,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
         <Link href="/overview" className="flex h-[64px] items-center px-5"><Wordmark /></Link>
         <div className="mx-3 mb-4 flex h-[52px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5">
           <span className="flex size-7 items-center justify-center rounded-lg bg-[#E4E4E7] text-[9px] font-bold text-zinc-800">{initials(organization.data?.name)}</span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organization.data?.name ?? 'Your company'}</span><span className="block text-[10px] text-[#A1A1AA]">Security operations</span></span>
+          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organization.data?.name ?? 'Your company'}</span><span className="block text-[10px] text-[#A1A1AA]">{process.env.NEXT_PUBLIC_BRAND_TAGLINE ?? 'Fortewings Security'}</span></span>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-2.5">
           {navigation.map(({ label, href, icon: Icon, tag }) => (
@@ -85,8 +86,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
         <div className="border-t border-white/10 px-3 pb-3 pt-2">
           <Link href="/guard-app" className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-xs text-[#B4B4BB] hover:bg-white/[0.06] hover:text-white"><Phone className="size-4" />Guard mobile app</Link>
           <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-3">
-            <span className="flex size-8 items-center justify-center rounded-full bg-[#E4E4E7] text-[10px] font-bold text-zinc-800">{initials(user?.name)}</span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{user?.name ?? 'Signed in'}</span><span className="block truncate text-[10px] text-[#A1A1AA]">{user?.email}</span></span>
+            <Link href="/profile" aria-label="Your profile" title="Your profile"><Avatar name={user?.name ?? 'User'} src={user?.image} size={32} /></Link>
+            <Link href="/profile" className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{user?.name ?? 'Signed in'}</span><span className="block truncate text-[10px] text-[#A1A1AA]">{user?.email}</span></Link>
             <button onClick={() => void signOut()} aria-label="Sign out" title="Sign out" className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"><LogOut className="size-4" /></button>
           </div>
         </div>
@@ -119,6 +120,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
             <div className="grid grid-cols-3 gap-2">
               {navigation.map(({ label, href, icon: Icon }) => <Link key={label} href={href} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Icon className="size-5" />{label}</Link>)}
               <Link href="/guard-app" className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Phone className="size-5" />Guard app</Link>
+              <Link href="/profile" className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Avatar name={user?.name ?? 'User'} src={user?.image} size={24} />My profile</Link>
               <button onClick={() => void signOut()} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><LogOut className="size-5" />Sign out</button>
             </div>
           </div>
