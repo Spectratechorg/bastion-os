@@ -30,9 +30,9 @@ export async function GET() {
     db.select({ total: sql<number>`count(*)` }).from(clients).where(eq(clients.organizationId, organizationId)),
   ])
 
-  const revenue = financeRows.filter((row) => row.kind === 'revenue').reduce((sum, row) => sum + Number(row.amount), 0)
-  const costs = financeRows.filter((row) => ['operating_cost', 'expense', 'salary'].includes(row.kind)).reduce((sum, row) => sum + Number(row.amount), 0)
-  const pending = financeRows.filter((row) => !['paid', 'settled'].includes(row.status)).reduce((sum, row) => sum + Number(row.amount), 0)
+  const revenue = financeRows.filter((row) => ['revenue', 'invoice'].includes(row.kind)).reduce((sum, row) => sum + Number(row.amount), 0)
+  const costs = financeRows.filter((row) => !['revenue', 'invoice'].includes(row.kind)).reduce((sum, row) => sum + Number(row.amount), 0)
+  const pending = financeRows.filter((row) => !['paid', 'settled', 'received'].includes(row.status)).reduce((sum, row) => sum + Number(row.amount), 0)
   return NextResponse.json({
     generatedAt: new Date().toISOString(),
     periodStart: yearStart.toISOString(),

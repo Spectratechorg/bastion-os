@@ -158,26 +158,31 @@ export function ClientsDataPage() {
 const financeFilters: Record<string, string[] | null> = {
   overview: null,
   invoices: ['invoice'],
-  payroll: ['payroll', 'salary'],
   expenses: ['operating_cost', 'expense'],
   inventory: ['inventory'],
   budgets: ['budget'],
-  reports: null,
 }
 
 const defaultKind: Record<string, string> = {
-  invoices: 'invoice', payroll: 'payroll', expenses: 'operating_cost',
-  inventory: 'inventory', budgets: 'budget', reports: 'revenue', overview: 'revenue',
+  invoices: 'invoice', expenses: 'operating_cost',
+  inventory: 'inventory', budgets: 'budget', overview: 'revenue',
 }
 
+const moneyIn = ['revenue', 'invoice']
+const settledStatuses = ['paid', 'settled', 'received']
+
 export function FinanceDataPage({ tab }: { tab: string }) {
+  const page = tab in financeFilters ? tab : 'overview'
   const [rows, setRows] = useState<FinanceRecord[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [busyId, setBusyId] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ kind: defaultKind[tab] ?? 'revenue', label: '', amount: '', status: 'pending', dueDate: '', notes: '' })
+  const emptyForm = (kind: string) => ({ kind, label: '', amount: '', status: 'pending', dueDate: '', notes: '' })
+  const [form, setForm] = useState(emptyForm(defaultKind[page] ?? 'revenue'))
 
   async function load() {
     setLoading(true)
@@ -191,24 +196,34 @@ export function FinanceDataPage({ tab }: { tab: string }) {
     }
   }
 
-  useEffect(() => { void load() }, [tab])
-  const filter = financeFilters[tab] ?? null
+  useEffect(() => { void load() }, [page])
+  const filter = financeFilters[page] ?? null
   const filtered = useMemo(() => rows.filter((row) => (!filter || filter.includes(row.kind)) && `${row.label} ${row.kind} ${row.status} ${row.notes ?? ''}`.toLowerCase().includes(search.toLowerCase())), [rows, filter, search])
-  const total = filtered.reduce((sum, row) => sum + Number(row.amount), 0)
-  const pending = filtered.filter((row) => !['paid', 'settled'].includes(row.status.toLowerCase())).reduce((sum, row) => sum + Number(row.amount), 0)
-  const title = tab === 'overview' ? 'Finance' : `${tab[0]?.toUpperCase()}${tab.slice(1)}`
+  const inflow = filtered.filter((row) => moneyIn.includes(row.kind)).reduce((sum, row) => sum + Number(row.amount), 0)
+  const outflow = filtered.filter((row) => !moneyIn.includes(row.kind)).reduce((sum, row) => sum + Number(row.amount), 0)
+  const unsettled = filtered.filter((row) => !settledStatuses.includes(row.status.toLowerCase())).reduce((sum, row) => sum + Number(row.amount), 0)
+  const title = page === 'overview' ? 'Finance' : `${page[0]?.toUpperCase()}${page.slice(1)}`
 
-  async function create(event: FormEvent<HTMLFormElement>) {
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSaving(true)
     setError('')
+    const payload = {
+      section: 'finances',
+      ...(editingId ? { id: editingId, action: 'update' } : {}),
+      ...form,
+      amount: Number(form.amount),
+      dueDate: form.dueDate ? new Date(`${form.dueDate}T00:00:00.000Z`).toISOString() : '',
+      notes: form.notes || null,
+    }
     try {
       await jsonRequest<FinanceRecord>('/api/operations', {
-        method: 'POST',
+        method: editingId ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ section: 'finances', ...form, amount: Number(form.amount), dueDate: form.dueDate ? new Date(`${form.dueDate}T00:00:00.000Z`).toISOString() : '' }),
+        body: JSON.stringify(payload),
       })
-      setForm({ kind: defaultKind[tab] ?? 'revenue', label: '', amount: '', status: 'pending', dueDate: '', notes: '' })
+      setForm(emptyForm(defaultKind[page] ?? 'revenue'))
+      setEditingId(null)
       setOpen(false)
       await load()
     } catch (cause) {
@@ -218,25 +233,60 @@ export function FinanceDataPage({ tab }: { tab: string }) {
     }
   }
 
+  async function patch(row: FinanceRecord, action: 'settle' | 'reopen' | 'delete') {
+    if (action === 'delete' && !window.confirm(`Delete “${row.label}”? This cannot be undone.`)) return
+    setBusyId(row.id)
+    setError('')
+    try {
+      await jsonRequest('/api/operations', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ section: 'finances', id: row.id, action }),
+      })
+      if (action === 'delete') setRows((items) => items.filter((item) => item.id !== row.id))
+      else setRows((items) => items.map((item) => item.id === row.id ? { ...item, status: action === 'settle' ? 'paid' : 'pending' } : item))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to update the finance record.')
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  function edit(row: FinanceRecord) {
+    setForm({
+      kind: row.kind,
+      label: row.label,
+      amount: String(row.amount),
+      status: row.status,
+      dueDate: row.dueDate ? new Date(row.dueDate).toISOString().slice(0, 10) : '',
+      notes: row.notes ?? '',
+    })
+    setEditingId(row.id)
+    setOpen(true)
+  }
+
   return <>
-    <PageHeader title={title} subtitle="Financial records and summaries from your organization database.">
+    <PageHeader title={title} subtitle="Income and costs recorded for your organization.">
       <a href="/api/export?section=finances" className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold"><Download className="size-3.5" />Export CSV</a>
-      <button onClick={() => setOpen(!open)} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-black px-3.5 text-xs font-semibold text-white"><Plus className="size-3.5" />Add record</button>
+      <button onClick={() => { setEditingId(null); setForm(emptyForm(defaultKind[page] ?? 'revenue')); setOpen(!open) }} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-black px-3.5 text-xs font-semibold text-white"><Plus className="size-3.5" />Add record</button>
     </PageHeader>
-    <nav className="mb-5 flex gap-5 overflow-x-auto border-b border-zinc-200 text-xs">{Object.keys(financeFilters).map((item) => <a key={item} href={item === 'overview' ? '/finance' : `/finance/${item}`} className={`border-b-2 pb-3 capitalize ${item === tab ? 'border-black font-semibold' : 'border-transparent text-zinc-500'}`}>{item}</a>)}</nav>
-    <StatStrip stats={[[String(filtered.length), 'Records'], [money(total), 'Total value'], [money(pending), 'Unsettled value'], [loading ? '…' : 'Live', 'Database status']]} />
+    <nav className="mb-5 flex gap-5 overflow-x-auto border-b border-zinc-200 text-xs">{Object.keys(financeFilters).map((item) => <a key={item} href={item === 'overview' ? '/finance' : `/finance/${item}`} className={`border-b-2 pb-3 capitalize ${item === page ? 'border-black font-semibold' : 'border-transparent text-zinc-500'}`}>{item}</a>)}<a href="/finance/payroll" className="border-b-2 border-transparent pb-3 text-zinc-500">Payroll run</a></nav>
+    <StatStrip stats={[[String(filtered.length), 'Records'], [money(inflow), 'Money in'], [money(outflow), 'Money out'], [money(unsettled), 'Unsettled']]} />
     {error && <ErrorNotice>{error}</ErrorNotice>}
-    {open && <form onSubmit={create} className="mb-5 grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
+    {open && <form onSubmit={save} className="mb-5 grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
       <label className="flex flex-col gap-1.5 text-xs font-medium">Record type<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3">{['revenue', 'invoice', 'payroll', 'operating_cost', 'expense', 'inventory', 'budget'].map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Description<input required value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Amount (NGN)<input required min="0" step="any" type="number" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
-      <label className="flex flex-col gap-1.5 text-xs font-medium">Status<input required value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
+      <label className="flex flex-col gap-1.5 text-xs font-medium">Status<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3">{['pending', 'paid', 'received', 'overdue'].map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Due date<input type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Notes<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
-      <div className="flex items-end gap-2"><button disabled={saving} className="h-10 rounded-lg bg-black px-4 text-xs font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save record'}</button><button type="button" onClick={() => setOpen(false)} className="h-10 rounded-lg border border-zinc-200 px-4 text-xs">Cancel</button></div>
+      <div className="flex items-end gap-2"><button disabled={saving} className="h-10 rounded-lg bg-black px-4 text-xs font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Update record' : 'Save record'}</button><button type="button" onClick={() => { setOpen(false); setEditingId(null) }} className="h-10 rounded-lg border border-zinc-200 px-4 text-xs">Cancel</button></div>
     </form>}
     <div className="mb-3 flex items-center gap-2"><label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3"><Search className="size-4 text-zinc-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}…`} className="w-full text-xs outline-none" /></label><button onClick={() => void load()} aria-label="Refresh finance records" className="rounded-lg border border-zinc-200 bg-white p-3"><RefreshCw className="size-3.5" /></button></div>
-    <div className="overflow-x-auto rounded-[18px] border border-zinc-200 bg-white"><table className="w-full min-w-[700px] text-left text-xs"><thead className="bg-zinc-50 text-[10px] tracking-wide text-zinc-500"><tr>{['TYPE', 'DESCRIPTION', 'AMOUNT', 'STATUS', 'DUE DATE', 'NOTES'].map((name) => <th key={name} className="px-4 py-3">{name}</th>)}</tr></thead><tbody>{loading ? <EmptyState>Loading finance records…</EmptyState> : filtered.length === 0 ? <EmptyState>{search ? 'No records match your search.' : 'No finance records in this category yet.'}</EmptyState> : filtered.map((row) => <tr key={row.id} className="border-t border-zinc-100"><td className="px-4 py-3.5 capitalize">{row.kind.replaceAll('_', ' ')}</td><td className="px-4 py-3.5 font-semibold">{row.label}</td><td className="px-4 py-3.5">{money(Number(row.amount))}</td><td className="px-4 py-3.5 capitalize">{row.status}</td><td className="px-4 py-3.5">{row.dueDate ? new Date(row.dueDate).toLocaleDateString() : '—'}</td><td className="px-4 py-3.5">{row.notes ?? '—'}</td></tr>)}</tbody></table></div>
+    <div className="overflow-x-auto rounded-[18px] border border-zinc-200 bg-white"><table className="w-full min-w-[820px] text-left text-xs"><thead className="bg-zinc-50 text-[10px] tracking-wide text-zinc-500"><tr>{['TYPE', 'DESCRIPTION', 'AMOUNT', 'STATUS', 'DUE DATE', 'NOTES', ''].map((name, index) => <th key={`${name}-${index}`} className="px-4 py-3">{name}</th>)}</tr></thead><tbody>{loading ? <EmptyState colSpan={7}>Loading finance records…</EmptyState> : filtered.length === 0 ? <EmptyState colSpan={7}>{search ? 'No records match your search.' : 'No finance records in this category yet.'}</EmptyState> : filtered.map((row) => {
+      const settled = settledStatuses.includes(row.status.toLowerCase())
+      return <tr key={row.id} className="border-t border-zinc-100"><td className="px-4 py-3.5 capitalize">{row.kind.replaceAll('_', ' ')}</td><td className="px-4 py-3.5 font-semibold">{row.label}</td><td className="px-4 py-3.5 font-mono">{money(Number(row.amount))}</td><td className="px-4 py-3.5 capitalize">{row.status}</td><td className="px-4 py-3.5">{row.dueDate ? new Date(row.dueDate).toLocaleDateString() : '—'}</td><td className="max-w-[220px] px-4 py-3.5">{row.notes ?? '—'}</td><td className="px-4 py-3.5"><span className="flex flex-wrap justify-end gap-1.5"><button disabled={busyId === row.id} onClick={() => void patch(row, settled ? 'reopen' : 'settle')} className="rounded border border-zinc-200 px-2 py-1 text-[10px] font-semibold disabled:opacity-50">{settled ? 'Reopen' : 'Mark paid'}</button><button onClick={() => edit(row)} className="rounded border border-zinc-200 px-2 py-1 text-[10px] font-semibold">Edit</button><button disabled={busyId === row.id} onClick={() => void patch(row, 'delete')} className="rounded border border-red-200 px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-50">Delete</button></span></td></tr>
+    })}</tbody></table></div>
   </>
 }
 

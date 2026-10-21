@@ -174,7 +174,7 @@ export async function POST(request: Request) {
 const updateSchema = z.object({
   section: sectionSchema,
   id: z.string().uuid(),
-  action: z.enum(['update', 'suspend', 'reactivate', 'reissue-nfc', 'deactivate', 'approve', 'flag', 'assign', 'comment', 'escalate', 'resolve', 'acknowledge', 'complete']).default('update'),
+  action: z.enum(['update', 'suspend', 'reactivate', 'reissue-nfc', 'deactivate', 'approve', 'flag', 'assign', 'comment', 'escalate', 'resolve', 'acknowledge', 'complete', 'settle', 'reopen', 'delete']).default('update'),
   name: z.string().trim().min(2).max(200).optional(),
   nin: z.string().trim().min(4).max(100).optional(),
   phone: z.string().trim().min(7).max(50).optional(),
@@ -190,6 +190,11 @@ const updateSchema = z.object({
   progress: z.coerce.number().int().min(0).max(100).optional(),
   acknowledged: z.boolean().optional(),
   comment: z.string().trim().min(1).max(1000).optional(),
+  label: z.string().trim().min(1).max(200).optional(),
+  kind: z.string().trim().min(1).max(64).optional(),
+  amount: z.coerce.number().finite().nonnegative().optional(),
+  notes: z.string().trim().max(5000).nullable().optional(),
+  dueDate: z.union([z.string().datetime(), z.literal('')]).nullable().optional(),
 })
 
 export async function PATCH(request: Request) {
@@ -302,6 +307,38 @@ export async function PATCH(request: Request) {
     if (!updated) return fail('Alert not found in this organization.', 404)
     row = updated
     eventTitle = `Alert updated: ${updated.title}`
+  } else if (section === 'finances') {
+    const where = and(eq(finances.id, id), eq(finances.organizationId, current.organizationId))
+    const [record] = await db.select().from(finances).where(where).limit(1)
+    if (!record) return fail('Finance record not found in this organization.', 404)
+
+    if (action === 'delete') {
+      if (!(await isModerator(current))) return fail('Only an owner, administrator or moderator can delete a finance record.', 403)
+      await db.delete(finances).where(where)
+      await log(current, 'finance.deleted', `Finance record deleted: ${record.label}`, `${record.kind} · ${record.status}`)
+      return NextResponse.json({ id, deleted: true })
+    }
+
+    let changes: Partial<typeof finances.$inferInsert>
+    if (action === 'settle') changes = { status: 'paid' }
+    else if (action === 'reopen') changes = { status: 'pending' }
+    else if (action === 'update') changes = {
+      kind: parsed.data.kind,
+      label: parsed.data.label,
+      amount: parsed.data.amount,
+      status: parsed.data.status,
+      notes: parsed.data.notes,
+      dueDate: parsed.data.dueDate === undefined ? undefined : parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
+    }
+    else return fail('Unsupported finance action.')
+
+    const values = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))
+    if (Object.keys(values).length === 0) return fail('Provide at least one finance field to update.')
+    const [updated] = await db.update(finances).set(values).where(where).returning()
+    if (!updated) return fail('Finance record not found in this organization.', 404)
+    row = updated
+    eventTitle = `Finance record ${action === 'settle' ? 'marked paid' : action === 'reopen' ? 'reopened' : 'updated'}: ${updated.label}`
+    eventBody = `${updated.kind} · ${updated.status}`
   } else {
     return fail('Unsupported record type.')
   }
