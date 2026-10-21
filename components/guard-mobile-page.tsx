@@ -265,6 +265,7 @@ export function GuardMobilePage() {
           <form onSubmit={(event) => { event.preventDefault(); void verifyToken('attendance', manualToken) }} className="mt-3 flex gap-2">
             <input aria-label="Guard NFC token" value={manualToken} onChange={(event) => setManualToken(event.target.value)} placeholder="Or enter guard tag code" className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 text-xs" />
             <button disabled={submitting} className="rounded-lg border border-zinc-200 px-3 text-xs font-semibold disabled:opacity-60">{checkedIn ? 'Clock out' : 'Clock in/out'}</button>
+            <button type="button" disabled={submitting || !manualToken.trim()} onClick={() => void verifyToken('patrol', manualToken)} className="rounded-lg border border-zinc-200 px-3 text-xs font-semibold disabled:opacity-60">Log patrol</button>
           </form>
         </section>
 

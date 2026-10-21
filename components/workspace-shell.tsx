@@ -1,15 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { authClient } from '@/lib/auth-client'
 import { Avatar } from '@/components/ui-bits'
 import { Wordmark } from '@/components/brand'
 import type { LucideIcon } from 'lucide-react'
 import {
   Activity, Bell, BriefcaseBusiness, ChevronDown, ChevronRight,
-  Clock3, FileText, Grid2X2, MapPin, Moon, Phone, Route,
+  Clock3, FileText, Grid2X2, MapPin, Phone, Route,
   Search, Settings, Sparkles, Users, Wallet,
 } from 'lucide-react'
 
@@ -30,8 +30,30 @@ const navigation: { label: string; href: string; icon: LucideIcon; badge?: strin
 
 export function WorkspaceShell({ active, children }: { active: string; children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const searchBox = useRef<HTMLInputElement>(null)
+  const [term, setTerm] = useState('')
   const [identity, setIdentity] = useState<{ user: { name: string; email: string; image: string | null; role: string }; organization: { name: string } } | null>(null)
   const [signOutError, setSignOutError] = useState('')
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        searchBox.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  function submitSearch(event: React.FormEvent) {
+    event.preventDefault()
+    const value = term.trim()
+    if (!value) return
+    const section = navigation.find((item) => item.label.toLowerCase().includes(value.toLowerCase()))
+    router.push(section ? section.href : `/guards?q=${encodeURIComponent(value)}`)
+  }
 
   useEffect(() => {
     fetch('/api/workspace', { cache: 'no-store' })
@@ -62,8 +84,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
           <Wordmark size={32} />
         </Link>
         <div className="mx-3 mb-4 flex h-[52px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-[#EBEBED] text-[9px] font-bold text-zinc-800">{organizationName.slice(0, 2).toUpperCase()}</span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organizationName}</span><span className="block text-[10px] capitalize text-[#A1A1A6]">{identity?.user.role ?? 'Loading account'}</span></span><ChevronDown className="size-3.5 text-zinc-400" />
+          <Link href="/settings/roles" className="flex min-w-0 flex-1 items-center gap-2"><span className="flex size-7 items-center justify-center rounded-lg bg-[#EBEBED] text-[9px] font-bold text-zinc-800">{organizationName.slice(0, 2).toUpperCase()}</span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organizationName}</span><span className="block text-[10px] capitalize text-[#A1A1A6]">{identity?.user.role ?? 'Loading account'}</span></span><ChevronDown className="size-3.5 text-zinc-400" /></Link>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-2.5">
           {navigation.map(({ label, href, icon: Icon, badge, tag }) => {
@@ -86,12 +108,11 @@ export function WorkspaceShell({ active, children }: { active: string; children:
       </aside>
       <div className="lg:pl-[239px]">
         <header className="workspace-topbar sticky top-0 z-10 flex h-[65px] items-center gap-4 border-b border-[#E4E4E7] bg-white px-5 lg:px-7">
-          <div className="flex min-w-0 flex-1 items-center gap-3 text-[#9A9AA1]">
-            <Search className="size-4 shrink-0" /><input aria-label="Search workspace" placeholder="Search guards, sites, incidents..." className="w-full max-w-[350px] bg-transparent text-[13px] outline-none placeholder:text-[#9A9AA1]" /><kbd className="hidden whitespace-nowrap rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">Ctrl K</kbd>
-          </div>
-          <button className="hidden items-center gap-1 text-xs text-zinc-600 sm:flex">All sites<ChevronDown className="size-3.5" /></button><span className="hidden h-8 w-px bg-zinc-200 sm:block" />
-          <button aria-label="Toggle dark mode" className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"><Moon className="size-4" /></button>
-          <button aria-label="Notifications" className="relative rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-red-500" /></button>
+          <form onSubmit={submitSearch} className="flex min-w-0 flex-1 items-center gap-3 text-[#9A9AA1]">
+            <Search className="size-4 shrink-0" /><input ref={searchBox} value={term} onChange={(event) => setTerm(event.target.value)} aria-label="Search workspace" placeholder="Search guards, or jump to a page…" className="w-full max-w-[350px] bg-transparent text-[13px] outline-none placeholder:text-[#9A9AA1]" /><kbd className="hidden whitespace-nowrap rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">Ctrl K</kbd>
+          </form>
+          <Link href="/sites" className="hidden items-center gap-1 text-xs text-zinc-600 hover:text-zinc-900 sm:flex">All sites<ChevronDown className="size-3.5" /></Link><span className="hidden h-8 w-px bg-zinc-200 sm:block" />
+          <Link href="/alerts" aria-label="Notifications" className="relative rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"><Bell className="size-4" /><span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-red-500" /></Link>
           <Link href="/napoleon" className="flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] bg-[#111113] px-3 text-xs font-semibold text-white"><Sparkles className="size-3.5" /><span className="hidden sm:inline">Ask Napoleon</span></Link>
         </header>
         <nav aria-label="Workspace sections" className="flex gap-1 overflow-x-auto bg-[#0B0B0C] px-3 py-2 text-white lg:hidden">
