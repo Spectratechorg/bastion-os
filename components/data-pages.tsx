@@ -214,12 +214,32 @@ export function FinanceDataPage({ tab }: { tab: string }) {
   }
 
   useEffect(() => { void load() }, [page])
+  const clientName = (id: string | null) => clients.find((client) => client.id === id)?.name ?? null
+  const siteName = (id: string | null) => sites.find((site) => site.id === id)?.name ?? null
   const filter = financeFilters[page] ?? null
   const filtered = useMemo(() => rows.filter((row) => (!filter || filter.includes(row.kind)) && `${row.label} ${row.kind} ${row.status} ${row.notes ?? ''}`.toLowerCase().includes(search.toLowerCase())), [rows, filter, search])
   const inflow = filtered.filter((row) => moneyIn.includes(row.kind)).reduce((sum, row) => sum + Number(row.amount), 0)
   const outflow = filtered.filter((row) => !moneyIn.includes(row.kind)).reduce((sum, row) => sum + Number(row.amount), 0)
   const unsettled = filtered.filter((row) => !settledStatuses.includes(row.status.toLowerCase())).reduce((sum, row) => sum + Number(row.amount), 0)
   const title = page === 'overview' ? 'Finance' : `${page[0]?.toUpperCase()}${page.slice(1)}`
+  const [statementMonth, setStatementMonth] = useState(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }).slice(0, 7))
+  const statement = useMemo(() => {
+    const monthRows = rows.filter((row) => (row.dueDate ?? row.createdAt).slice(0, 7) === statementMonth)
+    const groups = new Map<string, { name: string; income: number; cost: number }>()
+    for (const row of monthRows) {
+      const key = row.clientId ?? 'none'
+      const entry = groups.get(key) ?? { name: clientName(row.clientId) ?? 'No client', income: 0, cost: 0 }
+      if (moneyIn.includes(row.kind)) entry.income += Number(row.amount)
+      else entry.cost += Number(row.amount)
+      groups.set(key, entry)
+    }
+    const list = [...groups.values()].sort((a, b) => (b.income - b.cost) - (a.income - a.cost))
+    return {
+      income: list.reduce((sum, item) => sum + item.income, 0),
+      cost: list.reduce((sum, item) => sum + item.cost, 0),
+      list,
+    }
+  }, [rows, statementMonth, clients])
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -300,8 +320,8 @@ export function FinanceDataPage({ tab }: { tab: string }) {
     }
   }
 
-  const clientName = (id: string | null) => clients.find((client) => client.id === id)?.name ?? null
-  const siteName = (id: string | null) => sites.find((site) => site.id === id)?.name ?? null
+  const clientLabel = (id: string | null) => clientName(id)
+  const siteLabel = (id: string | null) => siteName(id)
   const isCost = !moneyIn.includes(form.kind)
 
   return <>
@@ -311,6 +331,15 @@ export function FinanceDataPage({ tab }: { tab: string }) {
     </PageHeader>
     <nav className="mb-5 flex gap-5 overflow-x-auto border-b border-zinc-200 text-xs">{Object.keys(financeFilters).map((item) => <a key={item} href={item === 'overview' ? '/finance' : `/finance/${item}`} className={`border-b-2 pb-3 capitalize ${item === page ? 'border-black font-semibold' : 'border-transparent text-zinc-500'}`}>{item}</a>)}<a href="/finance/payroll" className="border-b-2 border-transparent pb-3 text-zinc-500">Payroll run</a></nav>
     <StatStrip stats={[[String(filtered.length), 'Records'], [money(inflow), 'Money in'], [money(outflow), 'Money out'], [money(unsettled), 'Unsettled']]} />
+    {page === 'overview' && <section className="mb-5 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 p-4"><div><h2 className="text-sm font-semibold">Profit statement</h2><p className="mt-1 text-xs text-zinc-500">Income minus costs for the chosen month, grouped by client.</p></div><input type="month" aria-label="Statement month" value={statementMonth} onChange={(event) => event.target.value && setStatementMonth(event.target.value)} className="h-10 rounded-lg border border-zinc-200 px-3 text-xs" /></header>
+      <div className="grid grid-cols-3 divide-x divide-[#E4E4E7] border-b border-zinc-100 text-center">
+        <div className="p-3"><p className="text-[10px] uppercase tracking-wide text-zinc-500">Income</p><p className="mt-1 font-mono text-sm font-semibold text-emerald-700">{money(statement.income)}</p></div>
+        <div className="p-3"><p className="text-[10px] uppercase tracking-wide text-zinc-500">Costs</p><p className="mt-1 font-mono text-sm font-semibold text-red-700">{money(statement.cost)}</p></div>
+        <div className="p-3"><p className="text-[10px] uppercase tracking-wide text-zinc-500">Profit</p><p className={`mt-1 font-mono text-sm font-semibold ${statement.income - statement.cost < 0 ? 'text-red-700' : 'text-zinc-900'}`}>{money(statement.income - statement.cost)}</p></div>
+      </div>
+      {statement.list.length === 0 ? <p className="px-4 py-8 text-center text-xs text-zinc-500">No finance records in {statementMonth}.</p> : <ul className="divide-y divide-zinc-100">{statement.list.map((item) => <li key={item.name} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs"><b className="font-semibold">{item.name}</b><span className="flex gap-4 font-mono"><span className="text-emerald-700">{money(item.income)}</span><span className="text-red-700">−{money(item.cost)}</span><b>{money(item.income - item.cost)}</b></span></li>)}</ul>}
+    </section>}
     {error && <ErrorNotice>{error}</ErrorNotice>}
     {open && <form onSubmit={save} className="mb-5 grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
       <label className="flex flex-col gap-1.5 text-xs font-medium">Record type<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3">{['revenue', 'invoice', 'payroll', 'operating_cost', 'expense', 'inventory', 'budget'].map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label>
