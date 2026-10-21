@@ -61,7 +61,7 @@ function EmptyState({ children, colSpan = 8 }: { children: string; colSpan?: num
   return <tr><td colSpan={colSpan} className="px-4 py-12 text-center text-xs text-zinc-500">{children}</td></tr>
 }
 
-const money = (amount: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', maximumFractionDigits: 0 }).format(amount)
+const money = (amount: number) => new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: Number.isInteger(amount) ? 0 : 2, maximumFractionDigits: 2 }).format(amount)
 
 export function ClientsDataPage() {
   const [rows, setRows] = useState<ClientRecord[]>([])
