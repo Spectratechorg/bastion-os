@@ -31,7 +31,7 @@ Total time: about 30 minutes. You need a GitHub account, a Neon account and a Ve
 2. Sites → add each site (use "Use my current location" while standing at the gate; set the geofence radius).
 3. Guards → Register guard (photo, NIN, salary, site). Note the NFC tag code shown.
 4. Write the tag code onto each guard's NFC card as a **plain text** record (free app "NFC Tools" on Android → Write → Add a record → Text).
-5. Patrol checkpoints use the same cards. Guards open `/guard-app` on an Android phone in Chrome (HTTPS is required for NFC), tap **Use code** and enter the company guard app code from **Settings → Guard app access**. No manager login is needed on the phone, and every phone can share the same code.
+5. Patrol checkpoints use the same cards. Set the patrol shift once in **Settings → Patrol shift** (for example 07:00–19:00); guards then sign one checkpoint every hour inside that shift. Guards open `/guard-app` on an Android phone in Chrome (HTTPS is required for NFC), tap **Use code** and enter the company guard app code from **Settings → Guard app access**. No manager login is needed on the phone, and every phone can share the same code.
 6. To lock out a phone that should no longer scan, press **Replace code** in Settings and share the new code with the supervisors.
 
 ## 5. Before real customers use it (commercial checklist)

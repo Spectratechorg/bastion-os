@@ -55,6 +55,8 @@ export const organizations = pgTable('organization', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
   guardAppCode: text('guard_app_code').unique(),
+  patrolStartHour: integer('patrol_start_hour').notNull().default(8),
+  patrolEndHour: integer('patrol_end_hour').notNull().default(18),
 })
 
 export const members = pgTable('member', {

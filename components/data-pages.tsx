@@ -407,6 +407,12 @@ export function SettingsDataPage() {
   const [codeError, setCodeError] = useState('')
   const [codeNote, setCodeNote] = useState('')
   const [rotating, setRotating] = useState(false)
+  const [shift, setShift] = useState({ startHour: 8, endHour: 18 })
+  const [shiftNote, setShiftNote] = useState('')
+  const [shiftError, setShiftError] = useState('')
+  const [savingShift, setSavingShift] = useState(false)
+
+  const hours = Array.from({ length: 25 }, (_, hour) => hour)
 
   async function load() {
     setLoading(true)
@@ -449,7 +455,37 @@ export function SettingsDataPage() {
     }
   }
 
-  useEffect(() => { void load(); void loadGuardCode() }, [])
+  async function loadShift() {
+    try {
+      const response = await fetch('/api/shift', { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to load the patrol shift.')
+      setShift({ startHour: payload.startHour, endHour: payload.endHour })
+      setShiftError('')
+    } catch (cause) {
+      setShiftError(cause instanceof Error ? cause.message : 'Unable to load the patrol shift.')
+    }
+  }
+
+  async function saveShift(event: React.FormEvent) {
+    event.preventDefault()
+    setSavingShift(true)
+    setShiftError('')
+    setShiftNote('')
+    try {
+      const response = await fetch('/api/shift', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(shift) })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to save the patrol shift.')
+      setShift({ startHour: payload.startHour, endHour: payload.endHour })
+      setShiftNote('Patrol checkpoints updated.')
+    } catch (cause) {
+      setShiftError(cause instanceof Error ? cause.message : 'Unable to save the patrol shift.')
+    } finally {
+      setSavingShift(false)
+    }
+  }
+
+  useEffect(() => { void load(); void loadGuardCode(); void loadShift() }, [])
 
   return <>
     <PageHeader title="Settings" subtitle="Organization, team access, and recorded workspace activity.">
@@ -471,6 +507,21 @@ export function SettingsDataPage() {
           <button onClick={() => void rotateGuardCode()} disabled={rotating} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white disabled:opacity-60">{rotating ? 'Replacing…' : 'Replace code'}</button>
         </div>
         {codeNote && <p role="status" className="mt-3 text-xs text-emerald-700">{codeNote}</p>}
+      </section>
+      <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
+        <h2 className="text-sm font-semibold">Patrol shift</h2>
+        <p className="mt-1 text-xs text-zinc-500">Guards sign one checkpoint every hour inside this shift, in Lagos time. A {shift.endHour - shift.startHour}-checkpoint patrol runs {String(shift.startHour).padStart(2, '0')}:00–{String(shift.endHour - 1).padStart(2, '0')}:59.</p>
+        {shiftError && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{shiftError}</p>}
+        <form onSubmit={saveShift} className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1.5 text-[11px] font-semibold text-zinc-700">Shift starts
+            <select value={shift.startHour} onChange={(event) => setShift({ ...shift, startHour: Number(event.target.value) })} className="h-10 rounded-lg border border-zinc-200 px-3 text-xs">{hours.slice(0, 24).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select>
+          </label>
+          <label className="flex flex-col gap-1.5 text-[11px] font-semibold text-zinc-700">Shift ends
+            <select value={shift.endHour} onChange={(event) => setShift({ ...shift, endHour: Number(event.target.value) })} className="h-10 rounded-lg border border-zinc-200 px-3 text-xs">{hours.slice(1).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select>
+          </label>
+          <button disabled={savingShift} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white disabled:opacity-60">{savingShift ? 'Saving…' : 'Save shift'}</button>
+        </form>
+        {shiftNote && <p role="status" className="mt-3 text-xs text-emerald-700">{shiftNote}</p>}
       </section>
       <section className="mb-5 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
         <header className="border-b border-zinc-100 p-4"><h2 className="text-sm font-semibold">Organization members</h2><p className="mt-1 text-xs text-zinc-500">Membership and roles currently stored for this organization.</p></header>

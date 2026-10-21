@@ -57,6 +57,13 @@
       "when": 1792597733233,
       "tag": "0007_rare_blue_shield",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792602500950,
+      "tag": "0008_dark_triton",
+      "breakpoints": true
     }
   ]
 }

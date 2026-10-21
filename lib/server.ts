@@ -30,7 +30,7 @@ export function lagosParts(date = new Date()) {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), month: `${parts.year}-${parts.month}` }
 }
 
-export { PATROL_SLOTS, PATROL_WINDOW, slotForHour } from '@/lib/server-rules'
+export { patrolSlots, DEFAULT_SHIFT, normalizeShift, slotForHour } from '@/lib/server-rules'
 
 export function distanceMetres(lat1: number, lon1: number, lat2: number, lon2: number) {
   const rad = (value: number) => (value * Math.PI) / 180

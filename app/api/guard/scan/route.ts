@@ -4,9 +4,9 @@ import { z } from 'zod'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
-import { attendance, guards, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
+import { attendance, guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
-import { lagosParts, slotForHour } from '@/lib/server'
+import { lagosParts, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,8 +150,12 @@ export async function POST(request: Request) {
   }
 
   const lagos = lagosParts(now)
-  const slot = slotForHour(lagos.hour)
-  if (!slot) return NextResponse.json({ error: 'Patrol checkpoints can only be signed between 09:00 and 12:59 Lagos time.' }, { status: 409 })
+  const [organization] = await db.select({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour })
+    .from(organizations).where(eq(organizations.id, currentUser.organizationId)).limit(1)
+  const shift = normalizeShift(organization?.startHour, organization?.endHour)
+  const slots = patrolSlots(shift)
+  const slot = slotForHour(lagos.hour, shift)
+  if (!slot) return NextResponse.json({ error: `Patrol checkpoints can only be signed between ${String(shift.startHour).padStart(2, '0')}:00 and ${String(shift.endHour - 1).padStart(2, '0')}:59 Lagos time. Ask your supervisor to change the patrol shift in Settings.` }, { status: 409 })
 
   let [patrol] = await db.select().from(patrols).where(and(
     eq(patrols.organizationId, currentUser.organizationId),
@@ -197,8 +201,8 @@ export async function POST(request: Request) {
   ))
   const signedCount = checkpointRows.length
   await db.update(patrols).set({
-    progress: Math.round((signedCount / 3) * 100),
-    status: signedCount === 3 ? 'completed' : 'in_progress',
+    progress: Math.round((signedCount / Math.max(slots.length, 1)) * 100),
+    status: signedCount >= slots.length ? 'completed' : 'in_progress',
   }).where(eq(patrols.id, patrol.id))
   const [todayPatrols] = await db.select({ total: count() })
     .from(patrolCheckpoints)

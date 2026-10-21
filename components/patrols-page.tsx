@@ -8,7 +8,7 @@ import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, btnPrimary, inputClass
 import { api } from '@/lib/client'
 
 type Patrol = { id: string; date: string; guardName: string; photoUrl: string | null; site: string; checkpoints: Record<string, string>; signedCount: number; status: string }
-type Data = { date: string; today: string; slots: string[]; rows: Patrol[]; notStarted: { guardId: string; guardName: string; site: string }[]; summary: { completedToday: number; inProgressToday: number; missedToday: number; completedThisMonth: number } }
+type Data = { date: string; today: string; slots: string[]; shift: { startHour: number; endHour: number }; rows: Patrol[]; notStarted: { guardId: string; guardName: string; site: string }[]; summary: { completedToday: number; inProgressToday: number; missedToday: number; completedThisMonth: number } }
 
 const time = (iso?: string) => iso ? new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) : null
 
@@ -24,7 +24,7 @@ export function PatrolsPage() {
   useEffect(() => { setLoading(true); void load(); const timer = window.setInterval(() => void load(), 10000); return () => window.clearInterval(timer) }, [load])
   const s = data?.summary
   return <>
-    <PageHeader title="Patrols" subtitle="Each guard signs 10:00, 11:00 and 12:00 between 09:00 and 12:59. All three signatures complete the patrol.">
+    <PageHeader title="Patrols" subtitle={data ? `Every hour from ${data.slots[0] ?? '08:00'} to ${data.slots[data.slots.length - 1] ?? '17:00'} (Lagos time). ${data.slots.length} signatures complete a patrol.` : 'Hourly checkpoints inside your shift.'}>
       <Link href="/guard-app" className={btnPrimary}><Smartphone className="size-4" />Open guard app</Link>
     </PageHeader>
     <StatStrip stats={[[String(s?.completedToday ?? '—'), 'Completed today'], [String(s?.inProgressToday ?? '—'), 'In progress'], [String(s?.missedToday ?? '—'), 'Missed today'], [String(s?.completedThisMonth ?? '—'), 'Completed this month']]} />
