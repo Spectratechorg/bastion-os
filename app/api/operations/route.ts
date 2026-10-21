@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
-import { activityEvents, alerts, attendance, finances, guards, incidents, patrols, sites } from '@/lib/db/schema'
+import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrols, sites } from '@/lib/db/schema'
 import { isModerator } from '@/lib/server'
 
 const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map'])
@@ -62,6 +62,10 @@ const financeCreateSchema = z.object({
   status: z.string().trim().min(1).max(32).default('pending'),
   dueDate: z.union([z.string().datetime(), z.literal('')]).optional(),
   notes: z.string().trim().max(5000).optional(),
+  clientId: z.union([z.string().uuid(), z.literal('')]).optional(),
+  siteId: z.union([z.string().uuid(), z.literal('')]).optional(),
+  category: z.string().trim().max(64).optional(),
+  receiptUrl: z.string().max(1_500_000).nullable().optional(),
 })
 
 export async function GET(request: Request) {
@@ -157,9 +161,29 @@ export async function POST(request: Request) {
   if (section.data === 'finances') {
     const parsed = financeCreateSchema.safeParse(body)
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid finance record.')
+    const clientId = parsed.data.clientId || null
+    const siteId = parsed.data.siteId || null
+    if (clientId) {
+      const [client] = await db.select({ id: clients.id }).from(clients).where(and(
+        eq(clients.organizationId, current.organizationId),
+        eq(clients.id, clientId),
+      )).limit(1)
+      if (!client) return fail('Select a client in this organization.')
+    }
+    if (siteId) {
+      const [site] = await db.select({ id: sites.id }).from(sites).where(and(
+        eq(sites.organizationId, current.organizationId),
+        eq(sites.id, siteId),
+      )).limit(1)
+      if (!site) return fail('Select a site in this organization.')
+    }
     const [row] = await db.insert(finances).values({
       ...current,
       ...parsed.data,
+      clientId,
+      siteId,
+      category: parsed.data.category || null,
+      receiptUrl: parsed.data.receiptUrl ?? null,
       dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
       notes: parsed.data.notes || null,
       createdAt: now,
@@ -195,6 +219,10 @@ const updateSchema = z.object({
   amount: z.coerce.number().finite().nonnegative().optional(),
   notes: z.string().trim().max(5000).nullable().optional(),
   dueDate: z.union([z.string().datetime(), z.literal('')]).nullable().optional(),
+  clientId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
+  siteId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
+  category: z.string().trim().max(64).nullable().optional(),
+  receiptUrl: z.string().max(1_500_000).nullable().optional(),
 })
 
 export async function PATCH(request: Request) {
@@ -328,6 +356,10 @@ export async function PATCH(request: Request) {
       amount: parsed.data.amount,
       status: parsed.data.status,
       notes: parsed.data.notes,
+      clientId: parsed.data.clientId === undefined ? undefined : parsed.data.clientId || null,
+      siteId: parsed.data.siteId === undefined ? undefined : parsed.data.siteId || null,
+      category: parsed.data.category === undefined ? undefined : parsed.data.category || null,
+      receiptUrl: parsed.data.receiptUrl,
       dueDate: parsed.data.dueDate === undefined ? undefined : parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
     }
     else return fail('Unsupported finance action.')

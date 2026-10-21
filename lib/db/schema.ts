@@ -214,6 +214,10 @@ export const finances = pgTable('finances', {
   status: text('status').notNull(),
   dueDate: timestamp('due_date', { withTimezone: true }),
   notes: text('notes'),
+  clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
+  siteId: uuid('site_id').references(() => sites.id, { onDelete: 'set null' }),
+  category: text('category'),
+  receiptUrl: text('receipt_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
