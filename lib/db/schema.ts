@@ -90,6 +90,8 @@ export const guards = pgTable('guards', {
   suspendedAt: timestamp('suspended_at', { withTimezone: true }),
   site: text('site'),
   nfcToken: text('nfc_token').unique(),
+  photoUrl: text('photo_url'),
+  monthlySalary: integer('monthly_salary').notNull().default(0),
   lastCheckIn: timestamp('last_check_in', { withTimezone: true }),
   lastLatitude: doublePrecision('last_latitude'),
   lastLongitude: doublePrecision('last_longitude'),
@@ -161,6 +163,7 @@ export const patrols = pgTable('patrols', {
   guardId: uuid('guard_id').notNull(),
   siteId: uuid('site_id'),
   loggedAt: timestamp('logged_at', { withTimezone: true }).notNull(),
+  patrolDate: text('patrol_date'),
   latitude: doublePrecision('latitude').notNull(),
   longitude: doublePrecision('longitude').notNull(),
   method: text('method').notNull(),
@@ -170,7 +173,35 @@ export const patrols = pgTable('patrols', {
   progress: integer('progress').notNull().default(0),
   status: text('status').notNull().default('in_progress'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
-})
+}, (table) => [uniqueIndex('patrols_organization_guard_date_unique').on(table.organizationId, table.guardId, table.patrolDate)])
+
+export const patrolCheckpoints = pgTable('patrol_checkpoints', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ...owner,
+  ...orgScoped,
+  patrolId: uuid('patrol_id').notNull().references(() => patrols.id, { onDelete: 'cascade' }),
+  slot: text('slot').notNull(),
+  signedAt: timestamp('signed_at', { withTimezone: true }).notNull(),
+}, (table) => [uniqueIndex('patrol_checkpoints_patrol_slot_unique').on(table.patrolId, table.slot)])
+
+export const payrollRecords = pgTable('payroll_records', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  ...owner,
+  ...orgScoped,
+  guardId: uuid('guard_id').notNull().references(() => guards.id, { onDelete: 'cascade' }),
+  period: text('period').notNull(),
+  status: text('status').notNull().default('pending'),
+  baseSalary: integer('base_salary').notNull(),
+  daysInPeriod: integer('days_in_period').notNull(),
+  daysPresent: integer('days_present').notNull(),
+  daysAbsent: integer('days_absent').notNull(),
+  absenceDeduction: integer('absence_deduction').notNull(),
+  pension: integer('pension').notNull(),
+  netPay: integer('net_pay').notNull(),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
+  paidBy: text('paid_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('payroll_records_guard_period_unique').on(table.guardId, table.period)])
 
 export const finances = pgTable('finances', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -225,6 +256,8 @@ export const schema = {
   incidents,
   alerts,
   patrols,
+  patrolCheckpoints,
+  payrollRecords,
   finances,
   clients,
   activityEvents,

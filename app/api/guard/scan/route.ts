@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { and, count, desc, eq, gte, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
-import { attendance, guards, patrols, sites } from '@/lib/db/schema'
+import { attendance, guards, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
+import { lagosParts, slotForHour } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,24 +139,64 @@ export async function POST(request: Request) {
     })
   }
 
-  const [record] = await db.insert(patrols).values({
+  const lagos = lagosParts(now)
+  const slot = slotForHour(lagos.hour)
+  if (!slot) return NextResponse.json({ error: 'Patrol checkpoints can only be signed between 09:00 and 12:59 Lagos time.' }, { status: 409 })
+
+  let [patrol] = await db.select().from(patrols).where(and(
+    eq(patrols.organizationId, currentUser.organizationId),
+    eq(patrols.guardId, guard.id),
+    eq(patrols.patrolDate, lagos.date),
+  )).limit(1)
+  if (!patrol) {
+    ;[patrol] = await db.insert(patrols).values({
+      userId: currentUser.userId,
+      organizationId: currentUser.organizationId,
+      guardId: guard.id,
+      siteId,
+      loggedAt: now,
+      patrolDate: lagos.date,
+      latitude,
+      longitude,
+      method: 'nfc',
+      withinBounds,
+      createdAt: now,
+    }).onConflictDoNothing().returning()
+    if (!patrol) {
+      ;[patrol] = await db.select().from(patrols).where(and(
+        eq(patrols.organizationId, currentUser.organizationId),
+        eq(patrols.guardId, guard.id),
+        eq(patrols.patrolDate, lagos.date),
+      )).limit(1)
+    }
+  }
+  if (!patrol) return NextResponse.json({ error: 'Could not open today’s patrol record.' }, { status: 500 })
+
+  const [checkpoint] = await db.insert(patrolCheckpoints).values({
     userId: currentUser.userId,
     organizationId: currentUser.organizationId,
-    guardId: guard.id,
-    siteId,
-    loggedAt: now,
-    latitude,
-    longitude,
-    method: 'nfc',
-    withinBounds,
-    createdAt: now,
-  }).returning()
+    patrolId: patrol.id,
+    slot,
+    signedAt: now,
+  }).onConflictDoNothing().returning()
+  if (!checkpoint) return NextResponse.json({ error: `The ${slot} checkpoint has already been signed today.` }, { status: 409 })
+
+  const checkpointRows = await db.select({ id: patrolCheckpoints.id }).from(patrolCheckpoints).where(and(
+    eq(patrolCheckpoints.organizationId, currentUser.organizationId),
+    eq(patrolCheckpoints.patrolId, patrol.id),
+  ))
+  const signedCount = checkpointRows.length
+  await db.update(patrols).set({
+    progress: Math.round((signedCount / 3) * 100),
+    status: signedCount === 3 ? 'completed' : 'in_progress',
+  }).where(eq(patrols.id, patrol.id))
   const [todayPatrols] = await db.select({ total: count() })
-    .from(patrols)
+    .from(patrolCheckpoints)
+    .innerJoin(patrols, eq(patrolCheckpoints.patrolId, patrols.id))
     .where(and(
-      eq(patrols.organizationId, currentUser.organizationId),
+      eq(patrolCheckpoints.organizationId, currentUser.organizationId),
       eq(patrols.guardId, guard.id),
-      gte(patrols.loggedAt, new Date(now.getFullYear(), now.getMonth(), now.getDate())),
+      eq(patrols.patrolDate, lagos.date),
     ))
 
   return NextResponse.json({
@@ -166,8 +207,9 @@ export async function POST(request: Request) {
     guardName: guard.name,
     siteName: site?.name ?? null,
     withinBounds,
+    checkpoint: slot,
     patrolCount: Number(todayPatrols?.total ?? 0),
     message: `Patrol checkpoint recorded for ${guard.name}${site ? ` at ${site.name}` : ''}.`,
-    record,
+    record: patrol,
   })
 }

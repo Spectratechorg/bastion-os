@@ -3,11 +3,14 @@ import { ClientsDataPage, FinanceDataPage, ReportsDataPage, SettingsDataPage } f
 import { NapoleonLivePage } from '@/components/napoleon-live-page'
 import { OperationsLivePage, OverviewLivePage } from '@/components/operations-live-pages'
 import { OperationsWorkspace } from '@/components/operations-workspace'
+import { FinancePage } from '@/components/finance-page'
+import { PatrolsPage } from '@/components/patrols-page'
 
 type OperationalSection = 'guards' | 'sites' | 'attendance' | 'patrols' | 'incidents'
 
 export function WorkspacePage({ route, financeTab = 'overview' }: { route: string; financeTab?: string }) {
   if (['guards', 'sites', 'attendance', 'patrols', 'incidents'].includes(route)) {
+    if (route === 'patrols') return <WorkspaceShell active={route}><PatrolsPage /></WorkspaceShell>
     return <WorkspaceShell active={route}><OperationsLivePage section={route as OperationalSection} /></WorkspaceShell>
   }
   if (['alerts', 'finances', 'live-map'].includes(route)) {
@@ -15,7 +18,7 @@ export function WorkspacePage({ route, financeTab = 'overview' }: { route: strin
   }
   if (route === 'overview') return <WorkspaceShell active={route}><OverviewLivePage /></WorkspaceShell>
   if (route === 'clients') return <WorkspaceShell active={route}><ClientsDataPage /></WorkspaceShell>
-  if (route === 'finance') return <WorkspaceShell active={route}><FinanceDataPage tab={financeTab} /></WorkspaceShell>
+  if (route === 'finance') return <WorkspaceShell active={route}>{financeTab === 'payroll' ? <FinancePage tab="payroll" /> : <FinanceDataPage tab={financeTab} />}</WorkspaceShell>
   if (route === 'reports') return <WorkspaceShell active={route}><ReportsDataPage /></WorkspaceShell>
   if (route === 'settings') return <WorkspaceShell active="Settings"><SettingsDataPage /></WorkspaceShell>
   if (route === 'napoleon') return <WorkspaceShell active={route}><NapoleonLivePage /></WorkspaceShell>

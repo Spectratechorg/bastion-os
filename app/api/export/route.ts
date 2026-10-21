@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { desc, eq } from 'drizzle-orm'
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
-import { attendance, clients, finances, guards, incidents, patrols, sites } from '@/lib/db/schema'
+import { attendance, clients, finances, guards, incidents, patrols, payrollRecords, sites } from '@/lib/db/schema'
 
-const tables = { guards, sites, attendance, patrols, incidents, finances, clients } as const
+const tables = { guards, sites, attendance, patrols, incidents, finances, clients, payroll: payrollRecords } as const
 
 function csvValue(value: unknown) {
   const text = value instanceof Date ? value.toISOString() : String(value ?? '')

@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { WorkspacePage } from '@/components/workspace-pages'
 
-const tabs = new Set(['overview', 'invoices', 'payroll', 'expenses', 'inventory', 'budgets', 'reports'])
+const tabs = new Set(['overview', 'payroll'])
 
 export default async function FinanceRoute({ params }: { params: Promise<{ tab?: string[] }> }) {
   const { tab } = await params

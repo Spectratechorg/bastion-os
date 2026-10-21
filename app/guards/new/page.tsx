@@ -1,5 +1,6 @@
-import { redirect } from 'next/navigation'
+import { GuardRegisterPage } from '@/components/guard-register-page'
+import { WorkspaceShell } from '@/components/workspace-shell'
 
-export default function AddGuardPage(): never {
-  redirect('/guards')
+export default function AddGuardPage() {
+  return <WorkspaceShell active="Guards"><GuardRegisterPage /></WorkspaceShell>
 }

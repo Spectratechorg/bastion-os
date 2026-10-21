@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { activityEvents, alerts, attendance, finances, guards, incidents, patrols, sites } from '@/lib/db/schema'
+import { isModerator } from '@/lib/server'
 
 const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map'])
 const databaseUnavailable = () => NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local and restart the app.' }, { status: 503 })
@@ -37,6 +38,8 @@ const guardCreateSchema = z.object({
   nin: z.string().trim().min(4).max(100),
   phone: z.string().trim().min(7).max(50),
   site: z.string().trim().max(200).nullable().optional(),
+  monthlySalary: z.coerce.number().int().nonnegative().max(100_000_000).default(0),
+  photoUrl: z.string().max(1_500_000).nullable().optional(),
 })
 const siteCreateSchema = z.object({
   name: z.string().trim().min(2).max(200),
@@ -102,6 +105,7 @@ export async function POST(request: Request) {
   if (section.data === 'guards') {
     const parsed = guardCreateSchema.safeParse(body)
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid guard.')
+    if (parsed.data.monthlySalary > 0 && !(await isModerator(current))) return fail('Only an owner, administrator, or moderator can set guard salary.', 403)
     const siteName = parsed.data.site || null
     if (siteName) {
       const [site] = await db.select({ id: sites.id }).from(sites).where(and(
@@ -118,6 +122,8 @@ export async function POST(request: Request) {
       initials: parsed.data.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
       status: 'active',
       nfcToken: `BOS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      monthlySalary: parsed.data.monthlySalary,
+      photoUrl: parsed.data.photoUrl ?? null,
       createdAt: now,
     }).returning()
     await log(current, 'guard.created', `Guard added: ${row.name}`, 'A new guard was added to the roster.')
@@ -173,6 +179,8 @@ const updateSchema = z.object({
   nin: z.string().trim().min(4).max(100).optional(),
   phone: z.string().trim().min(7).max(50).optional(),
   site: z.string().trim().max(200).nullable().optional(),
+  monthlySalary: z.coerce.number().int().nonnegative().max(100_000_000).optional(),
+  photoUrl: z.string().max(1_500_000).nullable().optional(),
   address: z.string().trim().min(4).max(500).optional(),
   latitude: z.coerce.number().finite().min(-90).max(90).optional(),
   longitude: z.coerce.number().finite().min(-180).max(180).optional(),
@@ -207,8 +215,13 @@ export async function PATCH(request: Request) {
       nin: parsed.data.nin,
       phone: parsed.data.phone,
       site: parsed.data.site,
+      monthlySalary: parsed.data.monthlySalary,
+      photoUrl: parsed.data.photoUrl,
     }
     else return fail('Unsupported guard action.')
+    if (parsed.data.monthlySalary !== undefined && !(await isModerator(current))) {
+      return fail('Only an owner, administrator, or moderator can change guard salary.', 403)
+    }
 
     if (changes.site) {
       const [site] = await db.select({ id: sites.id }).from(sites).where(and(

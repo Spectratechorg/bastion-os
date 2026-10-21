@@ -8,7 +8,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Activity, Bell, BriefcaseBusiness, ChevronDown, ChevronRight,
   Clock3, FileText, Grid2X2, MapPin, Moon, Phone, Route,
-  Search, Settings, Sparkles, Users, Wallet, X,
+  Search, Settings, Sparkles, Users, Wallet,
 } from 'lucide-react'
 
 const navigation: { label: string; href: string; icon: LucideIcon; badge?: string; tag?: string }[] = [
@@ -26,48 +26,8 @@ const navigation: { label: string; href: string; icon: LucideIcon; badge?: strin
   { label: 'Settings', href: '/settings/roles', icon: Settings },
 ]
 
-function GuardDrawer({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(0)
-  const steps = ['Personal', 'Identity', 'Assignment', 'Review']
-  const fields = [
-    [['First name', 'e.g. Adewale'], ['Last name', 'e.g. Johnson']],
-    [['Phone number', '+234 800 000 0000'], ['Email address', 'name@example.com']],
-    [['Residential address', 'Street, city, state']],
-  ]
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/35 backdrop-blur-[5px]" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section aria-label="Add guard" className="flex h-full w-full max-w-[521px] flex-col bg-white shadow-2xl">
-        <header className="flex h-[82px] items-center justify-between border-b border-zinc-200 px-6">
-          <div><p className="text-[10px] font-semibold tracking-[0.16em] text-zinc-500">NEW GUARD</p><h2 className="mt-1 text-[22px] font-normal">Add guard</h2></div>
-          <button onClick={onClose} aria-label="Close drawer" className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100"><X className="size-5" /></button>
-        </header>
-        <nav aria-label="Guard setup steps" className="flex justify-between border-b border-zinc-200 px-6 py-5">
-          {steps.map((label, index) => <div key={label} className="flex items-center gap-2 text-xs">
-            <span className={`flex size-[22px] items-center justify-center rounded-full border text-[10px] ${step === index ? 'border-[#111113] bg-[#111113] font-semibold text-white' : 'border-zinc-300 text-zinc-500'}`}>{index + 1}</span>
-            <span className={step === index ? 'font-semibold text-zinc-900' : 'text-zinc-500'}>{label}</span>
-          </div>)}
-        </nav>
-        <div className="flex-1 overflow-auto p-6">
-          <h3 className="text-[17px] font-semibold">Personal information</h3>
-          <p className="mt-1 text-xs text-zinc-500">Add the guard&apos;s legal details as shown on their government ID.</p>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2">
-            {fields.flat().map(([label, placeholder]) => <label key={label} className={`flex flex-col gap-2 text-[11px] font-semibold ${label === 'Residential address' ? 'sm:col-span-2' : ''}`}>
-              {label}<input placeholder={placeholder} className="h-[38px] rounded-lg border border-zinc-200 bg-zinc-100 px-3 text-xs font-normal outline-none placeholder:text-zinc-400 focus:border-zinc-500" />
-            </label>)}
-          </div>
-        </div>
-        <footer className="flex h-16 items-center justify-end gap-2 border-t border-zinc-200 px-6">
-          <button onClick={onClose} className="rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-xs font-semibold">Cancel</button>
-          <button onClick={() => setStep((current) => Math.min(current + 1, 3))} className="rounded-lg bg-[#111113] px-4 py-2.5 text-xs font-semibold text-white">{step === 3 ? 'Save guard' : 'Continue ›'}</button>
-        </footer>
-      </section>
-    </div>
-  )
-}
-
 export function WorkspaceShell({ active, children }: { active: string; children: React.ReactNode }) {
   const pathname = usePathname()
-  const showGuardDrawer = pathname === '/guards/new'
   const [identity, setIdentity] = useState<{ user: { name: string; email: string; role: string }; organization: { name: string } } | null>(null)
   const [signOutError, setSignOutError] = useState('')
 
@@ -137,7 +97,6 @@ export function WorkspaceShell({ active, children }: { active: string; children:
         </nav>
         <main className="mx-auto max-w-[1600px] px-5 py-7 lg:px-7">{children}</main>
       </div>
-      {showGuardDrawer && <GuardDrawer onClose={() => { window.location.href = '/guards' }} />}
     </div>
   )
 }

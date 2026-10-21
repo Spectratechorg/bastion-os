@@ -5,7 +5,6 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'BastionOS — Security Operations',
   description: 'Real-time security operations, guard attendance, incidents, and live site monitoring.',
-  generator: 'v0.app',
   icons: {
     icon: [
       {
@@ -16,20 +15,16 @@ export const metadata: Metadata = {
         url: '/icon-dark-32x32.png',
         media: '(prefers-color-scheme: dark)',
       },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
     ],
     apple: '/apple-icon.png',
   },
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
+  colorScheme: 'light', width: 'device-width', initialScale: 1,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
+    { media: '(prefers-color-scheme: light)', color: '#2A2B2E' },
+    { media: '(prefers-color-scheme: dark)', color: '#2A2B2E' },
   ],
 }
 
