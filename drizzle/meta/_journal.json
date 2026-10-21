@@ -43,6 +43,13 @@
       "when": 1792572509121,
       "tag": "0005_massive_preak",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792584332236,
+      "tag": "0006_freezing_sersi",
+      "breakpoints": true
     }
   ]
 }

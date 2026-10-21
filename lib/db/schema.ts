@@ -54,6 +54,7 @@ export const organizations = pgTable('organization', {
   logo: text('logo'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
   metadata: text('metadata'),
+  guardAppCode: text('guard_app_code').unique(),
 })
 
 export const members = pgTable('member', {

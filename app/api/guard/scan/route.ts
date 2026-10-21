@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { attendance, guards, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
+import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
 import { lagosParts, slotForHour } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
@@ -14,6 +15,8 @@ const scanSchema = z.object({
   token: z.string().trim().min(1).max(200),
   latitude: z.number().finite().min(-90).max(90),
   longitude: z.number().finite().min(-180).max(180),
+  /** Shared guard-app code, used by phones that are not signed in. */
+  code: z.string().trim().max(64).optional(),
 })
 
 function isWithinSite(latitude: number, longitude: number, site: typeof sites.$inferSelect) {
@@ -33,12 +36,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local before enabling NFC verification.' }, { status: 503 })
   }
 
-  const currentUser = await getActiveOrganization()
-  if (!currentUser) return NextResponse.json({ error: 'Sign in before scanning a guard tag.' }, { status: 401 })
-  if (!currentUser.organizationId) {
-    return NextResponse.json({ error: 'No active organization membership. Select an organization before scanning tags.' }, { status: 403 })
-  }
-
   let body: unknown
   try {
     body = await request.json()
@@ -48,6 +45,19 @@ export async function POST(request: Request) {
   }
   const parsed = scanSchema.safeParse(body)
   if (!parsed.success) return NextResponse.json({ error: 'Provide a scan type, registered token, and valid phone location.' }, { status: 400 })
+
+  const session = await getActiveOrganization()
+  let currentUser: { userId: string; organizationId: string } | null = null
+  if (session?.organizationId) {
+    currentUser = { userId: session.userId, organizationId: session.organizationId }
+  } else if (parsed.data.code) {
+    const organization = await organizationForGuardAppCode(parsed.data.code)
+    if (!organization) return NextResponse.json({ error: 'That guard app code is not recognised. Ask your supervisor for the current code.' }, { status: 401 })
+    const ownerId = await ownerUserId(organization.id)
+    if (!ownerId) return NextResponse.json({ error: 'This organization has no administrator to record scans against.' }, { status: 403 })
+    currentUser = { userId: ownerId, organizationId: organization.id }
+  }
+  if (!currentUser) return NextResponse.json({ error: 'Enter your company guard app code, or sign in, before scanning a guard tag.' }, { status: 401 })
 
   const { type, latitude, longitude } = parsed.data
   const token = parsed.data.token.replace(/^nfc:/i, '').trim()

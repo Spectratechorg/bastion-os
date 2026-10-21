@@ -281,6 +281,10 @@ export function SettingsDataPage() {
   const [data, setData] = useState<WorkspaceData | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [guardCode, setGuardCode] = useState('')
+  const [codeError, setCodeError] = useState('')
+  const [codeNote, setCodeNote] = useState('')
+  const [rotating, setRotating] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -294,7 +298,36 @@ export function SettingsDataPage() {
     }
   }
 
-  useEffect(() => { void load() }, [])
+  async function loadGuardCode() {
+    try {
+      const response = await fetch('/api/guard/access', { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to load the guard app code.')
+      setGuardCode(payload.code ?? '')
+      setCodeError('')
+    } catch (cause) {
+      setCodeError(cause instanceof Error ? cause.message : 'Unable to load the guard app code.')
+    }
+  }
+
+  async function rotateGuardCode() {
+    if (!window.confirm('Replace the guard app code? Every phone using the old code will stop working.')) return
+    setRotating(true)
+    try {
+      const response = await fetch('/api/guard/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to replace the code.')
+      setGuardCode(payload.code ?? '')
+      setCodeError('')
+      setCodeNote('New code created. Give it to your supervisors.')
+    } catch (cause) {
+      setCodeError(cause instanceof Error ? cause.message : 'Unable to replace the code.')
+    } finally {
+      setRotating(false)
+    }
+  }
+
+  useEffect(() => { void load(); void loadGuardCode() }, [])
 
   return <>
     <PageHeader title="Settings" subtitle="Organization, team access, and recorded workspace activity.">
@@ -305,6 +338,17 @@ export function SettingsDataPage() {
       <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
         <h2 className="text-sm font-semibold">Organization</h2>
         <dl className="mt-4 grid gap-4 text-xs sm:grid-cols-3"><div><dt className="text-zinc-500">Name</dt><dd className="mt-1 font-semibold">{data.organization.name}</dd></div><div><dt className="text-zinc-500">Organization ID</dt><dd className="mt-1 font-mono">{data.organization.slug}</dd></div><div><dt className="text-zinc-500">Your access</dt><dd className="mt-1 capitalize font-semibold">{data.user.role}</dd></div></dl>
+      </section>
+      <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
+        <h2 className="text-sm font-semibold">Guard app access</h2>
+        <p className="mt-1 text-xs text-zinc-500">Guard phones enter this code once at <span className="font-mono">/guard-app</span>, so nobody needs a manager login on the phone.</p>
+        {codeError && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{codeError}</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <code className="rounded-lg bg-zinc-100 px-3 py-2 font-mono text-sm font-semibold tracking-wider">{guardCode || '—'}</code>
+          <button onClick={() => guardCode && void navigator.clipboard.writeText(guardCode)} disabled={!guardCode} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold disabled:opacity-60">Copy code</button>
+          <button onClick={() => void rotateGuardCode()} disabled={rotating} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white disabled:opacity-60">{rotating ? 'Replacing…' : 'Replace code'}</button>
+        </div>
+        {codeNote && <p role="status" className="mt-3 text-xs text-emerald-700">{codeNote}</p>}
       </section>
       <section className="mb-5 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
         <header className="border-b border-zinc-100 p-4"><h2 className="text-sm font-semibold">Organization members</h2><p className="mt-1 text-xs text-zinc-500">Membership and roles currently stored for this organization.</p></header>

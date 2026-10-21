@@ -37,12 +37,52 @@ export function GuardMobilePage() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [manualToken, setManualToken] = useState('')
+  const [accessCode, setAccessCode] = useState('')
+  const [codeDraft, setCodeDraft] = useState('')
+  const [organizationName, setOrganizationName] = useState('')
+  const [codeError, setCodeError] = useState('')
+  const [codePending, setCodePending] = useState(false)
   const controller = useRef<AbortController | null>(null)
 
   useEffect(() => {
     setNfcAvailable(Boolean(window.NDEFReader && window.isSecureContext))
+    const stored = window.localStorage.getItem('bastion.guardCode') ?? ''
+    setAccessCode(stored)
     return () => controller.current?.abort()
   }, [])
+
+  async function saveCode(event: React.FormEvent) {
+    event.preventDefault()
+    setCodeError('')
+    setCodePending(true)
+    try {
+      const response = await fetch('/api/guard/access/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: codeDraft }),
+      })
+      const payload = await response.json()
+      if (!response.ok || payload.error) throw new Error(payload.error ?? 'That code was not accepted.')
+      const code = codeDraft.trim().toUpperCase()
+      window.localStorage.setItem('bastion.guardCode', code)
+      setAccessCode(code)
+      setOrganizationName(payload.organizationName ?? '')
+      setCodeDraft('')
+      setMessage(`This phone is now set up for ${payload.organizationName ?? 'your company'}. Scan a guard tag to continue.`)
+    } catch (cause) {
+      setCodeError(cause instanceof Error ? cause.message : 'That code was not accepted.')
+    } finally {
+      setCodePending(false)
+    }
+  }
+
+  function forgetCode() {
+    window.localStorage.removeItem('bastion.guardCode')
+    setAccessCode('')
+    setOrganizationName('')
+    setCheckedIn(null)
+    setMessage('Guard app code removed from this phone.')
+  }
 
   const stopScan = () => {
     controller.current?.abort()
@@ -77,6 +117,7 @@ export function GuardMobilePage() {
           token,
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          ...(accessCode ? { code: accessCode } : {}),
         }),
       })
       const payload = await response.json()
@@ -178,8 +219,24 @@ export function GuardMobilePage() {
 
       <div className="mx-auto max-w-[480px] px-4 pb-8">
         <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[10px] leading-4 text-amber-900">
-          Sign in with an organization account, allow location access, then scan a registered guard NFC text token.
+          Enter your company guard app code once, allow location access, then scan a registered guard NFC text token. No manager login is needed on this phone.
         </div>
+        {accessCode ? (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[#E4E4E7] bg-white px-3 py-2 text-[10px] text-zinc-600">
+            <span>Company code <b className="font-mono text-[11px] text-zinc-900">{accessCode}</b>{organizationName ? ` · ${organizationName}` : ''}</span>
+            <button onClick={forgetCode} className="font-semibold text-zinc-700 underline">Change</button>
+          </div>
+        ) : (
+          <form onSubmit={saveCode} className="mb-3 grid gap-2 rounded-xl border border-[#E4E4E7] bg-white p-3">
+            <label className="text-[10px] font-semibold text-zinc-700" htmlFor="guard-app-code">Company guard app code</label>
+            <div className="flex gap-2">
+              <input id="guard-app-code" required value={codeDraft} onChange={(event) => setCodeDraft(event.target.value.toUpperCase())} placeholder="GRD-XXXX-XXXX" autoCapitalize="characters" className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 font-mono text-xs uppercase" />
+              <button disabled={codePending} className="rounded-lg bg-[#111113] px-3 text-xs font-semibold text-white disabled:opacity-60">{codePending ? 'Checking…' : 'Use code'}</button>
+            </div>
+            {codeError && <p role="alert" className="text-[10px] text-red-700">{codeError}</p>}
+            <p className="text-[9px] text-zinc-500">Your supervisor finds this code in Settings → Guard app access.</p>
+          </form>
+        )}
         <p className="mb-3 text-[10px] text-zinc-600" role="status">
           {nfcAvailable === null ? 'Checking NFC support…' : nfcAvailable ? 'NFC reader available in this secure browser.' : 'NFC requires Chrome on NFC-capable Android over HTTPS.'}
         </p>
