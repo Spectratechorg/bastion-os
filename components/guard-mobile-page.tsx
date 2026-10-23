@@ -20,6 +20,8 @@ type Identity = { name: string; site: string | null; photoUrl: string | null }
 type Me = { linked: boolean; role: string; guard?: Identity & { id: string } } & Partial<Today>
 
 const CODE_KEY = 'bastion.guardCode'
+/** The tag code this phone last scanned, so SOS can identify the guard without a fresh scan. */
+const TAG_KEY = 'bastion.guardTag'
 const clock = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) : ''
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
@@ -64,6 +66,7 @@ export function GuardMobilePage() {
       const response = await fetch('/api/guard/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: action, token: tag, ...where, ...(signedIn ? {} : { code }) }) })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? 'Could not verify this tag.')
+      if (tag) window.localStorage.setItem(TAG_KEY, tag.trim())
       setMessage(body.withinBounds === false ? `${body.message} You are outside the site area, so your supervisor has been told.` : body.message)
       setManual(false); setToken('')
       if (body.status) setLocal({ who: { name: body.guardName, site: body.siteName ?? null, photoUrl: null }, today: body.status })
@@ -72,7 +75,14 @@ export function GuardMobilePage() {
   }
 
   async function scan(action: Action) {
-    if (action === 'sos' && me?.linked) return void submit('sos', '')
+    if (action === 'sos') {
+      // SOS must work without a tag in hand: reuse the identity this phone already scanned.
+      const remembered = window.localStorage.getItem(TAG_KEY) ?? ''
+      if (me?.linked || remembered) return void submit('sos', me?.linked ? '' : remembered)
+      setError('To send SOS, type your tag code below once so we know who needs help.')
+      setManualAction('sos'); setManual(true)
+      return
+    }
     const Reader = window.NDEFReader
     if (!Reader) { setManualAction(action); return setManual(true) }
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort
@@ -151,7 +161,7 @@ export function GuardMobilePage() {
           {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-zinc-200 bg-white p-4"><label className="text-xs font-semibold">What is the code for?<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-xs font-semibold">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. BOS-1A2B3C4D" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[48px] bg-[#2A2B2E] text-white`}>Send</button></form>}
 
           <div className="mt-8 border-t border-zinc-200 pt-5"><button onClick={() => { if (window.confirm('Send an emergency SOS to your supervisors now?')) void scan('sos') }} disabled={busy || scanning !== null} className={`${big} bg-[#B42318] text-white`}><ShieldAlert className="size-5" />Emergency SOS</button>
-            <p className="mt-2 text-center text-[11px] text-zinc-500">Only press this if you are in danger or need urgent help. Supervisors are alerted straight away with your location.</p></div>
+            <p className="mt-2 text-center text-[11px] text-zinc-500">Only press this if you are in danger or need urgent help. Supervisors are alerted straight away with your location.{!me?.linked && !identity ? ' The first time, you will be asked for your tag code so we know who needs help.' : ''}</p></div>
         </>}
       </div>
     </main>

@@ -12,7 +12,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params; if (!z.string().uuid().safeParse(id).success) return fail('Invalid guard')
   const now = lagosParts()
   const orgRow = await pool.query('select patrol_start_hour, patrol_end_hour from organization where id = $1', [current.organizationId])
-  const shift = normalizeShift(orgRow.rows[0]?.patrol_start_hour, orgRow.rows[0]?.patrol_end_hour); const slotCount = patrolSlots(shift).length
+  const shift = normalizeShift(orgRow.rows[0]?.patrol_start_hour, orgRow.rows[0]?.patrol_end_hour)
+  const slots = patrolSlots(shift)
+  const slotCount = slots.length
   const period = new URL(request.url).searchParams.get('period') ?? now.month
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return fail('Period must look like 2026-10')
   const g = await pool.query('select id, name, site, status, created_at, last_check_in from guards where id = $1 and organization_id = $2', [id, current.organizationId])
@@ -36,7 +38,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const expected = days.length; const daysPresent = days.filter((x) => x.present).length
   const due = days.filter((x) => x.windowClosed); const completed = due.filter((x) => x.signed >= slotCount).length
   return NextResponse.json({
-    guard: { id: guard.id, name: guard.name, site: guard.site, status: guard.status, lastCheckIn: guard.last_check_in }, period,
+    guard: { id: guard.id, name: guard.name, site: guard.site, status: guard.status, lastCheckIn: guard.last_check_in }, period, slots,
     attendance: { expected, present: daysPresent, absent: expected - daysPresent, percent: expected ? Math.round((daysPresent / expected) * 100) : null },
     patrols: { due: due.length, completed, missed: due.length - completed, percent: due.length ? Math.round((completed / due.length) * 100) : null },
     outsideGeofence: days.filter((x) => x.outside).length, days: days.slice(-31),
