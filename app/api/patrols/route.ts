@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server'
 import { and, desc, eq, gte } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
-import { actor, fail, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
+import { actor, denyGuard, fail, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
+import { raiseAlert } from '@/lib/alerts'
 
 export const dynamic = 'force-dynamic'
 
 /** Daily patrols (one per guard per day) with the hourly checkpoints from the organization shift. */
 export async function GET(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization to view patrols.', 401)
+  { const denied = denyGuard(current); if (denied) return denied }
   const now = lagosParts()
   const date = new URL(request.url).searchParams.get('date') ?? now.date
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail('Date must look like 2026-10-20')
@@ -39,6 +41,11 @@ export async function GET(request: Request) {
   const month = enriched.filter((patrol) => patrol.date.slice(0, 7) === now.month)
   const patrolled = new Set(today.map((patrol) => patrol.guardId))
   const notStarted = guardRows.filter((guard) => guard.status === 'active' && !patrolled.has(guard.id)).map((guard) => ({ guardId: guard.id, guardName: guard.name, site: guard.site ?? '—' }))
+  // Once the shift has ended, raise one "missed patrol" alert per guard for today (idempotent).
+  if (now.hour >= shift.endHour) {
+    const missed = [...today.filter((patrol) => patrol.status === 'missed').map((patrol) => ({ id: patrol.guardId, name: patrol.guardName, site: patrol.site })), ...notStarted.map((guard) => ({ id: guard.guardId, name: guard.guardName, site: guard.site }))]
+    for (const guard of missed) await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'patrol', title: 'Missed patrol', body: `${guard.name} did not complete all checkpoints at ${guard.site}`, severity: 'medium', key: `patrol:${guard.id}:${now.date}` })
+  }
   return NextResponse.json({
     date, today: now.date, slots, shift,
     rows: enriched.filter((patrol) => patrol.date === date),

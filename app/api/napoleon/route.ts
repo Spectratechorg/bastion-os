@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
+import { memberRole } from '@/lib/server'
 
 async function isAuthenticated() {
   const session = await auth.api.getSession({ headers: await headers() })
-  return Boolean(session?.user)
+  const orgId = (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId
+  if (!session?.user || !orgId) return false
+  const role = await memberRole(orgId, session.user.id)
+  return Boolean(role) && role !== 'guard'
 }
 
 function configuration() {

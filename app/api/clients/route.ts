@@ -2,9 +2,9 @@ import { and, desc, eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
-import { activityEvents, clients } from '@/lib/db/schema'
+import { activityEvents, clients, guards, sites } from '@/lib/db/schema'
+import { actor, denyGuard } from '@/lib/server'
 
 const clientSchema = z.object({
   name: z.string().trim().min(2).max(200),
@@ -21,9 +21,10 @@ const error = (message: string, status = 400) => NextResponse.json({ error: mess
 
 async function getCurrent() {
   if (!process.env.DATABASE_URL) return { response: error('Database is not configured.', 503) }
-  const user = await getActiveOrganization()
+  const user = await actor()
   if (!user) return { response: error('Unauthorized', 401) }
-  if (!user.organizationId) return { response: error('No active organization membership.', 403) }
+  const denied = denyGuard(user)
+  if (denied) return { response: denied }
   return { user }
 }
 
@@ -40,10 +41,19 @@ export async function GET() {
   const { user, response } = await getCurrent()
   if (response) return response
   const rows = await db.select().from(clients)
-    .where(eq(clients.organizationId, user.organizationId!))
+    .where(eq(clients.organizationId, user.organizationId))
     .orderBy(desc(clients.createdAt))
     .limit(500)
-  return NextResponse.json(rows)
+  // Each client can own several sites; guards are counted through the sites they are assigned to.
+  const [siteRows, guardRows] = await Promise.all([
+    db.select({ id: sites.id, name: sites.name, status: sites.status, clientId: sites.clientId }).from(sites).where(eq(sites.organizationId, user.organizationId)),
+    db.select({ site: guards.site }).from(guards).where(and(eq(guards.organizationId, user.organizationId), eq(guards.status, 'active'))),
+  ])
+  return NextResponse.json(rows.map((client) => {
+    const owned = siteRows.filter((site) => site.clientId === client.id)
+    const names = new Set(owned.map((site) => site.name))
+    return { ...client, sites: owned.map((site) => ({ id: site.id, name: site.name, status: site.status })), guardCount: guardRows.filter((guard) => guard.site && names.has(guard.site)).length }
+  }))
 }
 
 export async function POST(request: Request) {
@@ -55,7 +65,7 @@ export async function POST(request: Request) {
   const now = new Date()
   const [row] = await db.insert(clients).values({
     userId: user.userId,
-    organizationId: user.organizationId!,
+    organizationId: user.organizationId,
     ...parsed.data,
     contactName: parsed.data.contactName || null,
     email: parsed.data.email || null,
@@ -66,7 +76,7 @@ export async function POST(request: Request) {
   }).returning()
   await db.insert(activityEvents).values({
     userId: user.userId,
-    organizationId: user.organizationId!,
+    organizationId: user.organizationId,
     type: 'client.created',
     title: `Client added: ${row.name}`,
     body: 'A client account was added.',
@@ -103,12 +113,12 @@ export async function PATCH(request: Request) {
 
   const [row] = await db.update(clients).set(changes).where(and(
     eq(clients.id, id.data),
-    eq(clients.organizationId, user.organizationId!),
+    eq(clients.organizationId, user.organizationId),
   )).returning()
   if (!row) return error('Client not found in this organization.', 404)
   await db.insert(activityEvents).values({
     userId: user.userId,
-    organizationId: user.organizationId!,
+    organizationId: user.organizationId,
     type: 'client.updated',
     title: `Client updated: ${row.name}`,
     body: 'Client account details were updated.',

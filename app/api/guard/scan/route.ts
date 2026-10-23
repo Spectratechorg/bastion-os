@@ -6,13 +6,16 @@ import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { attendance, guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
-import { lagosParts, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
+import { raiseAlert } from '@/lib/alerts'
+import { todayStatus } from '@/lib/guard-today'
+import { lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
 const scanSchema = z.object({
-  type: z.enum(['attendance', 'patrol']),
-  token: z.string().trim().min(1).max(200),
+  type: z.enum(['attendance', 'patrol', 'sos']),
+  /** Optional for a guard signed in with their own login: their linked record is used. */
+  token: z.string().trim().max(200).default(''),
   latitude: z.number().finite().min(-90).max(90),
   longitude: z.number().finite().min(-180).max(180),
   /** Shared guard-app code, used by phones that are not signed in. */
@@ -61,19 +64,31 @@ export async function POST(request: Request) {
 
   const { type, latitude, longitude } = parsed.data
   const token = parsed.data.token.replace(/^nfc:/i, '').trim()
-  if (!token) return NextResponse.json({ error: 'A registered NFC token is required.' }, { status: 400 })
+  // A guard signed in with their own login can only act as their linked guard record.
+  const linkedGuardId = session?.organizationId && currentUser.userId === session.userId && (await memberRole(currentUser.organizationId, currentUser.userId)) === 'guard'
+    ? (await db.select({ id: guards.id }).from(guards).where(and(eq(guards.organizationId, currentUser.organizationId), eq(guards.loginUserId, currentUser.userId))).limit(1))[0]?.id ?? 'none'
+    : null
+  if (!token && !linkedGuardId) return NextResponse.json({ error: 'Tap your NFC tag or type its code to continue.' }, { status: 400 })
 
   const [guard] = await db
     .select()
     .from(guards)
     .where(and(
       eq(guards.organizationId, currentUser.organizationId),
-      eq(guards.nfcToken, token),
+      linkedGuardId && !token ? eq(guards.id, linkedGuardId) : eq(guards.nfcToken, token),
     ))
     .limit(1)
 
   if (!guard) {
-    return NextResponse.json({ error: 'This NFC token is not registered for your active organization.' }, { status: 404 })
+    return NextResponse.json({ error: 'This NFC tag is not registered for your company.' }, { status: 404 })
+  }
+  if (linkedGuardId && guard.id !== linkedGuardId) return NextResponse.json({ error: 'This tag belongs to another guard. Use your own tag.' }, { status: 403 })
+  if (guard.status === 'suspended') return NextResponse.json({ error: `${guard.name} is suspended and cannot check in or patrol.` }, { status: 403 })
+
+  if (type === 'sos') {
+    await raiseAlert({ userId: currentUser.userId, organizationId: currentUser.organizationId, type: 'sos', title: 'SOS activated', body: `${guard.name} at ${guard.site ?? 'an unassigned site'} needs help (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`, severity: 'critical', key: `sos:${guard.id}:${Math.floor(Date.now() / 60000)}` })
+    await db.update(guards).set({ lastLatitude: latitude, lastLongitude: longitude }).where(eq(guards.id, guard.id))
+    return NextResponse.json({ ok: true, action: 'sos', guardId: guard.id, guardName: guard.name, message: 'SOS sent. Your supervisor has been alerted.' })
   }
 
   const site = guard.site
@@ -109,6 +124,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         ok: true,
+        status: await todayStatus(currentUser.organizationId, guard.id),
         action: 'attendance',
         checkedIn: false,
         guardId: guard.id,
@@ -135,9 +151,11 @@ export async function POST(request: Request) {
     await db.update(guards)
       .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude })
       .where(eq(guards.id, guard.id))
+    if (!withinBounds) await raiseAlert({ userId: currentUser.userId, organizationId: currentUser.organizationId, type: 'geofence', title: 'Outside geofence', body: `${guard.name} checked in outside ${site.name}`, severity: 'high', key: `geofence:${record.id}` })
 
     return NextResponse.json({
       ok: true,
+      status: await todayStatus(currentUser.organizationId, guard.id),
       action: 'attendance',
       checkedIn: true,
       guardId: guard.id,
@@ -215,6 +233,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
+    status: await todayStatus(currentUser.organizationId, guard.id),
     action: 'patrol',
     checkedIn: true,
     guardId: guard.id,

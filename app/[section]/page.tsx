@@ -6,6 +6,7 @@ const sections = new Set([
   'overview',
   'guards',
   'sites',
+  'map',
   'attendance',
   'patrols',
   'incidents',

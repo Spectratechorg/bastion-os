@@ -1,10 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import Link from 'next/link'
-import { Check, Download, RefreshCw, Smartphone } from 'lucide-react'
+import { Check, Download, RefreshCw } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
-import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, btnPrimary, inputClass } from '@/components/ui-bits'
+import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, inputClass } from '@/components/ui-bits'
 import { api } from '@/lib/client'
 
 type Patrol = { id: string; date: string; guardName: string; photoUrl: string | null; site: string; checkpoints: Record<string, string>; signedCount: number; status: string }
@@ -24,9 +23,7 @@ export function PatrolsPage() {
   useEffect(() => { setLoading(true); void load(); const timer = window.setInterval(() => void load(), 10000); return () => window.clearInterval(timer) }, [load])
   const s = data?.summary
   return <>
-    <PageHeader title="Patrols" subtitle={data ? `Every hour from ${data.slots[0] ?? '08:00'} to ${data.slots[data.slots.length - 1] ?? '17:00'} (Lagos time). ${data.slots.length} signatures complete a patrol.` : 'Hourly checkpoints inside your shift.'}>
-      <Link href="/guard-app" className={btnPrimary}><Smartphone className="size-4" />Open guard app</Link>
-    </PageHeader>
+    <PageHeader title="Patrols" subtitle={data ? `Every hour from ${data.slots[0] ?? '08:00'} to ${data.slots[data.slots.length - 1] ?? '17:00'} (Lagos time). ${data.slots.length} signatures complete a patrol.` : 'Hourly checkpoints inside your shift.'} />
     <StatStrip stats={[[String(s?.completedToday ?? '—'), 'Completed today'], [String(s?.inProgressToday ?? '—'), 'In progress'], [String(s?.missedToday ?? '—'), 'Missed today'], [String(s?.completedThisMonth ?? '—'), 'Completed this month']]} />
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <input type="date" aria-label="Patrol date" value={date || data?.today || ''} max={data?.today} onChange={(e) => setDate(e.target.value)} className={`${inputClass.replace("w-full", "w-auto")}`} />

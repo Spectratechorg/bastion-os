@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Send } from 'lucide-react'
 import { PageHeader } from '@/components/workspace-shell'
+import { Logo } from '@/components/brand'
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
 type Connection = 'checking' | 'connected' | 'not-configured' | 'unavailable'
@@ -88,11 +89,11 @@ export function NapoleonLivePage() {
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
         <section className="flex min-h-[610px] flex-col rounded-[20px] border border-[#E4E4E7] bg-white">
           <header className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-zinc-600 to-zinc-950 font-serif italic text-white">N</span>
+            <Logo size={32} />
             <span className="flex-1"><b className="block text-xs">Napoleon</b><small className="text-[10px] text-zinc-500">Deterministic operational analysis</small></span>
           </header>
           <div className="flex flex-1 flex-col items-center justify-center px-5 py-8 text-center">
-            <span className="flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-zinc-600 to-zinc-950 font-serif text-2xl italic text-white">N</span>
+            <Logo size={56} />
             <h2 className="mt-4 text-[22px] font-normal">How can I help your operation?</h2>
             <p className="mt-2 text-xs text-zinc-500">Ask about attendance, incidents, patrols, sites or guard performance.</p>
             <div className="mt-4 flex w-full max-w-2xl flex-col gap-3">

@@ -64,6 +64,13 @@
       "when": 1792602500950,
       "tag": "0008_dark_triton",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792717427067,
+      "tag": "0009_lowly_magma",
+      "breakpoints": true
     }
   ]
 }
