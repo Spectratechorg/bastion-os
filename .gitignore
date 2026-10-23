@@ -22,3 +22,5 @@ node_modules
 .neon
 
 tsconfig.tsbuildinfo
+
+tsconfig.tsbuildinfo
