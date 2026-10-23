@@ -1,0 +1,1432 @@
+▲ Next.js 16.3.3
+- Local:         http://localhost:3100
+- Network:       http://172.22.48.1:3100
+✓ Ready in 14.3s
+✓ Running next.config.mjs took 243ms
+(node:19872) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:7105) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+      at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:8772)
+    at async Module.P [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:10829) {
+  query: 'select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: relation "staff" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694) {
+    length: 105,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '130',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1498',
+    routine: 'parserOpenTable'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:7105) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+      at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:8772)
+    at async Module.P [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:10829) {
+  query: 'select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: relation "staff" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694) {
+    length: 105,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '130',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1498',
+    routine: 'parserOpenTable'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:8772)
+    at async Module.P [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:10829) {
+  query: 'select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: relation "staff" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694) {
+    length: 105,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '130',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1498',
+    routine: 'parserOpenTable'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "member"."id", "member"."user_id", "member"."role", "member"."created_at", "user"."name", "user"."email", "user"."image", "guards"."id", "guards"."name" from "member" inner join "user" on "user"."id" = "member"."user_id" left join "guards" on ("guards"."login_user_id" = "user"."id" and "guards"."organization_id" = "member"."organization_id") where "member"."organization_id" = $1 order by "member"."created_at"
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async p (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_05bn-a6._.js:1:315)
+    at async W (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_05bn-a6._.js:1:9492)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_05bn-a6._.js:1:10570)
+    at async Module.y [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_05bn-a6._.js:1:12627) {
+  query: 'select "member"."id", "member"."user_id", "member"."role", "member"."created_at", "user"."name", "user"."email", "user"."image", "guards"."id", "guards"."name" from "member" inner join "user" on "user"."id" = "member"."user_id" left join "guards" on ("guards"."login_user_id" = "user"."id" and "guards"."organization_id" = "member"."organization_id") where "member"."organization_id" = $1 order by "member"."created_at"',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: column guards.login_user_id does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async p (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_05bn-a6._.js:1:315)
+      at async W (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_05bn-a6._.js:1:9492) {
+    length: 119,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '252',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:7105) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+      at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ error: relation "contracts" does not exist
+    at async GET (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__18e-9zp._.js:1:3102)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__14wu1z6._.js:1:4035)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__14wu1z6._.js:1:5113)
+    at async Module.x [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__14wu1z6._.js:1:7170) {
+  length: 108,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '15',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1498',
+  routine: 'parserOpenTable'
+}
+⨯ error: relation "inventory_items" does not exist
+    at async GET (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__18e-9zp._.js:1:3102)
+    at async W (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__0bnzulc._.js:1:3937)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__0bnzulc._.js:1:5015)
+    at async Module.C [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__0bnzulc._.js:1:7072) {
+  length: 114,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '15',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1498',
+  routine: 'parserOpenTable'
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ error: relation "staff" does not exist
+    at async GET (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__18e-9zp._.js:1:3102)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__1y-c78t._.js:1:3877)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__1y-c78t._.js:1:4955)
+    at async Module.C [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\[root-of-the-server]__1y-c78t._.js:1:7012) {
+  length: 104,
+  severity: 'ERROR',
+  code: '42P01',
+  detail: undefined,
+  hint: undefined,
+  position: '15',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '1498',
+  routine: 'parserOpenTable'
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:8772)
+    at async Module.P [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:10829) {
+  query: 'select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: relation "staff" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694) {
+    length: 105,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '130',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1498',
+    routine: 'parserOpenTable'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:7105) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+      at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,8
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:6556) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."last_check_in" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 8 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:505)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1hs6cas._.js:1:5478) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:7105) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+      at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:8772)
+    at async Module.P [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:10829) {
+  query: 'select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: relation "staff" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694) {
+    length: 105,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '130',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1498',
+    routine: 'parserOpenTable'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1 order by "guards"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:4082)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ,250
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:23918)
+    at async Module.I [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:25975) {
+  query: 'select "id", "user_id", "organization_id", "type", "title", "body", "severity", "acknowledged", "dedupe_key", "created_at" from "alerts" where "alerts"."organization_id" = $1 order by "alerts"."created_at" desc limit $2',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ', 250 ],
+  [cause]: error: column "dedupe_key" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async w (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:5061)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1df9yww._.js:1:22840) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '97',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+    at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:8772)
+    at async Module.P [as handler] (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:10829) {
+  query: 'select "id", "user_id", "organization_id", "name", "title", "phone", "monthly_salary", "start_date", "status", "created_at" from "staff" where "staff"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: relation "staff" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:939)
+      at async Y (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_1jlxvf9._.js:1:7694) {
+    length: 105,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '130',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1498',
+    routine: 'parserOpenTable'
+  }
+}
+⨯ Error: Failed query: select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1
+params: kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ
+    at m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36842)
+    at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+    at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+    at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027)
+    at async J (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:7105) {
+  query: 'select "id", "user_id", "organization_id", "name", "nin", "phone", "initials", "status", "suspended_at", "site", "nfc_token", "photo_url", "monthly_salary", "last_check_in", "last_latitude", "last_longitude", "login_user_id", "created_at" from "guards" where "guards"."organization_id" = $1',
+  params: [ 'kr3Do4Ls1yPghzjAub5Ea22HmQjP4lDZ' ],
+  [cause]: error: column "login_user_id" does not exist
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40607)
+      at async m.queryWithCache (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:36817)
+      at async (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_03qds31._.js:8:40392)
+      at async c (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:798)
+      at async Z (C:\Users\dell\Desktop\work\bastion-os\.next\server\chunks\_058z_ii._.js:1:6027) {
+    length: 114,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '210',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3854',
+    routine: 'errorMissingColumn'
+  }
+}
