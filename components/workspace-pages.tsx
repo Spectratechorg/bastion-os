@@ -9,7 +9,6 @@ import { RecordsPage } from '@/components/records-page'
 import { PatrolsPage } from '@/components/patrols-page'
 import { FinancePage } from '@/components/finance-page'
 import { GuardRegisterPage } from '@/components/guard-register-page'
-import { MapPage } from '@/components/map-page'
 import { ProfilePage } from '@/components/profile-page'
 import { ReportsPage, SettingsPage } from '@/components/more-pages'
 
@@ -19,7 +18,6 @@ export function WorkspacePage({ route, financeTab = 'overview' }: { route: strin
     case 'overview': content = <OverviewPage />; break
     case 'guards': content = <RecordsPage section="guards" />; break
     case 'guards-new': content = <GuardRegisterPage />; active = 'guards'; break
-    case 'map': content = <MapPage />; active = 'Live map'; break
     case 'sites': content = <RecordsPage section="sites" />; break
     case 'attendance': content = <RecordsPage section="attendance" />; break
     case 'incidents': content = <RecordsPage section="incidents" />; break
