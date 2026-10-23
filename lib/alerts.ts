@@ -1,23 +1,10 @@
 import { db } from '@/lib/db'
 import { alerts } from '@/lib/db/schema'
 
-export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical'
+export type AlertType = 'sos' | 'geofence' | 'incident' | 'patrol'
+export { ALERT_RULES } from '@/lib/alerts-client'
 
-/**
- * Alerts are created by the system, never typed by hand. Each one records the rule that fired:
- * - geofence breach (a scan outside the site radius) -> high, critical after 3 breaches in a day
- * - incident reported as critical, or escalated -> matches the incident severity
- * - guard SOS from the phone -> critical
- * - patrol shift ended with missed checkpoints -> medium
- */
-export async function raiseAlert(input: {
-  userId: string
-  organizationId: string
-  type: string
-  title: string
-  body: string
-  severity: AlertSeverity
-}) {
-  const [row] = await db.insert(alerts).values({ ...input, acknowledged: false, createdAt: new Date() }).returning()
-  return row
+/** Insert an alert once. `key` makes repeated calls idempotent (e.g. one missed-patrol alert per guard per day). */
+export async function raiseAlert(a: { userId: string; organizationId: string; type: AlertType; title: string; body: string; severity: 'low' | 'medium' | 'high' | 'critical'; key?: string }) {
+  await db.insert(alerts).values({ userId: a.userId, organizationId: a.organizationId, type: a.type, title: a.title, body: a.body, severity: a.severity, acknowledged: false, dedupeKey: a.key ?? null, createdAt: new Date() }).onConflictDoNothing()
 }

@@ -2,6 +2,7 @@
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import { db } from '@/lib/db'
+import { asc, eq } from 'drizzle-orm'
 import { accounts, authSessions, invitations, members, organizations, users, verifications } from '@/lib/db/schema'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
@@ -47,7 +48,21 @@ export const auth = betterAuth({
   } : {}),
   baseURL: defaultOrigin,
   secret: process.env.BETTER_AUTH_SECRET,
+  rateLimit: { enabled: true, window: 60, max: 60, customRules: { '/sign-in/email': { window: 60, max: 8 }, '/sign-up/email': { window: 60, max: 5 } } },
   emailAndPassword: { enabled: true, autoSignIn: true },
+  databaseHooks: {
+    session: {
+      create: {
+        // Every new sign-in starts inside the user's first organization, so people added from Settings can sign straight in.
+        before: async (session) => {
+          const [first] = hasDatabase
+            ? await db.select({ organizationId: members.organizationId }).from(members).where(eq(members.userId, session.userId)).orderBy(asc(members.createdAt)).limit(1).catch(() => [])
+            : []
+          return { data: { ...session, activeOrganizationId: first?.organizationId ?? null } }
+        },
+      },
+    },
+  },
   plugins: [organization({ allowUserToCreateOrganization: async () => true })],
   trustedOrigins,
   session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },

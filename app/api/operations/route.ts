@@ -1,26 +1,30 @@
 import { NextResponse } from 'next/server'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
+import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
-import { getActiveOrganization } from '@/lib/auth/organization'
-import { db } from '@/lib/db'
-import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
+import { db, pool } from '@/lib/db'
 import { raiseAlert } from '@/lib/alerts'
-import { isModerator } from '@/lib/server'
+import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
+import { actor, can, denyGuard, isModerator } from '@/lib/server'
+import type { PermissionKey } from '@/lib/permissions'
 
-const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map', 'clients'])
-const deleteSchema = z.object({ section: sectionSchema, id: z.string().uuid() })
+const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map', 'activity'])
 const databaseUnavailable = () => NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local and restart the app.' }, { status: 503 })
 const fail = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-type CurrentUser = { userId: string; organizationId: string }
+type CurrentUser = { userId: string; organizationId: string; role: string }
 
 async function getCurrentUser() {
-  const user = await getActiveOrganization()
-  if (!user) return { response: fail('Unauthorized', 401) }
-  if (!user.organizationId) return { response: fail('No active organization membership. Select an organization before accessing records.', 403) }
-  return { current: { userId: user.userId, organizationId: user.organizationId } satisfies CurrentUser }
+  const user = await actor()
+  if (!user) return { response: fail('Sign in and select an organization to continue.', 401) }
+  const denied = denyGuard(user)
+  if (denied) return { response: denied }
+  return { current: user satisfies CurrentUser }
 }
+
+/** Section-level permission switches (editable in Settings). */
+const needFor = (section: string): PermissionKey | null => section === 'guards' || section === 'sites' ? 'manageGuards' : section === 'incidents' || section === 'alerts' ? 'manageIncidents' : null
 
 async function readJson(request: Request): Promise<unknown> {
   try {
@@ -31,7 +35,7 @@ async function readJson(request: Request): Promise<unknown> {
   }
 }
 
-async function log(current: CurrentUser, type: string, title: string, body: string) {
+async function log(current: { userId: string; organizationId: string }, type: string, title: string, body: string) {
   await db.insert(activityEvents).values({ ...current, type, title, body, tone: 'neutral', createdAt: new Date() })
 }
 
@@ -50,6 +54,7 @@ const siteCreateSchema = z.object({
   longitude: z.coerce.number().finite().min(-180).max(180),
   geofenceRadius: z.coerce.number().int().positive().max(100_000).default(100),
   dangerLevel: z.enum(['low', 'medium', 'high']).default('low'),
+  clientId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
 })
 const incidentCreateSchema = z.object({
   title: z.string().trim().min(2).max(200),
@@ -70,6 +75,37 @@ const financeCreateSchema = z.object({
   receiptUrl: z.string().max(1_500_000).nullable().optional(),
 })
 
+const SEVERITY_WEIGHT: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 5 }
+
+/**
+ * Site risk is calculated, not typed in. Over the last 30 days every incident at the site adds points by severity
+ * (low 1, medium 2, high 3, critical 5) and every check-in outside the geofence adds 1.
+ * 0-2 points = low, 3-7 = medium, 8 or more = high. `dangerLevel` in the response is this calculated value.
+ */
+async function withRisk(organizationId: string, rows: (typeof sites.$inferSelect)[]) {
+  const since = new Date(Date.now() - 30 * 86400000)
+  const [inc, outside, assigned, clientRows] = await Promise.all([
+    pool.query('select site, severity, count(*)::int as n from incidents where organization_id = $1 and reported_at >= $2 group by site, severity', [organizationId, since]),
+    pool.query('select site_id, count(*)::int as n from attendance where organization_id = $1 and checked_in_at >= $2 and within_geofence = false group by site_id', [organizationId, since]),
+    pool.query("select site, count(*)::int as n from guards where organization_id = $1 and status = 'active' and site is not null group by site", [organizationId]),
+    db.select({ id: clients.id, name: clients.name }).from(clients).where(eq(clients.organizationId, organizationId)),
+  ])
+  return rows.map((site) => {
+    const incidentRows = inc.rows.filter((r) => r.site === site.name)
+    const incidentPoints = incidentRows.reduce((t, r) => t + (SEVERITY_WEIGHT[r.severity] ?? 1) * r.n, 0)
+    const incidentCount = incidentRows.reduce((t, r) => t + r.n, 0)
+    const outsideCount = outside.rows.find((r) => r.site_id === site.id)?.n ?? 0
+    const score = incidentPoints + outsideCount
+    const level = score >= 8 ? 'high' : score >= 3 ? 'medium' : 'low'
+    return {
+      ...site, dangerLevel: level, riskScore: score,
+      riskReason: score === 0 ? 'No incidents or geofence breaches in 30 days' : `${incidentCount} incident${incidentCount === 1 ? '' : 's'} and ${outsideCount} outside-geofence check-in${outsideCount === 1 ? '' : 's'} in 30 days`,
+      guardCount: assigned.rows.find((r) => r.site === site.name)?.n ?? 0,
+      clientName: clientRows.find((c) => c.id === site.clientId)?.name ?? null,
+    }
+  })
+}
+
 export async function GET(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
@@ -83,7 +119,7 @@ export async function GET(request: Request) {
     case 'guards':
       return NextResponse.json(await db.select().from(guards).where(eq(guards.organizationId, current.organizationId)).orderBy(desc(guards.createdAt)).limit(250))
     case 'sites':
-      return NextResponse.json(await db.select().from(sites).where(eq(sites.organizationId, current.organizationId)).orderBy(desc(sites.createdAt)).limit(250))
+      return NextResponse.json(await withRisk(current.organizationId, await db.select().from(sites).where(eq(sites.organizationId, current.organizationId)).orderBy(desc(sites.createdAt)).limit(250)))
     case 'attendance':
       return NextResponse.json(await db.select().from(attendance).where(eq(attendance.organizationId, current.organizationId)).orderBy(desc(attendance.createdAt)).limit(250))
     case 'patrols':
@@ -92,10 +128,10 @@ export async function GET(request: Request) {
       return NextResponse.json(await db.select().from(incidents).where(eq(incidents.organizationId, current.organizationId)).orderBy(desc(incidents.createdAt)).limit(250))
     case 'alerts':
       return NextResponse.json(await db.select().from(alerts).where(eq(alerts.organizationId, current.organizationId)).orderBy(desc(alerts.createdAt)).limit(250))
+    case 'activity':
+      return NextResponse.json(await db.select().from(activityEvents).where(eq(activityEvents.organizationId, current.organizationId)).orderBy(desc(activityEvents.createdAt)).limit(100))
     case 'finances':
       return NextResponse.json(await db.select().from(finances).where(eq(finances.organizationId, current.organizationId)).orderBy(desc(finances.createdAt)).limit(250))
-    case 'clients':
-      return NextResponse.json(await db.select().from(clients).where(eq(clients.organizationId, current.organizationId)).orderBy(desc(clients.createdAt)).limit(250))
   }
 }
 
@@ -109,6 +145,7 @@ export async function POST(request: Request) {
   const section = sectionSchema.safeParse(body.section)
   if (!section.success) return fail('Unknown section')
   const now = new Date()
+  { const need = needFor(section.data); if (need && !(await can(current, need))) return fail('Your role does not allow this. An administrator can change it in Settings.', 403) }
 
   if (section.data === 'guards') {
     const parsed = guardCreateSchema.safeParse(body)
@@ -141,7 +178,8 @@ export async function POST(request: Request) {
   if (section.data === 'sites') {
     const parsed = siteCreateSchema.safeParse(body)
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid site.')
-    const [row] = await db.insert(sites).values({ ...current, ...parsed.data, status: 'active', createdAt: now }).returning()
+    const clientId = parsed.data.clientId || null
+    const [row] = await db.insert(sites).values({ ...current, ...parsed.data, clientId, status: 'active', createdAt: now }).returning()
     await log(current, 'site.created', `Site added: ${row.name}`, row.address)
     return NextResponse.json(row, { status: 201 })
   }
@@ -158,17 +196,8 @@ export async function POST(request: Request) {
       reportedAt: now,
       createdAt: now,
     }).returning()
+    if (row.severity === 'high' || row.severity === 'critical') await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'incident', title: `${row.severity === 'critical' ? 'Critical' : 'High'} incident: ${row.title}`, body: `${row.site}: ${row.description.slice(0, 140)}`, severity: row.severity, key: `incident:${row.id}` })
     await log(current, 'incident.created', `Incident reported: ${row.title}`, row.site)
-    if (row.severity === 'critical') {
-      await raiseAlert({
-        userId: current.userId,
-        organizationId: current.organizationId,
-        type: 'incident.critical',
-        title: `Critical incident: ${row.title}`,
-        body: `${row.site} · reported by a moderator`,
-        severity: 'critical',
-      })
-    }
     return NextResponse.json(row, { status: 201 })
   }
 
@@ -224,6 +253,7 @@ const updateSchema = z.object({
   longitude: z.coerce.number().finite().min(-180).max(180).optional(),
   geofenceRadius: z.coerce.number().int().positive().max(100_000).optional(),
   dangerLevel: z.enum(['low', 'medium', 'high']).optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
   status: z.string().trim().min(1).max(32).optional(),
   progress: z.coerce.number().int().min(0).max(100).optional(),
   acknowledged: z.boolean().optional(),
@@ -237,7 +267,6 @@ const updateSchema = z.object({
   siteId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
   category: z.string().trim().max(64).nullable().optional(),
   receiptUrl: z.string().max(1_500_000).nullable().optional(),
-  assigneeId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
 })
 
 export async function PATCH(request: Request) {
@@ -249,6 +278,8 @@ export async function PATCH(request: Request) {
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid update.')
   const { section, id, action } = parsed.data
   const now = new Date()
+  { const need = needFor(section); if (need && action !== 'acknowledge' && !(await can(current, need))) return fail('Your role does not allow this. An administrator can change it in Settings.', 403) }
+  if (['suspend', 'reactivate', 'reissue-nfc', 'deactivate'].includes(action) && !(await isModerator(current))) return fail('Only an owner, admin or moderator can do this.', 403)
   let row: object | undefined
   let eventTitle = 'Record updated'
   let eventBody: string = action
@@ -290,13 +321,13 @@ export async function PATCH(request: Request) {
     if (action === 'deactivate') changes = { status: 'inactive' }
     else if (action === 'reactivate') changes = { status: 'active' }
     else if (action === 'update') changes = {
+      clientId: parsed.data.clientId === undefined ? undefined : parsed.data.clientId || null,
       name: parsed.data.name,
       address: parsed.data.address,
       latitude: parsed.data.latitude,
       longitude: parsed.data.longitude,
       geofenceRadius: parsed.data.geofenceRadius,
       dangerLevel: parsed.data.dangerLevel,
-      clientId: parsed.data.clientId === undefined ? undefined : parsed.data.clientId || null,
     }
     else return fail('Unsupported site action.')
     const values = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))
@@ -332,22 +363,12 @@ export async function PATCH(request: Request) {
       row = updated
       eventBody = 'Comment added'
     } else if (action === 'assign') {
-      const assigneeId = parsed.data.assigneeId || null
-      let assigneeName = 'Nobody'
-      if (assigneeId) {
-        const [guard] = await db.select({ name: guards.name }).from(guards).where(and(
-          eq(guards.id, assigneeId),
-          eq(guards.organizationId, current.organizationId),
-        )).limit(1)
-        if (!guard) return fail('Select a guard in this organization.')
-        assigneeName = guard.name
-      }
       const [updated] = await db.update(incidents).set({
-        assigneeId,
-        timeline: [...record.timeline, `${now.toISOString()} Assigned to ${assigneeName}`],
+        assigneeId: parsed.data.assigneeId ?? null,
+        timeline: [...record.timeline, `${now.toISOString()} Assigned`],
       }).where(where).returning()
       row = updated
-      eventBody = `Assigned to ${assigneeName}`
+      eventBody = 'Assigned'
     } else if (action === 'escalate' || action === 'resolve' || (action === 'update' && parsed.data.status)) {
       const status = action === 'escalate' ? 'escalated' : action === 'resolve' ? 'resolved' : parsed.data.status!
       const [updated] = await db.update(incidents).set({
@@ -356,16 +377,7 @@ export async function PATCH(request: Request) {
       }).where(where).returning()
       row = updated
       eventBody = status
-      if (status === 'escalated') {
-        await raiseAlert({
-          userId: current.userId,
-          organizationId: current.organizationId,
-          type: 'incident.escalated',
-          title: `Incident escalated: ${record.title}`,
-          body: `${record.site} · reported severity ${record.severity}`,
-          severity: record.severity === 'critical' ? 'critical' : 'high',
-        })
-      }
+      if (action === 'escalate') await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'incident', title: `Escalated: ${record.title}`, body: `${record.site} incident was escalated`, severity: 'critical', key: `escalate:${record.id}` })
     } else {
       return fail('Unsupported incident action.')
     }
@@ -423,66 +435,42 @@ export async function PATCH(request: Request) {
   return NextResponse.json(row)
 }
 
+/** Permanent removal of a guard or site. Needs the "approve payroll" permission. Guards take their attendance, patrol and payroll history with them. */
 export async function DELETE(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
-  if (!(await isModerator(current))) return fail('Only an owner, administrator or moderator can delete records.', 403)
-
-  const parsed = deleteSchema.safeParse(await readJson(request))
-  if (!parsed.success) return fail('Provide the record type and the id to delete.')
-  const { section, id } = parsed.data
-  const now = new Date()
+  if (!(await isModerator(current))) return fail('Only an owner, admin or moderator can delete records.', 403)
+  const url = new URL(request.url)
+  const section = url.searchParams.get('section')
+  const id = url.searchParams.get('id') ?? ''
+  if (!z.string().uuid().safeParse(id).success) return fail('Invalid id')
+  const inOrg = (table: { organizationId: AnyPgColumn }) => eq(table.organizationId, current.organizationId)
 
   if (section === 'guards') {
-    const [guard] = await db.select().from(guards).where(and(eq(guards.id, id), eq(guards.organizationId, current.organizationId))).limit(1)
-    if (!guard) return fail('Guard not found in this organization.', 404)
-    const patrolIds = (await db.select({ id: patrols.id }).from(patrols).where(and(eq(patrols.organizationId, current.organizationId), eq(patrols.guardId, id)))).map((item) => item.id)
-    if (patrolIds.length) await db.delete(patrolCheckpoints).where(inArray(patrolCheckpoints.patrolId, patrolIds))
-    await db.delete(patrols).where(and(eq(patrols.organizationId, current.organizationId), eq(patrols.guardId, id)))
-    await db.delete(attendance).where(and(eq(attendance.organizationId, current.organizationId), eq(attendance.guardId, id)))
-    await db.delete(payrollRecords).where(and(eq(payrollRecords.organizationId, current.organizationId), eq(payrollRecords.guardId, id)))
-    await db.delete(guards).where(and(eq(guards.id, id), eq(guards.organizationId, current.organizationId)))
-    await log(current, 'guard.deleted', `Guard removed: ${guard.name}`, 'The guard and their attendance, patrol and payroll records were deleted.')
-    return NextResponse.json({ id, deleted: true })
+    const [found] = await db.select({ name: guards.name }).from(guards).where(and(eq(guards.id, id), inOrg(guards))).limit(1)
+    if (!found) return fail('Guard not found', 404)
+    await db.transaction(async (tx) => {
+      await tx.delete(attendance).where(and(eq(attendance.guardId, id), inOrg(attendance)))
+      await tx.delete(patrols).where(and(eq(patrols.guardId, id), inOrg(patrols))) // checkpoints cascade
+      await tx.delete(payrollRecords).where(and(eq(payrollRecords.guardId, id), inOrg(payrollRecords)))
+      await tx.update(incidents).set({ assigneeId: null }).where(and(eq(incidents.assigneeId, id), inOrg(incidents)))
+      await tx.delete(guards).where(and(eq(guards.id, id), inOrg(guards)))
+    })
+    await log(current, 'guard.deleted', `Guard deleted: ${found.name}`, 'Removed with their attendance, patrol and payroll history')
+    return NextResponse.json({ ok: true })
   }
-
   if (section === 'sites') {
-    const [site] = await db.select().from(sites).where(and(eq(sites.id, id), eq(sites.organizationId, current.organizationId))).limit(1)
-    if (!site) return fail('Site not found in this organization.', 404)
-    await db.update(guards).set({ site: null }).where(and(eq(guards.organizationId, current.organizationId), eq(guards.site, site.name)))
-    await db.update(attendance).set({ siteId: null }).where(and(eq(attendance.organizationId, current.organizationId), eq(attendance.siteId, id)))
-    await db.update(patrols).set({ siteId: null }).where(and(eq(patrols.organizationId, current.organizationId), eq(patrols.siteId, id)))
-    await db.update(finances).set({ siteId: null }).where(and(eq(finances.organizationId, current.organizationId), eq(finances.siteId, id)))
-    await db.delete(sites).where(and(eq(sites.id, id), eq(sites.organizationId, current.organizationId)))
-    await log(current, 'site.deleted', `Site removed: ${site.name}`, 'Guards assigned to this site are now unassigned.')
-    return NextResponse.json({ id, deleted: true })
+    const [found] = await db.select({ name: sites.name }).from(sites).where(and(eq(sites.id, id), inOrg(sites))).limit(1)
+    if (!found) return fail('Site not found', 404)
+    await db.transaction(async (tx) => {
+      await tx.update(guards).set({ site: null }).where(and(eq(guards.site, found.name), inOrg(guards)))
+      await tx.update(attendance).set({ siteId: null }).where(and(eq(attendance.siteId, id), inOrg(attendance)))
+      await tx.update(patrols).set({ siteId: null }).where(and(eq(patrols.siteId, id), inOrg(patrols)))
+      await tx.delete(sites).where(and(eq(sites.id, id), inOrg(sites))) // finances.siteId is set null by the foreign key
+    })
+    await log(current, 'site.deleted', `Site deleted: ${found.name}`, 'Guards at this site are now unassigned')
+    return NextResponse.json({ ok: true })
   }
-
-  if (section === 'clients') {
-    const [client] = await db.select().from(clients).where(and(eq(clients.id, id), eq(clients.organizationId, current.organizationId))).limit(1)
-    if (!client) return fail('Client not found in this organization.', 404)
-    await db.update(finances).set({ clientId: null }).where(and(eq(finances.organizationId, current.organizationId), eq(finances.clientId, id)))
-    await db.delete(clients).where(and(eq(clients.id, id), eq(clients.organizationId, current.organizationId)))
-    await log(current, 'client.deleted', `Client removed: ${client.name}`, 'Their finance records were kept without a client link.')
-    return NextResponse.json({ id, deleted: true })
-  }
-
-  if (section === 'finances') {
-    const [record] = await db.select().from(finances).where(and(eq(finances.id, id), eq(finances.organizationId, current.organizationId))).limit(1)
-    if (!record) return fail('Finance record not found in this organization.', 404)
-    await db.delete(finances).where(and(eq(finances.id, id), eq(finances.organizationId, current.organizationId)))
-    await log(current, 'finance.deleted', `Finance record deleted: ${record.label}`, `${record.kind} · ${record.status}`)
-    return NextResponse.json({ id, deleted: true })
-  }
-
-  if (section === 'incidents') {
-    const [record] = await db.select().from(incidents).where(and(eq(incidents.id, id), eq(incidents.organizationId, current.organizationId))).limit(1)
-    if (!record) return fail('Incident not found in this organization.', 404)
-    await db.delete(incidents).where(and(eq(incidents.id, id), eq(incidents.organizationId, current.organizationId)))
-    await log(current, 'incident.deleted', `Incident deleted: ${record.title}`, record.site)
-    return NextResponse.json({ id, deleted: true })
-  }
-
-  return fail('This record type cannot be deleted.', 405)
+  return fail('Only guards and sites can be deleted.', 405)
 }

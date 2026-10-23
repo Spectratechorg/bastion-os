@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { alerts, activityEvents, attendance, finances, guards, incidents, patrols } from '@/lib/db/schema'
-import { getActiveOrganization } from '@/lib/auth/organization'
+import { actor, denyGuard } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,9 +10,10 @@ export async function GET() {
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local and restart the app.' }, { status: 503 })
   }
-  const currentUser = await getActiveOrganization()
+  const currentUser = await actor()
   if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!currentUser.organizationId) return NextResponse.json({ error: 'No active organization. Create or join an organization before using the dashboard.' }, { status: 403 })
+  const denied = denyGuard(currentUser)
+  if (denied) return denied
   const organizationId = currentUser.organizationId
   const [guardRows, incidentRows, alertRows, activityRows, attendanceRows, counts, patrolRows, financeRows] = await Promise.all([
     db.select().from(guards).where(eq(guards.organizationId, organizationId)).orderBy(desc(guards.lastCheckIn)).limit(8),

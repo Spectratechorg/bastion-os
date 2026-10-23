@@ -1,29 +1,37 @@
+'use client'
+
 import { WorkspaceShell } from '@/components/workspace-shell'
 import { FinanceDataPage } from '@/components/data-pages'
 import { ClientsPage } from '@/components/clients-page'
-import { ReportsPage } from '@/components/reports-page'
-import { SettingsPage } from '@/components/settings-page'
-import { AlertsPage } from '@/components/alerts-page'
 import { NapoleonLivePage } from '@/components/napoleon-live-page'
-import { OperationsLivePage, OverviewLivePage } from '@/components/operations-live-pages'
-import { FinancePage } from '@/components/finance-page'
+import { OverviewPage } from '@/components/overview-page'
+import { RecordsPage } from '@/components/records-page'
 import { PatrolsPage } from '@/components/patrols-page'
+import { FinancePage } from '@/components/finance-page'
+import { GuardRegisterPage } from '@/components/guard-register-page'
+import { MapPage } from '@/components/map-page'
 import { ProfilePage } from '@/components/profile-page'
-
-type OperationalSection = 'guards' | 'sites' | 'attendance' | 'patrols' | 'incidents'
+import { ReportsPage, SettingsPage } from '@/components/more-pages'
 
 export function WorkspacePage({ route, financeTab = 'overview' }: { route: string; financeTab?: string }) {
-  if (route === 'patrols') return <WorkspaceShell active={route}><PatrolsPage /></WorkspaceShell>
-  if (['guards', 'sites', 'attendance', 'incidents'].includes(route)) {
-    return <WorkspaceShell active={route}><OperationsLivePage section={route as OperationalSection} /></WorkspaceShell>
+  let content: React.ReactNode; let active = route
+  switch (route) {
+    case 'overview': content = <OverviewPage />; break
+    case 'guards': content = <RecordsPage section="guards" />; break
+    case 'guards-new': content = <GuardRegisterPage />; active = 'guards'; break
+    case 'map': content = <MapPage />; active = 'Live map'; break
+    case 'sites': content = <RecordsPage section="sites" />; break
+    case 'attendance': content = <RecordsPage section="attendance" />; break
+    case 'incidents': content = <RecordsPage section="incidents" />; break
+    case 'alerts': content = <RecordsPage section="alerts" />; break
+    case 'patrols': content = <PatrolsPage />; break
+    case 'finance': content = financeTab === 'payroll' || financeTab === 'contracts' ? <FinancePage tab={financeTab} /> : <FinanceDataPage tab={financeTab} />; break
+    case 'clients': content = <ClientsPage />; break
+    case 'reports': content = <ReportsPage />; break
+    case 'profile': content = <ProfilePage />; active = 'profile'; break
+    case 'napoleon': content = <NapoleonLivePage />; break
+    case 'settings': content = <SettingsPage />; active = 'Settings'; break
+    default: content = <OverviewPage />
   }
-  if (route === 'overview') return <WorkspaceShell active={route}><OverviewLivePage /></WorkspaceShell>
-  if (route === 'alerts') return <WorkspaceShell active={route}><AlertsPage /></WorkspaceShell>
-  if (route === 'clients') return <WorkspaceShell active={route}><ClientsPage /></WorkspaceShell>
-  if (route === 'finance') return <WorkspaceShell active={route}>{financeTab === 'payroll' ? <FinancePage tab="payroll" /> : <FinanceDataPage tab={financeTab} />}</WorkspaceShell>
-  if (route === 'reports') return <WorkspaceShell active={route}><ReportsPage /></WorkspaceShell>
-  if (route === 'settings') return <WorkspaceShell active="Settings"><SettingsPage /></WorkspaceShell>
-  if (route === 'profile') return <WorkspaceShell active={route}><ProfilePage /></WorkspaceShell>
-  if (route === 'napoleon') return <WorkspaceShell active={route}><NapoleonLivePage /></WorkspaceShell>
-  return null
+  return <WorkspaceShell active={active}>{content}</WorkspaceShell>
 }

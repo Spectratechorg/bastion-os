@@ -5,8 +5,8 @@ import { LoaderCircle, X } from 'lucide-react'
 
 export function Badge({ value }: { value: unknown }) {
   const text = String(value ?? '—')
-  const tone = /critical|high|suspended|flagged|outside|escalated|missed|unacknowledged/i.test(text) ? 'bg-[#FDECEA] text-[#B42318]'
-    : /medium|pending|open|inactive|in_progress|in progress|investigating/i.test(text) ? 'bg-[#FEF3E2] text-[#B7791F]'
+  const tone = /critical|high|suspended|flagged|outside|escalated|missed|unacknowledged|overdue/i.test(text) ? 'bg-[#FDECEA] text-[#B42318]'
+    : /medium|pending|open|inactive|in_progress|in progress|investigating|restock|due soon/i.test(text) ? 'bg-[#FEF3E2] text-[#B7791F]'
     : /paid|completed|approved|active|resolved|inside|acknowledged|low/i.test(text) ? 'bg-[#E3F4EA] text-[#16794A]' : 'bg-[#EFEFF1] text-[#52525B]'
   return <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${tone}`}>{text.replace('_', ' ')}</span>
 }

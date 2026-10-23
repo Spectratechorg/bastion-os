@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Download, Plus, RefreshCw, Search } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { photoToDataUrl } from '@/lib/client'
+import { ContractSummary, FinanceTabs, InventoryTab } from '@/components/finance-extra'
 
 type ClientRecord = {
   id: string
@@ -15,6 +16,8 @@ type ClientRecord = {
   monthlyValue: number
   slaScore: number | null
   renewalDate: string | null
+  sites?: { id: string; name: string; status: string }[]
+  guardCount?: number
 }
 
 type FinanceRecord = {
@@ -235,9 +238,11 @@ export function FinanceDataPage({ tab }: { tab: string }) {
   return <>
     <PageHeader title={title} subtitle="Income and costs recorded for your organization.">
       <a href="/api/export?section=finances" className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold"><Download className="size-3.5" />Export CSV</a>
-      <button onClick={() => { setEditingId(null); setForm(emptyForm(defaultKind[page] ?? 'revenue')); setOpen(!open) }} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-black px-3.5 text-xs font-semibold text-white"><Plus className="size-3.5" />Add record</button>
+      <button onClick={() => { setEditingId(null); setForm(emptyForm(defaultKind[page] ?? 'revenue')); setOpen(!open) }} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3.5 text-xs font-semibold text-white"><Plus className="size-3.5" />Add record</button>
     </PageHeader>
-    <nav className="mb-5 flex gap-5 overflow-x-auto border-b border-zinc-200 text-xs">{Object.keys(financeFilters).map((item) => <a key={item} href={item === 'overview' ? '/finance' : `/finance/${item}`} className={`border-b-2 pb-3 capitalize ${item === page ? 'border-black font-semibold' : 'border-transparent text-zinc-500'}`}>{item}</a>)}<a href="/finance/payroll" className="border-b-2 border-transparent pb-3 text-zinc-500">Payroll run</a></nav>
+    <FinanceTabs active={page} />
+    {page === 'overview' && <ContractSummary />}
+    {page === 'inventory' && <><h2 className="mb-2 text-sm font-semibold">Stock on hand</h2><InventoryTab /><h2 className="mb-2 mt-6 text-sm font-semibold">Inventory purchases and costs</h2></>}
     <StatStrip stats={[[String(filtered.length), 'Records'], [money(inflow), 'Money in'], [money(outflow), 'Money out'], [money(unsettled), 'Unsettled']]} />
     {page === 'overview' && <section className="mb-5 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 p-4"><div><h2 className="text-sm font-semibold">Profit statement</h2><p className="mt-1 text-xs text-zinc-500">Income minus costs for the chosen month, grouped by client.</p></div><input type="month" aria-label="Statement month" value={statementMonth} onChange={(event) => event.target.value && setStatementMonth(event.target.value)} className="h-10 rounded-lg border border-zinc-200 px-3 text-xs" /></header>
@@ -260,7 +265,7 @@ export function FinanceDataPage({ tab }: { tab: string }) {
       <label className="flex flex-col gap-1.5 text-xs font-medium">Due date<input type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Notes<input value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium sm:col-span-2">Receipt photo<input type="file" accept="image/*" onChange={attachReceipt} className="text-xs" />{form.receiptUrl ? <span className="flex items-center gap-2 text-[11px] text-emerald-700">Receipt attached<button type="button" onClick={() => setForm({ ...form, receiptUrl: '' })} className="underline">remove</button></span> : <span className="text-[10px] font-normal text-zinc-500">Optional — snap the paper receipt.</span>}</label>
-      <div className="flex items-end gap-2"><button disabled={saving} className="h-10 rounded-lg bg-black px-4 text-xs font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Update record' : 'Save record'}</button><button type="button" onClick={() => { setOpen(false); setEditingId(null) }} className="h-10 rounded-lg border border-zinc-200 px-4 text-xs">Cancel</button></div>
+      <div className="flex items-end gap-2"><button disabled={saving} className="h-10 rounded-lg bg-[#2A2B2E] px-4 text-xs font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Update record' : 'Save record'}</button><button type="button" onClick={() => { setOpen(false); setEditingId(null) }} className="h-10 rounded-lg border border-zinc-200 px-4 text-xs">Cancel</button></div>
     </form>}
     <div className="mb-3 flex items-center gap-2"><label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3"><Search className="size-4 text-zinc-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}…`} className="w-full text-xs outline-none" /></label><button onClick={() => void load()} aria-label="Refresh finance records" className="rounded-lg border border-zinc-200 bg-white p-3"><RefreshCw className="size-3.5" /></button></div>
     <div className="overflow-x-auto rounded-[18px] border border-zinc-200 bg-white"><table className="w-full min-w-[820px] text-left text-xs"><thead className="bg-zinc-50 text-[10px] tracking-wide text-zinc-500"><tr>{['TYPE', 'DESCRIPTION', 'AMOUNT', 'STATUS', 'DUE DATE', 'NOTES', ''].map((name, index) => <th key={`${name}-${index}`} className="px-4 py-3">{name}</th>)}</tr></thead><tbody>{loading ? <EmptyState colSpan={7}>Loading finance records…</EmptyState> : filtered.length === 0 ? <EmptyState colSpan={7}>{search ? 'No records match your search.' : 'No finance records in this category yet.'}</EmptyState> : filtered.map((row) => {
@@ -270,3 +275,175 @@ export function FinanceDataPage({ tab }: { tab: string }) {
   </>
 }
 
+export function ReportsDataPage() {
+  const [report, setReport] = useState<ReportData | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  async function load() {
+    setLoading(true)
+    try {
+      setReport(await jsonRequest<ReportData>('/api/reports'))
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to generate live reports.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [])
+  const summary = report?.summary
+  const reports = [
+    { title: 'Guard workforce', details: `${summary?.guards.active ?? 0} active of ${summary?.guards.total ?? 0} registered`, href: '/api/export?section=guards' },
+    { title: 'Site register', details: `${summary?.sites ?? 0} sites`, href: '/api/export?section=sites' },
+    { title: 'Incident review', details: `${summary?.incidents.open ?? 0} open of ${summary?.incidents.total ?? 0} incidents`, href: '/api/export?section=incidents' },
+    { title: 'Client accounts', details: `${summary?.clients ?? 0} client accounts`, href: '/api/export?section=clients' },
+    { title: 'Finance ledger', details: `${money(summary?.finance.revenue ?? 0)} revenue · ${money(summary?.finance.costs ?? 0)} costs`, href: '/api/export?section=finances' },
+  ]
+
+  return <>
+    <PageHeader title="Reports" subtitle="Live organization summaries and exports from persisted records.">
+      <button onClick={() => void load()} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold"><RefreshCw className="size-3.5" />Refresh reports</button>
+    </PageHeader>
+    {error && <ErrorNotice>{error}</ErrorNotice>}
+    <StatStrip stats={[[String(summary?.guards.total ?? (loading ? '…' : 0)), 'Registered guards'], [String(summary?.sites ?? (loading ? '…' : 0)), 'Sites'], [String(summary?.incidents.open ?? (loading ? '…' : 0)), 'Open incidents'], [money(summary?.finance.pending ?? 0), 'Unsettled finance']]} />
+    <section className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white"><header className="border-b border-zinc-100 p-4"><h2 className="text-sm font-semibold">Available reports</h2><p className="mt-1 text-xs text-zinc-500">{report ? `Generated ${new Date(report.generatedAt).toLocaleString()} · year-to-date from ${new Date(report.periodStart).toLocaleDateString()}` : 'Summary data is loaded from your active organization.'}</p></header><div className="divide-y divide-zinc-100">{reports.map((item) => <div key={item.title} className="flex flex-wrap items-center gap-3 px-4 py-4"><div className="min-w-0 flex-1"><h3 className="text-xs font-semibold">{item.title}</h3><p className="mt-1 text-[11px] text-zinc-500">{item.details}</p></div><a href={item.href} className="inline-flex items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold"><Download className="size-3.5" />Download CSV</a></div>)}</div></section>
+  </>
+}
+
+export function SettingsDataPage() {
+  const [data, setData] = useState<WorkspaceData | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [guardCode, setGuardCode] = useState('')
+  const [codeError, setCodeError] = useState('')
+  const [codeNote, setCodeNote] = useState('')
+  const [rotating, setRotating] = useState(false)
+  const [shift, setShift] = useState({ startHour: 8, endHour: 18 })
+  const [shiftNote, setShiftNote] = useState('')
+  const [shiftError, setShiftError] = useState('')
+  const [savingShift, setSavingShift] = useState(false)
+
+  const hours = Array.from({ length: 25 }, (_, hour) => hour)
+
+  async function load() {
+    setLoading(true)
+    try {
+      setData(await jsonRequest<WorkspaceData>('/api/workspace'))
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to load organization settings.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadGuardCode() {
+    try {
+      const response = await fetch('/api/guard/access', { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to load the guard app code.')
+      setGuardCode(payload.code ?? '')
+      setCodeError('')
+    } catch (cause) {
+      setCodeError(cause instanceof Error ? cause.message : 'Unable to load the guard app code.')
+    }
+  }
+
+  async function rotateGuardCode() {
+    if (!window.confirm('Replace the guard app code? Every phone using the old code will stop working.')) return
+    setRotating(true)
+    try {
+      const response = await fetch('/api/guard/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to replace the code.')
+      setGuardCode(payload.code ?? '')
+      setCodeError('')
+      setCodeNote('New code created. Give it to your supervisors.')
+    } catch (cause) {
+      setCodeError(cause instanceof Error ? cause.message : 'Unable to replace the code.')
+    } finally {
+      setRotating(false)
+    }
+  }
+
+  async function loadShift() {
+    try {
+      const response = await fetch('/api/shift', { cache: 'no-store' })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to load the patrol shift.')
+      setShift({ startHour: payload.startHour, endHour: payload.endHour })
+      setShiftError('')
+    } catch (cause) {
+      setShiftError(cause instanceof Error ? cause.message : 'Unable to load the patrol shift.')
+    }
+  }
+
+  async function saveShift(event: React.FormEvent) {
+    event.preventDefault()
+    setSavingShift(true)
+    setShiftError('')
+    setShiftNote('')
+    try {
+      const response = await fetch('/api/shift', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(shift) })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error ?? 'Unable to save the patrol shift.')
+      setShift({ startHour: payload.startHour, endHour: payload.endHour })
+      setShiftNote('Patrol checkpoints updated.')
+    } catch (cause) {
+      setShiftError(cause instanceof Error ? cause.message : 'Unable to save the patrol shift.')
+    } finally {
+      setSavingShift(false)
+    }
+  }
+
+  useEffect(() => { void load(); void loadGuardCode(); void loadShift() }, [])
+
+  return <>
+    <PageHeader title="Settings" subtitle="Organization, team access, and recorded workspace activity.">
+      <button onClick={() => void load()} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold"><RefreshCw className="size-3.5" />Refresh</button>
+    </PageHeader>
+    {error && <ErrorNotice>{error}</ErrorNotice>}
+    {loading && !data ? <p className="rounded-xl border border-zinc-200 bg-white p-6 text-xs text-zinc-500">Loading your organization settings…</p> : data && <>
+      <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
+        <h2 className="text-sm font-semibold">Organization</h2>
+        <dl className="mt-4 grid gap-4 text-xs sm:grid-cols-3"><div><dt className="text-zinc-500">Name</dt><dd className="mt-1 font-semibold">{data.organization.name}</dd></div><div><dt className="text-zinc-500">Organization ID</dt><dd className="mt-1 font-mono">{data.organization.slug}</dd></div><div><dt className="text-zinc-500">Your access</dt><dd className="mt-1 capitalize font-semibold">{data.user.role}</dd></div></dl>
+      </section>
+      <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
+        <h2 className="text-sm font-semibold">Guard app access</h2>
+        <p className="mt-1 text-xs text-zinc-500">Guard phones enter this code once at <span className="font-mono">/guard-app</span>, so nobody needs a manager login on the phone.</p>
+        {codeError && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{codeError}</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <code className="rounded-lg bg-zinc-100 px-3 py-2 font-mono text-sm font-semibold tracking-wider">{guardCode || '—'}</code>
+          <button onClick={() => guardCode && void navigator.clipboard.writeText(guardCode)} disabled={!guardCode} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold disabled:opacity-60">Copy code</button>
+          <button onClick={() => void rotateGuardCode()} disabled={rotating} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white disabled:opacity-60">{rotating ? 'Replacing…' : 'Replace code'}</button>
+        </div>
+        {codeNote && <p role="status" className="mt-3 text-xs text-emerald-700">{codeNote}</p>}
+      </section>
+      <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
+        <h2 className="text-sm font-semibold">Patrol shift</h2>
+        <p className="mt-1 text-xs text-zinc-500">Guards sign one checkpoint every hour inside this shift, in Lagos time. A {shift.endHour - shift.startHour}-checkpoint patrol runs {String(shift.startHour).padStart(2, '0')}:00–{String(shift.endHour - 1).padStart(2, '0')}:59.</p>
+        {shiftError && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{shiftError}</p>}
+        <form onSubmit={saveShift} className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1.5 text-[11px] font-semibold text-zinc-700">Shift starts
+            <select value={shift.startHour} onChange={(event) => setShift({ ...shift, startHour: Number(event.target.value) })} className="h-10 rounded-lg border border-zinc-200 px-3 text-xs">{hours.slice(0, 24).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select>
+          </label>
+          <label className="flex flex-col gap-1.5 text-[11px] font-semibold text-zinc-700">Shift ends
+            <select value={shift.endHour} onChange={(event) => setShift({ ...shift, endHour: Number(event.target.value) })} className="h-10 rounded-lg border border-zinc-200 px-3 text-xs">{hours.slice(1).map((hour) => <option key={hour} value={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select>
+          </label>
+          <button disabled={savingShift} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white disabled:opacity-60">{savingShift ? 'Saving…' : 'Save shift'}</button>
+        </form>
+        {shiftNote && <p role="status" className="mt-3 text-xs text-emerald-700">{shiftNote}</p>}
+      </section>
+      <section className="mb-5 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
+        <header className="border-b border-zinc-100 p-4"><h2 className="text-sm font-semibold">Organization members</h2><p className="mt-1 text-xs text-zinc-500">Membership and roles currently stored for this organization.</p></header>
+        <div className="overflow-x-auto"><table className="w-full min-w-[500px] text-left text-xs"><thead className="bg-zinc-50 text-[10px] text-zinc-500"><tr>{['NAME', 'EMAIL', 'ROLE', 'JOINED'].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead><tbody>{data.members.length ? data.members.map((member) => <tr key={member.id} className="border-t border-zinc-100"><td className="px-4 py-3.5 font-semibold">{member.name}</td><td className="px-4 py-3.5">{member.email}</td><td className="px-4 py-3.5 capitalize">{member.role}</td><td className="px-4 py-3.5">{new Date(member.joinedAt).toLocaleDateString()}</td></tr>) : <EmptyState colSpan={4}>No members are recorded for this organization.</EmptyState>}</tbody></table></div>
+      </section>
+      <section className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
+        <header className="border-b border-zinc-100 p-4"><h2 className="text-sm font-semibold">Recent recorded activity</h2><p className="mt-1 text-xs text-zinc-500">Events written by the operations API; this is not a complete security audit log.</p></header>
+        <div className="divide-y divide-zinc-100">{data.activity.length ? data.activity.map((event) => <article key={event.id} className="flex flex-wrap gap-2 px-4 py-3.5"><div className="min-w-0 flex-1"><h3 className="text-xs font-semibold">{event.title}</h3><p className="mt-1 text-[11px] text-zinc-500">{event.body} <span className="ml-1">({event.type})</span></p></div><time className="text-[10px] text-zinc-400">{new Date(event.createdAt).toLocaleString()}</time></article>) : <p className="px-4 py-10 text-center text-xs text-zinc-500">No activity has been recorded yet.</p>}</div>
+      </section>
+    </>}
+  </>
+}
