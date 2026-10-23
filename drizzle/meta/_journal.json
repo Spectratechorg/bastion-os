@@ -64,6 +64,13 @@
       "when": 1792602500950,
       "tag": "0008_dark_triton",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792738502099,
+      "tag": "0009_daily_greymalkin",
+      "breakpoints": true
     }
   ]
 }

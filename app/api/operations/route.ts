@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
-import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrols, sites } from '@/lib/db/schema'
+import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
+import { raiseAlert } from '@/lib/alerts'
 import { isModerator } from '@/lib/server'
 
-const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map'])
+const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map', 'clients'])
+const deleteSchema = z.object({ section: sectionSchema, id: z.string().uuid() })
 const databaseUnavailable = () => NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local and restart the app.' }, { status: 503 })
 const fail = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
@@ -92,6 +94,8 @@ export async function GET(request: Request) {
       return NextResponse.json(await db.select().from(alerts).where(eq(alerts.organizationId, current.organizationId)).orderBy(desc(alerts.createdAt)).limit(250))
     case 'finances':
       return NextResponse.json(await db.select().from(finances).where(eq(finances.organizationId, current.organizationId)).orderBy(desc(finances.createdAt)).limit(250))
+    case 'clients':
+      return NextResponse.json(await db.select().from(clients).where(eq(clients.organizationId, current.organizationId)).orderBy(desc(clients.createdAt)).limit(250))
   }
 }
 
@@ -155,6 +159,16 @@ export async function POST(request: Request) {
       createdAt: now,
     }).returning()
     await log(current, 'incident.created', `Incident reported: ${row.title}`, row.site)
+    if (row.severity === 'critical') {
+      await raiseAlert({
+        userId: current.userId,
+        organizationId: current.organizationId,
+        type: 'incident.critical',
+        title: `Critical incident: ${row.title}`,
+        body: `${row.site} · reported by a moderator`,
+        severity: 'critical',
+      })
+    }
     return NextResponse.json(row, { status: 201 })
   }
 
@@ -223,6 +237,7 @@ const updateSchema = z.object({
   siteId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
   category: z.string().trim().max(64).nullable().optional(),
   receiptUrl: z.string().max(1_500_000).nullable().optional(),
+  assigneeId: z.union([z.string().uuid(), z.literal('')]).nullable().optional(),
 })
 
 export async function PATCH(request: Request) {
@@ -273,6 +288,7 @@ export async function PATCH(request: Request) {
   } else if (section === 'sites') {
     let changes: Partial<typeof sites.$inferInsert>
     if (action === 'deactivate') changes = { status: 'inactive' }
+    else if (action === 'reactivate') changes = { status: 'active' }
     else if (action === 'update') changes = {
       name: parsed.data.name,
       address: parsed.data.address,
@@ -280,6 +296,7 @@ export async function PATCH(request: Request) {
       longitude: parsed.data.longitude,
       geofenceRadius: parsed.data.geofenceRadius,
       dangerLevel: parsed.data.dangerLevel,
+      clientId: parsed.data.clientId === undefined ? undefined : parsed.data.clientId || null,
     }
     else return fail('Unsupported site action.')
     const values = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))
@@ -314,6 +331,23 @@ export async function PATCH(request: Request) {
       }).where(where).returning()
       row = updated
       eventBody = 'Comment added'
+    } else if (action === 'assign') {
+      const assigneeId = parsed.data.assigneeId || null
+      let assigneeName = 'Nobody'
+      if (assigneeId) {
+        const [guard] = await db.select({ name: guards.name }).from(guards).where(and(
+          eq(guards.id, assigneeId),
+          eq(guards.organizationId, current.organizationId),
+        )).limit(1)
+        if (!guard) return fail('Select a guard in this organization.')
+        assigneeName = guard.name
+      }
+      const [updated] = await db.update(incidents).set({
+        assigneeId,
+        timeline: [...record.timeline, `${now.toISOString()} Assigned to ${assigneeName}`],
+      }).where(where).returning()
+      row = updated
+      eventBody = `Assigned to ${assigneeName}`
     } else if (action === 'escalate' || action === 'resolve' || (action === 'update' && parsed.data.status)) {
       const status = action === 'escalate' ? 'escalated' : action === 'resolve' ? 'resolved' : parsed.data.status!
       const [updated] = await db.update(incidents).set({
@@ -322,6 +356,16 @@ export async function PATCH(request: Request) {
       }).where(where).returning()
       row = updated
       eventBody = status
+      if (status === 'escalated') {
+        await raiseAlert({
+          userId: current.userId,
+          organizationId: current.organizationId,
+          type: 'incident.escalated',
+          title: `Incident escalated: ${record.title}`,
+          body: `${record.site} · reported severity ${record.severity}`,
+          severity: record.severity === 'critical' ? 'critical' : 'high',
+        })
+      }
     } else {
       return fail('Unsupported incident action.')
     }
@@ -379,6 +423,66 @@ export async function PATCH(request: Request) {
   return NextResponse.json(row)
 }
 
-export async function DELETE() {
-  return fail('Destructive deletion is disabled. Deactivate a site or suspend a guard instead.', 405)
+export async function DELETE(request: Request) {
+  if (!process.env.DATABASE_URL) return databaseUnavailable()
+  const { current, response } = await getCurrentUser()
+  if (response) return response
+  if (!(await isModerator(current))) return fail('Only an owner, administrator or moderator can delete records.', 403)
+
+  const parsed = deleteSchema.safeParse(await readJson(request))
+  if (!parsed.success) return fail('Provide the record type and the id to delete.')
+  const { section, id } = parsed.data
+  const now = new Date()
+
+  if (section === 'guards') {
+    const [guard] = await db.select().from(guards).where(and(eq(guards.id, id), eq(guards.organizationId, current.organizationId))).limit(1)
+    if (!guard) return fail('Guard not found in this organization.', 404)
+    const patrolIds = (await db.select({ id: patrols.id }).from(patrols).where(and(eq(patrols.organizationId, current.organizationId), eq(patrols.guardId, id)))).map((item) => item.id)
+    if (patrolIds.length) await db.delete(patrolCheckpoints).where(inArray(patrolCheckpoints.patrolId, patrolIds))
+    await db.delete(patrols).where(and(eq(patrols.organizationId, current.organizationId), eq(patrols.guardId, id)))
+    await db.delete(attendance).where(and(eq(attendance.organizationId, current.organizationId), eq(attendance.guardId, id)))
+    await db.delete(payrollRecords).where(and(eq(payrollRecords.organizationId, current.organizationId), eq(payrollRecords.guardId, id)))
+    await db.delete(guards).where(and(eq(guards.id, id), eq(guards.organizationId, current.organizationId)))
+    await log(current, 'guard.deleted', `Guard removed: ${guard.name}`, 'The guard and their attendance, patrol and payroll records were deleted.')
+    return NextResponse.json({ id, deleted: true })
+  }
+
+  if (section === 'sites') {
+    const [site] = await db.select().from(sites).where(and(eq(sites.id, id), eq(sites.organizationId, current.organizationId))).limit(1)
+    if (!site) return fail('Site not found in this organization.', 404)
+    await db.update(guards).set({ site: null }).where(and(eq(guards.organizationId, current.organizationId), eq(guards.site, site.name)))
+    await db.update(attendance).set({ siteId: null }).where(and(eq(attendance.organizationId, current.organizationId), eq(attendance.siteId, id)))
+    await db.update(patrols).set({ siteId: null }).where(and(eq(patrols.organizationId, current.organizationId), eq(patrols.siteId, id)))
+    await db.update(finances).set({ siteId: null }).where(and(eq(finances.organizationId, current.organizationId), eq(finances.siteId, id)))
+    await db.delete(sites).where(and(eq(sites.id, id), eq(sites.organizationId, current.organizationId)))
+    await log(current, 'site.deleted', `Site removed: ${site.name}`, 'Guards assigned to this site are now unassigned.')
+    return NextResponse.json({ id, deleted: true })
+  }
+
+  if (section === 'clients') {
+    const [client] = await db.select().from(clients).where(and(eq(clients.id, id), eq(clients.organizationId, current.organizationId))).limit(1)
+    if (!client) return fail('Client not found in this organization.', 404)
+    await db.update(finances).set({ clientId: null }).where(and(eq(finances.organizationId, current.organizationId), eq(finances.clientId, id)))
+    await db.delete(clients).where(and(eq(clients.id, id), eq(clients.organizationId, current.organizationId)))
+    await log(current, 'client.deleted', `Client removed: ${client.name}`, 'Their finance records were kept without a client link.')
+    return NextResponse.json({ id, deleted: true })
+  }
+
+  if (section === 'finances') {
+    const [record] = await db.select().from(finances).where(and(eq(finances.id, id), eq(finances.organizationId, current.organizationId))).limit(1)
+    if (!record) return fail('Finance record not found in this organization.', 404)
+    await db.delete(finances).where(and(eq(finances.id, id), eq(finances.organizationId, current.organizationId)))
+    await log(current, 'finance.deleted', `Finance record deleted: ${record.label}`, `${record.kind} · ${record.status}`)
+    return NextResponse.json({ id, deleted: true })
+  }
+
+  if (section === 'incidents') {
+    const [record] = await db.select().from(incidents).where(and(eq(incidents.id, id), eq(incidents.organizationId, current.organizationId))).limit(1)
+    if (!record) return fail('Incident not found in this organization.', 404)
+    await db.delete(incidents).where(and(eq(incidents.id, id), eq(incidents.organizationId, current.organizationId)))
+    await log(current, 'incident.deleted', `Incident deleted: ${record.title}`, record.site)
+    return NextResponse.json({ id, deleted: true })
+  }
+
+  return fail('This record type cannot be deleted.', 405)
 }

@@ -10,7 +10,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Activity, Bell, BriefcaseBusiness, ChevronDown, ChevronRight,
   Clock3, FileText, Grid2X2, MapPin, Phone, Route,
-  Search, Settings, Sparkles, Users, Wallet,
+  Search, Settings, Sparkles, UserRound, Users, Wallet,
 } from 'lucide-react'
 
 const navigation: { label: string; href: string; icon: LucideIcon; badge?: string; tag?: string }[] = [
@@ -26,6 +26,7 @@ const navigation: { label: string; href: string; icon: LucideIcon; badge?: strin
   { label: 'Reports', href: '/reports', icon: Activity },
   { label: 'Napoleon AI', href: '/napoleon', icon: Sparkles, tag: 'AI' },
   { label: 'Settings', href: '/settings/roles', icon: Settings },
+  { label: 'Profile', href: '/profile', icon: UserRound },
 ]
 
 export function WorkspaceShell({ active, children }: { active: string; children: React.ReactNode }) {

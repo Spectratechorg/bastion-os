@@ -112,6 +112,7 @@ export const sites = pgTable('sites', {
   geofenceRadius: integer('geofence_radius').notNull(),
   status: text('status').notNull(),
   dangerLevel: text('danger_level').notNull().default('low'),
+  clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 }, (table) => [uniqueIndex('sites_organization_name_unique').on(table.organizationId, table.name)])
 

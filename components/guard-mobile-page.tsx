@@ -1,13 +1,11 @@
-﻿'use client'
+'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Activity, Bell, ChevronLeft, Clock3, Grid2X2, MapPin, Route, Users, X } from 'lucide-react'
+import { AlertTriangle, Check, ChevronLeft, Clock3, LogIn, LogOut, MapPin, Phone, Route, X } from 'lucide-react'
 
 interface NfcReadingEvent extends Event {
-  message: {
-    records: Array<{ recordType: string; data?: DataView | null; encoding?: string; lang?: string }>
-  }
+  message: { records: Array<{ recordType: string; data?: DataView | null; encoding?: string; lang?: string }> }
 }
 
 interface NfcReader extends EventTarget {
@@ -17,39 +15,63 @@ interface NfcReader extends EventTarget {
 }
 
 declare global {
-  interface Window {
-    NDEFReader?: new () => NfcReader
-  }
+  interface Window { NDEFReader?: new () => NfcReader }
 }
 
 type ScanAction = 'attendance' | 'patrol'
+type Shift = { startHour: number; endHour: number }
+
+const pad = (hour: number) => String(hour).padStart(2, '0')
+
+function currentPosition() {
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Location is unavailable in this browser. Allow location access to verify the site boundary.'))
+      return
+    }
+    navigator.geolocation.getCurrentPosition(resolve, () => {
+      reject(new Error('Location access is required to check you are at the site. Allow location and try again.'))
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
+  })
+}
 
 export function GuardMobilePage() {
   const [nfcAvailable, setNfcAvailable] = useState<boolean | null>(null)
-  const [activeScan, setActiveScan] = useState<ScanAction | null>(null)
-  const [checkedIn, setCheckedIn] = useState<boolean | null>(null)
-  const [lastScan, setLastScan] = useState('No scans recorded yet.')
-  const [patrolCount, setPatrolCount] = useState(0)
-  const [guardName, setGuardName] = useState('')
-  const [siteName, setSiteName] = useState('')
-  const [withinBounds, setWithinBounds] = useState<boolean | null>(null)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [manualToken, setManualToken] = useState('')
   const [accessCode, setAccessCode] = useState('')
   const [codeDraft, setCodeDraft] = useState('')
   const [organizationName, setOrganizationName] = useState('')
   const [codeError, setCodeError] = useState('')
   const [codePending, setCodePending] = useState(false)
+  const [tagToken, setTagToken] = useState('')
+  const [guardName, setGuardName] = useState('')
+  const [siteName, setSiteName] = useState('')
+  const [checkedIn, setCheckedIn] = useState<boolean | null>(null)
+  const [patrolCount, setPatrolCount] = useState<number | null>(null)
+  const [shift, setShift] = useState<Shift | null>(null)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState<ScanAction | 'sos' | null>(null)
+  const [activeScan, setActiveScan] = useState<ScanAction | null>(null)
+  const [sosSent, setSosSent] = useState(false)
   const controller = useRef<AbortController | null>(null)
 
   useEffect(() => {
     setNfcAvailable(Boolean(window.NDEFReader && window.isSecureContext))
-    const stored = window.localStorage.getItem('bastion.guardCode') ?? ''
-    setAccessCode(stored)
+    const storedCode = window.localStorage.getItem('bastion.guardCode') ?? ''
+    const storedToken = window.localStorage.getItem('bastion.guardToken') ?? ''
+    setAccessCode(storedCode)
+    setTagToken(storedToken)
     return () => controller.current?.abort()
   }, [])
+
+  const loadShift = useCallback(async () => {
+    try {
+      const response = await fetch('/api/shift', { cache: 'no-store' })
+      if (response.ok) setShift(await response.json())
+    } catch { /* the shift is only used for display */ }
+  }, [])
+
+  useEffect(() => { void loadShift() }, [loadShift])
 
   async function saveCode(event: React.FormEvent) {
     event.preventDefault()
@@ -68,7 +90,7 @@ export function GuardMobilePage() {
       setAccessCode(code)
       setOrganizationName(payload.organizationName ?? '')
       setCodeDraft('')
-      setMessage(`This phone is now set up for ${payload.organizationName ?? 'your company'}. Scan a guard tag to continue.`)
+      setMessage(`This phone is set up for ${payload.organizationName ?? 'your company'}. Scan a guard card to start.`)
     } catch (cause) {
       setCodeError(cause instanceof Error ? cause.message : 'That code was not accepted.')
     } finally {
@@ -76,39 +98,29 @@ export function GuardMobilePage() {
     }
   }
 
-  function forgetCode() {
+  function resetPhone() {
     window.localStorage.removeItem('bastion.guardCode')
+    window.localStorage.removeItem('bastion.guardToken')
     setAccessCode('')
-    setOrganizationName('')
+    setTagToken('')
+    setGuardName('')
+    setSiteName('')
     setCheckedIn(null)
-    setMessage('Guard app code removed from this phone.')
+    setPatrolCount(null)
+    setMessage('This phone has been reset. Enter the company code again to use it.')
   }
 
-  const stopScan = () => {
-    controller.current?.abort()
-    controller.current = null
-    setActiveScan(null)
-  }
-
-  const verifyToken = async (action: ScanAction, rawToken: string) => {
+  async function submitScan(action: ScanAction, rawToken: string) {
     const token = rawToken.trim()
     if (!token) {
-      setError('Enter the guard NFC token from the roster.')
+      setError('Scan a guard card or type the tag code from the roster.')
       return
     }
     setError('')
-    setMessage('Checking the guard token and current location…')
-    setSubmitting(true)
+    setBusy(action)
+    setMessage(action === 'attendance' ? 'Checking your card and location…' : 'Recording the patrol checkpoint…')
     try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        if (!navigator.geolocation) {
-          reject(new Error('Location is unavailable in this browser. Allow location access to verify the site boundary.'))
-          return
-        }
-        navigator.geolocation.getCurrentPosition(resolve, () => {
-          reject(new Error('Location access is required to verify the assigned site. Allow location access and try again.'))
-        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 })
-      })
+      const position = await currentPosition()
       const response = await fetch('/api/guard/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,83 +133,84 @@ export function GuardMobilePage() {
         }),
       })
       const payload = await response.json()
-      if (!response.ok || payload.error) throw new Error(payload.error ?? 'Unable to verify the NFC token.')
+      if (!response.ok || payload.error) throw new Error(payload.error ?? 'Unable to verify the guard card.')
 
-      setMessage(payload.withinBounds ? payload.message : `${payload.message} The scan was saved but is outside the assigned site geofence.`)
+      window.localStorage.setItem('bastion.guardToken', token)
+      setTagToken(token)
       setGuardName(payload.guardName ?? '')
       setSiteName(payload.siteName ?? '')
-      setWithinBounds(Boolean(payload.withinBounds))
-      if (action === 'attendance') setCheckedIn(Boolean(payload.checkedIn))
-      if (action === 'patrol') setPatrolCount(Number(payload.patrolCount ?? patrolCount + 1))
-      setLastScan(payload.message ?? 'NFC verification succeeded.')
+      if (action === 'attendance') {
+        setCheckedIn(Boolean(payload.checkedIn))
+        setMessage(`${payload.checkedIn ? 'Clocked in' : 'Clocked out'} at ${wallClock()}.`)
+      } else {
+        setPatrolCount(Number(payload.patrolCount ?? 0))
+        setMessage(`Patrol checkpoint ${payload.checkpoint ?? ''} saved. ${payload.patrolCount ?? 0} so far today.`)
+        void loadShift()
+      }
+      if (!payload.withinBounds) {
+        setError('Saved, but your phone was outside the site boundary. Your supervisor will see this as a geofence breach.')
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to verify the NFC token.')
-      setMessage('The guard token was not verified.')
+      setError(cause instanceof Error ? cause.message : 'Unable to verify the guard card.')
+      setMessage('')
     } finally {
-      setSubmitting(false)
+      setBusy(null)
     }
   }
 
-  const scanNfc = async (action: ScanAction) => {
+  function stopScan() {
+    controller.current?.abort()
+    controller.current = null
+    setActiveScan(null)
+  }
+
+  /** Reads the NDEF text record from an NFC card, then runs the same verification as typing the code. */
+  async function scanNfc(action: ScanAction) {
     const Reader = window.NDEFReader
     if (!Reader) {
-      setError('NFC scanning is not supported by this browser. Use Chrome on an NFC-capable Android phone.')
+      setError('This phone cannot read NFC in the browser. Type the tag code printed on the guard card instead.')
       return
     }
     if (!window.isSecureContext) {
-      setError('NFC requires a secure HTTPS connection. Open this page on localhost or an HTTPS address.')
+      setError('NFC needs a secure HTTPS address. Open this page on the HTTPS link, or type the tag code instead.')
       return
     }
-
     stopScan()
     setError('')
-    setMessage('Hold an NFC tag near the back of your phone.')
+    setMessage('Hold the guard card against the back of your phone…')
     setActiveScan(action)
-    const abortController = new AbortController()
-    controller.current = abortController
+    const abort = new AbortController()
+    controller.current = abort
     const reader = new Reader()
+
     reader.onreading = async (event) => {
       const record = event.message.records.find((candidate) => candidate.recordType === 'text' && candidate.data)
+      abort.abort()
+      controller.current = null
+      setActiveScan(null)
       if (!record?.data) {
-        setError('Tag read, but it has no NDEF text token. Write the registered guard token as a text record and try again.')
-        setMessage('NFC hardware read succeeded; token verification was not attempted.')
-        abortController.abort()
-        controller.current = null
-        setActiveScan(null)
+        setError('That card has no text record. Ask your supervisor to write the guard tag code onto it as plain text.')
         return
       }
-
       const bytes = new Uint8Array(record.data.buffer, record.data.byteOffset, record.data.byteLength)
       const languageLength = (bytes[0] ?? 0) & 0x3f
       const token = new TextDecoder(record.encoding || 'utf-8').decode(bytes.subarray(1 + languageLength)).trim()
       if (!token) {
-        setError('The NFC text record is empty. Write the registered guard token and try again.')
-        setMessage('NFC hardware read succeeded; token verification was not attempted.')
-        abortController.abort()
-        controller.current = null
-        setActiveScan(null)
+        setError('That card is empty. Ask your supervisor to write the guard tag code onto it.')
         return
       }
-
-      setLastScan(`NDEF text token read · ${record.lang || 'text'}`)
-      setMessage('NFC tag read successfully. Checking whether the token is registered…')
-      try {
-        await verifyToken(action, token)
-      } finally {
-        abortController.abort()
-        controller.current = null
-        setActiveScan(null)
-      }
+      await submitScan(action, token)
     }
+
     reader.onreadingerror = () => {
-      setError('The tag could not be read. Hold a compatible NFC tag steadily near your phone and try again.')
-      abortController.abort()
+      abort.abort()
       controller.current = null
       setActiveScan(null)
+      setError('The card could not be read. Hold it flat against the back of the phone and try again.')
     }
 
     try {
-      await reader.scan({ signal: abortController.signal })
+      await reader.scan({ signal: abort.signal })
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === 'AbortError') return
       setError(cause instanceof Error ? cause.message : 'Unable to start NFC scanning.')
@@ -206,101 +219,119 @@ export function GuardMobilePage() {
     }
   }
 
-  const sendSos = () => setMessage('Emergency dispatch is not configured yet. Contact your supervisor directly.')
+  async function sendSos() {
+    if (!tagToken) {
+      setError('Scan your guard card first, then press SOS.')
+      return
+    }
+    if (!window.confirm('Send an emergency alert to your supervisors?')) return
+    setError('')
+    setBusy('sos')
+    try {
+      const position = await currentPosition().catch(() => null)
+      const response = await fetch('/api/guard/sos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: tagToken,
+          ...(accessCode ? { code: accessCode } : {}),
+          ...(position ? { latitude: position.coords.latitude, longitude: position.coords.longitude } : {}),
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok || payload.error) throw new Error(payload.error ?? 'Unable to send the SOS.')
+      setSosSent(true)
+      setMessage(payload.duplicate ? 'An SOS was already sent in the last 5 minutes.' : 'SOS sent. Your supervisors have been alerted.')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to send the SOS.')
+    } finally {
+      setBusy(null)
+    }
+  }
 
-  return (
-    <main id="top" className="min-h-screen bg-[#F4F4F5] text-[#0A0A0B]">
-      <header className="mx-auto flex h-14 max-w-[480px] items-center gap-3 px-4">
-        <Link href="/guards" aria-label="Back to operations" className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-200"><ChevronLeft className="size-5" /></Link>
-        <span className="flex size-7 items-center justify-center rounded-lg bg-[#111113] text-xs font-bold text-white">B</span>
-        <div className="flex-1"><p className="text-xs font-bold">BastionOS Guard</p><p className="text-[9px] text-zinc-500">MOBILE EXPERIENCE</p></div>
-        <Link href="/alerts" aria-label="Notifications" className="rounded-lg p-2 text-zinc-600"><Bell className="size-4" /></Link>
-      </header>
+  const shiftLabel = shift ? `${pad(shift.startHour)}:00–${pad(shift.endHour - 1)}:59` : 'your shift'
+  const statusLabel = checkedIn === null ? 'Not checked in yet' : checkedIn ? 'On duty' : 'Clocked out'
 
-      <div className="mx-auto max-w-[480px] px-4 pb-8">
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[10px] leading-4 text-amber-900">
-          Enter your company guard app code once, allow location access, then scan a registered guard NFC text token. No manager login is needed on this phone.
-        </div>
-        {accessCode ? (
-          <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[#E4E4E7] bg-white px-3 py-2 text-[10px] text-zinc-600">
-            <span>Company code <b className="font-mono text-[11px] text-zinc-900">{accessCode}</b>{organizationName ? ` · ${organizationName}` : ''}</span>
-            <button onClick={forgetCode} className="font-semibold text-zinc-700 underline">Change</button>
-          </div>
-        ) : (
-          <form onSubmit={saveCode} className="mb-3 grid gap-2 rounded-xl border border-[#E4E4E7] bg-white p-3">
-            <label className="text-[10px] font-semibold text-zinc-700" htmlFor="guard-app-code">Company guard app code</label>
-            <div className="flex gap-2">
-              <input id="guard-app-code" required value={codeDraft} onChange={(event) => setCodeDraft(event.target.value.toUpperCase())} placeholder="GRD-XXXX-XXXX" autoCapitalize="characters" className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 font-mono text-xs uppercase" />
-              <button disabled={codePending} className="rounded-lg bg-[#111113] px-3 text-xs font-semibold text-white disabled:opacity-60">{codePending ? 'Checking…' : 'Use code'}</button>
-            </div>
-            {codeError && <p role="alert" className="text-[10px] text-red-700">{codeError}</p>}
-            <p className="text-[9px] text-zinc-500">Your supervisor finds this code in Settings → Guard app access.</p>
-          </form>
-        )}
-        <p className="mb-3 text-[10px] text-zinc-600" role="status">
-          {nfcAvailable === null ? 'Checking NFC support…' : nfcAvailable ? 'NFC reader available in this secure browser.' : 'NFC requires Chrome on NFC-capable Android over HTTPS.'}
-        </p>
-
-        <p className="text-[11px] text-zinc-500">Guard field app</p>
-        <h1 className="mt-0.5 text-[26px] font-semibold tracking-tight">{guardName || 'Ready to scan'}</h1>
-        <p className="mt-1 flex items-center gap-1.5 text-[11px] text-zinc-500"><MapPin className="size-3" />{siteName || 'Your assigned site appears after a verified scan'}</p>
-
-        <section className="mt-5 rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,.03)]">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold tracking-[0.12em] text-zinc-500">SHIFT STATUS</p>
-            <span className={`rounded-full px-2.5 py-1 text-[9px] font-semibold ${withinBounds === null ? 'bg-[#E8E8EA] text-zinc-800' : withinBounds ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
-              {withinBounds === null ? 'Location not checked' : withinBounds ? 'Inside assigned geofence' : 'Outside assigned geofence'}
-            </span>
-          </div>
-          <p className="mt-3 text-[18px] font-medium">{checkedIn === null ? 'Scan to check attendance status' : checkedIn ? 'Currently checked in' : 'Not checked in'}</p>
-          <p className="mt-1 text-[10px] text-zinc-500">{lastScan}</p>
-          <button
-            onClick={() => void scanNfc('attendance')}
-            disabled={activeScan !== null}
-            className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-[#111113] px-3 text-xs font-semibold text-white disabled:opacity-70"
-          >
-            {submitting || activeScan === 'attendance' ? <><span className="size-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />Verifying tag…</> : checkedIn ? '▣ Scan NFC to clock out' : checkedIn === false ? '▣ Scan NFC to clock in' : '▣ Scan NFC to clock in or out'}
-          </button>
-          {activeScan === 'attendance' && <button onClick={stopScan} className="mt-2 flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-zinc-200 text-[11px] font-semibold text-zinc-700"><X className="size-3.5" />Cancel scan</button>}
-          <form onSubmit={(event) => { event.preventDefault(); void verifyToken('attendance', manualToken) }} className="mt-3 flex gap-2">
-            <input aria-label="Guard NFC token" value={manualToken} onChange={(event) => setManualToken(event.target.value)} placeholder="Or enter guard tag code" className="h-10 min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 text-xs" />
-            <button disabled={submitting} className="rounded-lg border border-zinc-200 px-3 text-xs font-semibold disabled:opacity-60">{checkedIn ? 'Clock out' : 'Clock in/out'}</button>
-            <button type="button" disabled={submitting || !manualToken.trim()} onClick={() => void verifyToken('patrol', manualToken)} className="rounded-lg border border-zinc-200 px-3 text-xs font-semibold disabled:opacity-60">Log patrol</button>
-          </form>
-        </section>
-
-        <div className="my-6 flex flex-col items-center">
-          <button onClick={sendSos} aria-label="Emergency SOS unavailable offline" className="flex size-[86px] flex-col items-center justify-center rounded-full bg-[#D64545] text-white shadow-[0_0_0_10px_rgba(214,69,69,0.14)]">
-            <strong className="text-[22px]">SOS</strong><span className="text-[7px]">Hold for emergency</span>
-          </button>
-          <p className="mt-3 text-[9px] text-zinc-500">Emergency dispatch is not configured</p>
-        </div>
-
-        <section className="rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,.03)]">
-          <div className="flex items-center justify-between"><h2 className="text-[15px] font-semibold">Patrol activity</h2><span className="text-[11px] font-semibold">{patrolCount} today</span></div>
-          <p className="mt-3 text-[9px] text-zinc-500">Each scan records the guard, time, location and assigned site. Patrols require NFC.</p>
-          <button
-            onClick={() => void scanNfc('patrol')}
-            disabled={activeScan !== null}
-            className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] border border-zinc-200 text-[11px] font-semibold disabled:opacity-60"
-          >
-            {submitting || activeScan === 'patrol' ? 'Verifying patrol scan…' : 'Scan NFC to log patrol ›'}
-          </button>
-        </section>
-        {activeScan === 'patrol' && <button onClick={stopScan} className="mt-2 flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white text-[11px] font-semibold text-zinc-700"><X className="size-3.5" />Cancel scan</button>}
-
-        {message && <p className="mt-4 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-700">{message}</p>}
-        {error && <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">{error}</p>}
-
-        <nav className="mt-7 flex items-center justify-between rounded-2xl border border-[#E4E4E7] bg-[#111113] px-5 py-3 text-white shadow-[0_12px_30px_rgba(7,10,11,0.15)]">
-          <a href="#top" aria-label="Dashboard" className="rounded-xl bg-white/5 p-2"><Grid2X2 className="size-4" /></a>
-          <button aria-label="Patrol" onClick={() => void scanNfc('patrol')}><Route className="size-4" /></button>
-          <span className="-mt-8 flex size-9 items-center justify-center rounded-full bg-[#111113] font-serif italic text-white"><Activity className="size-4" /></span>
-          <button aria-label="Attendance" onClick={() => void scanNfc('attendance')}><Clock3 className="size-4" /></button>
-          <Link aria-label="My profile" href="/profile"><Users className="size-4" /></Link>
-        </nav>
-        <Link href="/guards" className="mt-4 block text-center text-[10px] font-semibold text-zinc-500">Back to operations dashboard</Link>
-      </div>
+  if (!accessCode) {
+    return <main className="flex min-h-screen items-center justify-center bg-[#F4F4F5] px-5 text-[#0A0A0B]">
+      <form onSubmit={saveCode} className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5">
+        <div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-lg bg-[#111113] text-xs font-bold text-white">B</span><span className="text-sm font-semibold">BastionOS Guard</span></div>
+        <h1 className="mt-5 text-xl font-semibold">Set up this phone</h1>
+        <p className="mt-1 text-xs text-zinc-600">Enter the company code once. Your supervisor finds it in <b>Settings → Guard app access</b>. Every guard phone can use the same code — no manager login.</p>
+        <label htmlFor="guard-app-code" className="mt-5 block text-[11px] font-semibold text-zinc-700">Company guard app code</label>
+        <input id="guard-app-code" required value={codeDraft} onChange={(event) => setCodeDraft(event.target.value.toUpperCase())} placeholder="GRD-XXXX-XXXX" autoCapitalize="characters" className="mt-1.5 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm uppercase outline-none focus:border-zinc-500" />
+        {codeError && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{codeError}</p>}
+        <button disabled={codePending} className="mt-4 h-11 w-full rounded-lg bg-[#111113] text-sm font-semibold text-white disabled:opacity-60">{codePending ? 'Checking…' : 'Use this code'}</button>
+        <Link href="/sign-in" className="mt-3 block text-center text-[11px] font-semibold text-zinc-500 underline">I am a supervisor — sign in instead</Link>
+      </form>
     </main>
-  )
+  }
+
+  return <main className="min-h-screen bg-[#F4F4F5] text-[#0A0A0B]">
+    <header className="mx-auto flex h-14 max-w-[480px] items-center gap-3 px-4">
+      <Link href="/sign-in" aria-label="Back" className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-200"><ChevronLeft className="size-5" /></Link>
+      <div className="flex-1"><p className="text-xs font-bold">BastionOS Guard</p><p className="text-[9px] text-zinc-500">{organizationName || accessCode}</p></div>
+      <button onClick={resetPhone} className="rounded-lg px-2 py-1 text-[10px] font-semibold text-zinc-500 underline">Change code</button>
+    </header>
+
+    <div className="mx-auto max-w-[480px] px-4 pb-10">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold tracking-[0.12em] text-zinc-500">YOUR SHIFT</p>
+            <p className="mt-1 text-lg font-semibold">{statusLabel}</p>
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-zinc-600"><MapPin className="size-3" />{siteName || 'Site appears after your first scan'}</p>
+          </div>
+          <span className={`rounded-full px-2.5 py-1 text-[9px] font-semibold ${checkedIn ? 'bg-emerald-100 text-emerald-800' : 'bg-zinc-100 text-zinc-700'}`}>{checkedIn ? 'On duty' : 'Off duty'}</span>
+        </div>
+        <p className="mt-3 text-[11px] text-zinc-600">{guardName ? `${guardName} · ` : ''}Patrols every hour from {shiftLabel}.{patrolCount !== null ? ` ${patrolCount} checkpoint${patrolCount === 1 ? '' : 's'} today.` : ''}</p>
+
+        <div className="mt-4 grid gap-2">
+          <label className="text-[10px] font-semibold text-zinc-600" htmlFor="tag-token">Guard card tag code</label>
+          <div className="flex gap-2">
+            <input id="tag-token" value={tagToken} onChange={(event) => setTagToken(event.target.value.toUpperCase())} placeholder="BOS-XXXXXXXX" className="h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 font-mono text-sm uppercase outline-none focus:border-zinc-500" />
+            <button onClick={() => { window.localStorage.removeItem('bastion.guardToken'); setTagToken('') }} className="rounded-lg border border-zinc-200 px-3 text-[11px] font-semibold">Clear</button>
+          </div>
+          <p className="text-[10px] text-zinc-500">Saved on this phone after the first scan, so you only scan the card once.</p>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <button onClick={() => void scanNfc('attendance')} disabled={busy !== null || activeScan !== null} className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#111113] text-sm font-semibold text-white disabled:opacity-60">
+            {checkedIn ? <LogOut className="size-4" /> : <LogIn className="size-4" />}{busy === 'attendance' ? 'Checking…' : checkedIn ? 'Clock out' : 'Clock in'}
+          </button>
+          <button onClick={() => void scanNfc('patrol')} disabled={busy !== null || activeScan !== null} className="flex h-12 items-center justify-center gap-2 rounded-xl border border-zinc-300 bg-white text-sm font-semibold disabled:opacity-60">
+            <Route className="size-4" />{busy === 'patrol' ? 'Saving…' : 'Log patrol'}
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] text-zinc-500">{nfcAvailable === null ? 'Checking NFC support…' : nfcAvailable ? 'Hold the guard card on the phone, or type the tag code above and press the button.' : 'NFC is not available here — type the tag code above and press the button.'}</p>
+        {activeScan && <button onClick={stopScan} className="mt-2 flex h-10 w-full items-center justify-center gap-1 rounded-lg border border-zinc-200 text-[11px] font-semibold"><X className="size-3.5" />Cancel scan</button>}
+      </section>
+
+      <section className="mt-4 rounded-2xl border border-red-200 bg-white p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600"><AlertTriangle className="size-4" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">Emergency SOS</p>
+            <p className="mt-0.5 text-[11px] text-zinc-600">Raises a critical alert for your supervisors with your location. Use it only for a real emergency — for a fire, break-in, or injury call your supervisor too.</p>
+          </div>
+        </div>
+        <button onClick={() => void sendSos()} disabled={busy !== null} className="mt-3 h-12 w-full rounded-xl bg-[#D64545] text-sm font-bold text-white disabled:opacity-60">
+          {busy === 'sos' ? 'Sending…' : sosSent ? 'Send SOS again' : 'Send SOS'}
+        </button>
+        {sosSent && <p className="mt-2 flex items-center gap-1 text-[11px] font-semibold text-emerald-700"><Check className="size-3.5" />Your supervisors have been alerted.</p>}
+      </section>
+
+      {message && <p role="status" className="mt-4 rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-[11px] text-zinc-700">{message}</p>}
+      {error && <p role="alert" className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-[11px] text-red-700">{error}</p>}
+
+      <div className="mt-5 flex items-center justify-between rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-[11px] text-zinc-600">
+        <span className="flex items-center gap-1.5"><Clock3 className="size-3.5" />Shift {shiftLabel}</span>
+        <a href="tel:112" className="flex items-center gap-1.5 font-semibold text-zinc-900"><Phone className="size-3.5" />Call emergency services</a>
+      </div>
+    </div>
+  </main>
+}
+
+function wallClock() {
+  return new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' })
 }

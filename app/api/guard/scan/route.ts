@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { and, count, desc, eq, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { attendance, guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
+import { raiseAlert } from '@/lib/alerts'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
 import { lagosParts, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
 
@@ -29,6 +30,29 @@ function isWithinSite(latitude: number, longitude: number, site: typeof sites.$i
       + Math.cos(radians(latitude)) * Math.cos(radians(site.latitude)) * Math.sin(deltaLongitude / 2) ** 2,
   ))
   return distance <= site.geofenceRadius
+}
+
+/** A scan outside the geofence raises a high alert, or critical after three in a day. */
+async function raiseBreachAlert(
+  currentUser: { userId: string; organizationId: string },
+  guard: typeof guards.$inferSelect,
+  site: typeof sites.$inferSelect,
+  _siteId: string,
+) {
+  const breachesToday = await db.select({ id: attendance.id }).from(attendance).where(and(
+    eq(attendance.organizationId, currentUser.organizationId),
+    eq(attendance.guardId, guard.id),
+    eq(attendance.withinGeofence, false),
+    gte(attendance.checkedInAt, new Date(Date.now() - 86400000)),
+  ))
+  await raiseAlert({
+    userId: currentUser.userId,
+    organizationId: currentUser.organizationId,
+    type: `geofence.${guard.id}`,
+    title: `Geofence breach: ${guard.name}`,
+    body: `${site.name} · scanned outside the ${site.geofenceRadius} m radius`,
+    severity: breachesToday.length >= 3 ? 'critical' : 'high',
+  })
 }
 
 export async function POST(request: Request) {
@@ -104,8 +128,10 @@ export async function POST(request: Request) {
 
     if (activeAttendance) {
       await db.update(attendance)
-        .set({ checkedOutAt: now })
+        .set({ checkedOutAt: now, ...(withinBounds ? {} : { withinGeofence: false }) })
         .where(eq(attendance.id, activeAttendance.id))
+
+      if (!withinBounds) await raiseBreachAlert(currentUser, guard, site, siteId)
 
       return NextResponse.json({
         ok: true,
@@ -135,6 +161,8 @@ export async function POST(request: Request) {
     await db.update(guards)
       .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude })
       .where(eq(guards.id, guard.id))
+
+    if (!withinBounds) await raiseBreachAlert(currentUser, guard, site, siteId)
 
     return NextResponse.json({
       ok: true,

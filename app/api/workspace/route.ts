@@ -5,7 +5,6 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { activityEvents, members, organizations, users } from '@/lib/db/schema'
-
 export async function GET() {
   if (!process.env.DATABASE_URL) return NextResponse.json({ error: 'Database is not configured.' }, { status: 503 })
   const session = await auth.api.getSession({ headers: await headers() })
@@ -52,4 +51,37 @@ export async function GET() {
     members: team,
     activity,
   })
+}
+
+/** Rename the active organization. */
+export async function PATCH(request: Request) {
+  if (!process.env.DATABASE_URL) return NextResponse.json({ error: 'Database is not configured.' }, { status: 503 })
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const organizationId = session.session.activeOrganizationId
+  if (!organizationId) return NextResponse.json({ error: 'No active organization membership.' }, { status: 403 })
+
+  const body = await request.json().catch(() => null) as { name?: unknown } | null
+  const name = typeof body?.name === 'string' ? body.name.trim() : ''
+  if (name.length < 2 || name.length > 120) return NextResponse.json({ error: 'Organization name must be 2–120 characters.' }, { status: 400 })
+
+  const [membership] = await db.select({ role: members.role }).from(members)
+    .where(and(eq(members.organizationId, organizationId), eq(members.userId, session.user.id))).limit(1)
+  if (!membership || !['owner', 'admin'].includes(membership.role.toLowerCase())) {
+    return NextResponse.json({ error: 'Only an owner or administrator can rename the organization.' }, { status: 403 })
+  }
+
+  const [organization] = await db.update(organizations).set({ name }).where(eq(organizations.id, organizationId))
+    .returning({ id: organizations.id, name: organizations.name, slug: organizations.slug })
+  if (!organization) return NextResponse.json({ error: 'Organization not found.' }, { status: 404 })
+  await db.insert(activityEvents).values({
+    userId: session.user.id,
+    organizationId,
+    type: 'organization.renamed',
+    title: `Organization renamed to ${organization.name}`,
+    body: 'Updated in settings.',
+    tone: 'neutral',
+    createdAt: new Date(),
+  })
+  return NextResponse.json(organization)
 }
