@@ -41,10 +41,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   const [unread, setUnread] = useState(0)
   const [role, setRole] = useState<string | null>(null)
   const [perms, setPerms] = useState<Record<string, boolean>>({})
-<<<<<<< Updated upstream
-=======
   const [searchMessage, setSearchMessage] = useState('')
->>>>>>> Stashed changes
   const search = useRef<HTMLInputElement>(null)
   const user = session.data?.user
 
