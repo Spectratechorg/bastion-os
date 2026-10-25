@@ -6,7 +6,6 @@ import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { ASSIGNABLE_ROLES, EDITABLE_ROLES, PERMISSIONS, ROLE_LABELS } from '@/lib/permissions'
 import { api, when } from '@/lib/client'
-import { GuardAppSettings } from '@/components/guard-app-settings'
 
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -92,7 +91,7 @@ function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: () =
 }
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<'org' | 'team' | 'roles' | 'guardapp'>('org')
+  const [tab, setTab] = useState<'org' | 'team' | 'roles'>('org')
   const [team, setTeam] = useState<TeamData | null>(null); const [matrix, setMatrix] = useState<Matrix | null>(null); const [problem, setProblem] = useState('')
   const [editing, setEditing] = useState<Member | 'new' | null>(null); const [viewing, setViewing] = useState<Member | null>(null)
   const refreshTeam = useCallback(async () => { try { const [t, m] = await Promise.all([api<TeamData>('/api/team'), api<Matrix>('/api/permissions')]); setTeam(t); setMatrix(m); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to load your team.') } }, [])
@@ -103,7 +102,7 @@ export function SettingsPage() {
     setMatrix({ ...matrix, matrix: { ...matrix.matrix, [role]: { ...matrix.matrix[role], [permission]: next } } })
     try { await api('/api/permissions', { method: 'PATCH', json: { role, permission, allowed: next } }); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to save.'); void refreshTeam() }
   }
-  const tabs = [['org', 'Organisation & defaults'], ['team', 'Team members'], ['roles', 'Roles & permissions'], ['guardapp', 'Guard app & patrol shift']] as const
+  const tabs = [['org', 'Organisation & defaults'], ['team', 'Team members'], ['roles', 'Roles & permissions']] as const
   return <>
     <PageHeader title="Settings" subtitle="Your organisation, the defaults new records start with, your team and what each role can do.">{tab === 'team' && team?.canManage && <button className={btnPrimary} onClick={() => setEditing('new')}><Plus className="size-4" />Add user</button>}</PageHeader>
     <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
@@ -111,7 +110,7 @@ export function SettingsPage() {
     <div className="min-w-0">
     <ErrorBanner message={problem} retry={() => void refreshTeam()} />
     {tab === 'org' && <OrgSettings />}
-    {tab === 'guardapp' && <GuardAppSettings />}
+   
     {tab === 'team' && <section className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
       {!team ? <Spinner /> : <ul className="divide-y divide-zinc-100">{team.members.map((m) => <li key={m.id} className="flex flex-wrap items-center gap-3 p-4 text-xs"><button onClick={() => setViewing(m)} aria-label={`Open ${m.name}'s profile`} className="flex min-w-0 flex-1 items-center gap-3 text-left"><Avatar name={m.name} src={m.image} size={36} /><span className="min-w-0 flex-1"><b className="block truncate text-[13px] font-semibold">{m.name}{m.userId === team.me && <span className="ml-1.5 font-normal text-zinc-500">(you)</span>}</b><span className="block truncate text-zinc-500">{m.email}</span></span></button><Badge value={ROLE_LABELS[m.role] ?? m.role} />{team.canManage && <button className={smallBtn} onClick={() => setEditing(m)}>Edit</button>}</li>)}</ul>}
       {team && !team.canManage && <p className="border-t border-zinc-100 p-4 text-[11px] text-zinc-500">Only the owner or an administrator can add or edit people.</p>}
