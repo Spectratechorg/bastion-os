@@ -46,8 +46,8 @@ const meta: Record<Section, { title: string; subtitle: string; search: string; c
     ],
   },
   attendance: {
-    title: 'Attendance', subtitle: 'Check-ins from NFC scans, with geofence exceptions to review.', search: 'Search guard, site, method…',
-    stats: (rows) => [[String(rows.length), 'Check-ins'], [String(rows.filter((x) => x.withinGeofence).length), 'Inside geofence'], [String(rows.filter((x) => !x.withinGeofence).length), 'Outside geofence'], [String(rows.filter((x) => x.reviewStatus === 'flagged').length), 'Flagged']],
+    title: 'Attendance', subtitle: 'Check-ins from NFC scans, with flagged exceptions to review.', search: 'Search guard, site, method…',
+    stats: (rows) => [[String(rows.length), 'Check-ins'], [String(rows.filter((x) => x.withinGeofence).length), 'Inside geofence'], [String(rows.filter((x) => !x.withinGeofence || x.reviewStatus === 'flagged').length), 'Flagged'], [String(rows.filter((x) => x.reviewStatus === 'flagged').length), 'Needs review']],
     columns: [
       { head: 'Guard', cell: (r, c) => <b className="font-semibold">{guardName(c, r.guardId)}</b> },
       { head: 'Site', cell: (r, c) => siteName(c, r.siteId) },
@@ -60,7 +60,7 @@ const meta: Record<Section, { title: string; subtitle: string; search: string; c
   },
   incidents: {
     title: 'Incidents', subtitle: 'Report, assign, escalate and resolve security events.', search: 'Search incident, site, severity…', addLabel: 'Report incident',
-    stats: (rows) => [[String(rows.filter((x) => x.status !== 'resolved').length), 'Open'], [String(rows.filter((x) => x.severity === 'critical' && x.status !== 'resolved').length), 'Critical open'], [String(rows.filter((x) => x.status === 'escalated').length), 'Escalated'], [String(rows.filter((x) => x.status === 'resolved').length), 'Resolved']],
+    stats: (rows) => [[String(rows.filter((x) => x.status !== 'resolved').length), 'Open'], [String(rows.filter((x) => x.status === 'escalated').length), 'Escalated'], [String(rows.filter((x) => x.status === 'resolved').length), 'Resolved']],
     columns: [
       { head: 'Incident', cell: (r) => <span><b className="block font-semibold">{r.title}</b><span className="text-zinc-500">{r.site}</span></span> },
       { head: 'Severity', cell: (r) => <Badge value={r.severity} /> },

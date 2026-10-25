@@ -41,6 +41,10 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   const [unread, setUnread] = useState(0)
   const [role, setRole] = useState<string | null>(null)
   const [perms, setPerms] = useState<Record<string, boolean>>({})
+<<<<<<< Updated upstream
+=======
+  const [searchMessage, setSearchMessage] = useState('')
+>>>>>>> Stashed changes
   const search = useRef<HTMLInputElement>(null)
   const user = session.data?.user
 
@@ -67,11 +71,19 @@ export function WorkspaceShell({ active, children }: { active: string; children:
 
   const navigation = allNavigation.filter((item) => !(item.label === 'Finance' && role !== null && perms.viewFinance === false))
   const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
-  function runSearch(event: React.FormEvent<HTMLFormElement>) {
+  async function runSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const query = (search.current?.value ?? '').trim(); if (!query) return
-    const page = navigation.find((item) => item.label.toLowerCase().startsWith(query.toLowerCase()))
-    router.push(page ? page.href : `/guards?q=${encodeURIComponent(query)}`)
+    const normalized = query.toLowerCase()
+    const page = navigation.find((item) => item.label.toLowerCase().startsWith(normalized))
+    if (page) { setSearchMessage(''); router.push(page.href); return }
+    setSearchMessage('Searching workspace…')
+    const sources = ['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts']
+    try {
+      const results = await Promise.all(sources.map(async (section) => ({ section, rows: await fetch(`/api/operations?section=${section}`, { cache: 'no-store' }).then((response) => response.ok ? response.json() : []) as Record<string, unknown>[] })))
+      const hit = results.find(({ rows }) => rows.some((row) => Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(normalized))))
+      if (hit) { setSearchMessage(''); router.push(`/${hit.section}`) } else setSearchMessage(`No workspace record matched “${query}”.`)
+    } catch { setSearchMessage('Search is temporarily unavailable.') }
   }
   async function signOut() { await authClient.signOut(); router.push('/sign-in'); router.refresh() }
 
@@ -111,6 +123,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
             <Search className="size-4 shrink-0" />
             <input ref={search} aria-label="Search workspace" placeholder="Search guards, or jump to a page..." className="w-full max-w-[350px] bg-transparent text-[13px] text-[#18181B] outline-none placeholder:text-[#9A9AA1]" />
             <kbd className="hidden whitespace-nowrap rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">Ctrl K</kbd>
+            {searchMessage && <span role="status" className="hidden max-w-[260px] truncate text-[10px] text-zinc-500 md:block">{searchMessage}</span>}
           </form>
           <Link href="/alerts" aria-label={`${unread} unacknowledged alerts`} className="relative flex size-10 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"><Bell className="size-4" />{unread > 0 && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-red-500" />}</Link>
           <Link href="/napoleon" className="flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white"><Sparkles className="size-3.5" /><span className="hidden sm:inline">Ask Napoleon</span></Link>

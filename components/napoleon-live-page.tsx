@@ -107,7 +107,7 @@ export function NapoleonLivePage() {
             {error && <p role="alert" className="mt-3 max-w-lg rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-xs text-amber-900">{error}</p>}
             <div className="mt-6 flex max-w-xl flex-wrap justify-center gap-2">
               {suggestions.map((suggestion) => (
-                <button key={suggestion} onClick={() => void send(suggestion)} disabled={loading} className="rounded-xl border border-zinc-200 px-3 py-2.5 text-xs font-semibold disabled:opacity-50">
+                <button type="button" key={suggestion} onClick={(event) => { event.stopPropagation(); void send(suggestion) }} disabled={loading} className="rounded-xl border border-zinc-200 px-3 py-2.5 text-xs font-semibold disabled:opacity-50">
                   {suggestion}
                 </button>
               ))}

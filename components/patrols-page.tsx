@@ -24,7 +24,11 @@ export function PatrolsPage() {
   const s = data?.summary
   return <>
     <PageHeader title="Patrols" subtitle={data ? `Every hour from ${data.slots[0] ?? '08:00'} to ${data.slots[data.slots.length - 1] ?? '17:00'} (Lagos time). ${data.slots.length} signatures complete a patrol.` : 'Hourly checkpoints inside your shift.'} />
+<<<<<<< Updated upstream
     <StatStrip stats={[[String(s?.completedToday ?? '—'), 'Completed today'], [String(s?.inProgressToday ?? '—'), 'In progress'], [String(s?.missedToday ?? '—'), 'Missed today'], [String(s?.completedThisMonth ?? '—'), 'Completed this month']]} />
+=======
+    <StatStrip stats={[[String(s?.completedToday ?? '—'), 'Completed today'], [String(s?.missedToday ?? '—'), 'Missed today'], [String(s?.completedThisMonth ?? '—'), 'Completed this month'], [String(s?.completedToday ?? '—'), 'Routes today']]} />
+>>>>>>> Stashed changes
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <input type="date" aria-label="Patrol date" value={date || data?.today || ''} max={data?.today} onChange={(e) => setDate(e.target.value)} className={`${inputClass.replace("w-full", "w-auto")}`} />
       <button className={btn} onClick={() => { setLoading(true); void load() }}><RefreshCw className="size-3.5" />Refresh</button>
