@@ -23,9 +23,10 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
     let cancelled = false
     void import('leaflet').then((L) => {
       if (cancelled || !box.current) return
-      const map = L.map(box.current, { zoomControl: true, attributionControl: true }).setView([6.5244, 3.3792], 11)
+      const map = L.map(box.current, { zoomControl: true, attributionControl: true, worldCopyJump: false }).setView([6.5244, 3.3792], 11)
       L.tileLayer(TILES, { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
       state.current = { map, layer: L.layerGroup().addTo(map), fitted: false, opened: new Set() }
+      window.requestAnimationFrame(() => map.invalidateSize())
       draw(L)
     })
     return () => { cancelled = true; state.current?.map.remove(); state.current = null }
@@ -39,15 +40,18 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
     s.layer.clearLayers()
     const points: [number, number][] = []
     for (const site of sites.filter((x) => x.status !== 'inactive')) {
-      const colour = risk[site.dangerLevel] ?? '#52525B'; const at: [number, number] = [site.latitude, site.longitude]
+      const latitude = Number(site.latitude); const longitude = Number(site.longitude)
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) continue
+      const colour = risk[site.dangerLevel] ?? '#52525B'; const at: [number, number] = [latitude, longitude]
       points.push(at)
       L.circle(at, { radius: site.geofenceRadius, color: colour, weight: 2, fillColor: colour, fillOpacity: 0.12 }).addTo(s.layer)
       L.circleMarker(at, { radius: 7, color: '#fff', weight: 2, fillColor: '#2A2B2E', fillOpacity: 1 }).bindPopup(`<b>${esc(site.name)}</b><br>${site.geofenceRadius} m geofence · ${esc(site.dangerLevel)} risk`).addTo(s.layer)
     }
     const cutoff = Date.now() - 12 * 3600 * 1000
     for (const guard of guards) {
-      if (guard.lastLatitude == null || guard.lastLongitude == null || !guard.lastCheckIn) continue
-      const fresh = new Date(guard.lastCheckIn).getTime() > cutoff; const at: [number, number] = [guard.lastLatitude, guard.lastLongitude]
+      const latitude = Number(guard.lastLatitude); const longitude = Number(guard.lastLongitude)
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 || !guard.lastCheckIn) continue
+      const fresh = new Date(guard.lastCheckIn).getTime() > cutoff; const at: [number, number] = [latitude, longitude]
       if (fresh) points.push(at)
       const when = new Date(guard.lastCheckIn).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
       const initials = guard.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
@@ -57,7 +61,9 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
       if (chosen && !s.opened.has(guard.id)) { s.opened.add(guard.id); marker.openPopup() }
     }
     const chosenGuard = guards.find((x) => x.id === selectedGuardId)
-    if (chosenGuard && chosenGuard.lastLatitude != null && chosenGuard.lastLongitude != null) { if (s.lastFly !== chosenGuard.id) { s.lastFly = chosenGuard.id; s.map.flyTo([chosenGuard.lastLatitude, chosenGuard.lastLongitude], 17, { duration: 0.6 }) } return }
+    const chosenLatitude = chosenGuard ? Number(chosenGuard.lastLatitude) : NaN
+    const chosenLongitude = chosenGuard ? Number(chosenGuard.lastLongitude) : NaN
+    if (chosenGuard && Number.isFinite(chosenLatitude) && Number.isFinite(chosenLongitude) && chosenLatitude >= -90 && chosenLatitude <= 90 && chosenLongitude >= -180 && chosenLongitude <= 180) { if (s.lastFly !== chosenGuard.id) { s.lastFly = chosenGuard.id; s.map.flyTo([chosenLatitude, chosenLongitude], 17, { duration: 0.6 }) } return }
     s.lastFly = undefined; s.opened.clear()
     const selected = sites.find((x) => x.id === selectedSiteId)
     if (selected) s.map.flyTo([selected.latitude, selected.longitude], 16, { duration: 0.6 })
