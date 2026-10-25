@@ -129,9 +129,9 @@ export function SettingsPage() {
 
 
 function OrgSettings() {
-  const [d, setD] = useState<{ name: string; settings: { phone: string; address: string; defaultGeofence: number; defaultSalary: number }; canEdit: boolean } | null>(null)
-  const [v, setV] = useState({ name: '', phone: '', address: '', defaultGeofence: '100', defaultSalary: '150000' }); const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
-  useEffect(() => { api<NonNullable<typeof d>>('/api/settings').then((r) => { setD(r); setV({ name: r.name, phone: r.settings.phone, address: r.settings.address, defaultGeofence: String(r.settings.defaultGeofence), defaultSalary: String(r.settings.defaultSalary) }) }).catch((e) => setErr(e instanceof Error ? e.message : 'Unable to load settings.')) }, [])
+  const [d, setD] = useState<{ name: string; settings: { phone: string; address: string }; canEdit: boolean } | null>(null)
+  const [v, setV] = useState({ name: '', phone: '', address: '' }); const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
+  useEffect(() => { api<NonNullable<typeof d>>('/api/settings').then((r) => { setD(r); setV({ name: r.name, phone: r.settings.phone, address: r.settings.address }) }).catch((e) => setErr(e instanceof Error ? e.message : 'Unable to load settings.')) }, [])
   async function save(e: FormEvent) { e.preventDefault(); setBusy(true); setErr(''); setMsg(''); try { await api('/api/settings', { method: 'PATCH', json: v }); setMsg('Saved. The company name updates in the sidebar next time the page loads.') } catch (x) { setErr(x instanceof Error ? x.message : 'Unable to save.') } finally { setBusy(false) } }
   if (!d && !err) return <section className="rounded-[18px] border border-zinc-200 bg-white"><Spinner /></section>
   const off = !d?.canEdit
@@ -139,9 +139,6 @@ function OrgSettings() {
     <ErrorBanner message={err} />
     <section className="rounded-[18px] border border-zinc-200 bg-white p-5"><h2 className="text-[15px] font-semibold">Organisation</h2><p className="mt-0.5 text-xs text-zinc-500">How your company appears in BastionOS and on exports.</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="Company name"><input required minLength={2} disabled={off} className={inputClass} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></Field><Field label="Phone"><input disabled={off} className={inputClass} value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} /></Field><div className="sm:col-span-2"><Field label="Office address"><input disabled={off} className={inputClass} value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} /></Field></div></div></section>
-    <section className="rounded-[18px] border border-zinc-200 bg-white p-5"><h2 className="text-[15px] font-semibold">Defaults for new records</h2><p className="mt-0.5 text-xs text-zinc-500">These pre-fill the forms and drive payroll. Existing records are not changed.</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="New site geofence (m)" hint="Check-ins beyond this are flagged"><input type="number" min={10} max={5000} disabled={off} className={inputClass} value={v.defaultGeofence} onChange={(e) => setV({ ...v, defaultGeofence: e.target.value })} /></Field><Field label="New guard salary (₦)"><input type="number" min={0} disabled={off} className={inputClass} value={v.defaultSalary} onChange={(e) => setV({ ...v, defaultSalary: e.target.value })} /></Field></div>
-      <p className="mt-3 text-[11px] text-zinc-500">Patrol checkpoints follow the shift set under Patrol shift below.</p></section>
     <div className="flex items-center gap-3"><button className={btnPrimary} disabled={busy || off}>{busy ? 'Saving…' : 'Save settings'}</button>{off && <span className="text-[11px] text-zinc-500">Only the owner or an administrator can change these.</span>}{msg && <span role="status" className="text-xs text-[#16794A]">{msg}</span>}</div>
   </form>
 }

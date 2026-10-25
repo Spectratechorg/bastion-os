@@ -21,7 +21,7 @@ export function useList<T>(url: string) {
   return { rows, error, load }
 }
 
-export const FINANCE_TABS = [['Overview', '/finance', 'overview'], ['Invoices', '/finance/invoices', 'invoices'], ['Expenses', '/finance/expenses', 'expenses'], ['Contracts', '/finance/contracts', 'contracts'], ['Inventory', '/finance/inventory', 'inventory'], ['Budgets', '/finance/budgets', 'budgets'], ['Payroll', '/finance/payroll', 'payroll']] as const
+export const FINANCE_TABS = [['Overview', '/finance', 'overview'], ['Invoices', '/finance/invoices', 'invoices'], ['Expenses', '/finance/expenses', 'expenses'], ['Inventory', '/finance/inventory', 'inventory'], ['Payroll', '/finance/payroll', 'payroll']] as const
 
 /** The one tab bar shared by every Finance page. */
 export function FinanceTabs({ active }: { active: string }) {

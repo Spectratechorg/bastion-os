@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { Download, Plus, RefreshCw, Search } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { photoToDataUrl } from '@/lib/client'
-import { ContractSummary, FinanceTabs, InventoryTab } from '@/components/finance-extra'
+import { FinanceTabs, InventoryTab } from '@/components/finance-extra'
 import { Badge } from '@/components/ui-bits'
 
 type ClientRecord = {
@@ -56,9 +56,10 @@ type ReportData = {
 }
 
 async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { cache: 'no-store', ...init })
-  const body = await response.json()
-  if (!response.ok) throw new Error(body.error ?? 'Unable to load workspace data.')
+  let response: Response
+  try { response = await fetch(url, { cache: 'no-store', ...init }) } catch { throw new Error('Unable to reach the server. Check your connection and try again.') }
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error ?? 'Unable to save or load workspace data.')
   return body as T
 }
 
@@ -335,7 +336,6 @@ export function FinanceDataPage({ tab }: { tab: string }) {
     </PageHeader>
     <FinanceTabs active={page} />
     {page === 'overview' && <>
-      <ContractSummary />
       <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         {[[money(inflow), 'Revenue', 'This period'], [money(outflow), 'Operating costs', 'Recorded expenses'], [money(inflow - outflow), 'Net position', 'Revenue less costs'], [money(unsettled), 'Receivables', 'Outstanding'], [money(statement.income), 'Client income', statementMonth], [money(statement.cost), 'Client costs', statementMonth]].map(([value, label, note]) => <article key={label} className="rounded-2xl border border-zinc-200 bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{label}</p><p className="mt-2 font-mono text-lg font-semibold tracking-tight">{value}</p><p className="mt-1 text-[11px] text-zinc-500">{note}</p></article>)}
       </section>
@@ -357,7 +357,7 @@ export function FinanceDataPage({ tab }: { tab: string }) {
     </section>}
     {error && <ErrorNotice>{error}</ErrorNotice>}
     {open && <form onSubmit={save} className="mb-5 grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
-      <label className="flex flex-col gap-1.5 text-xs font-medium">Record type<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3">{['revenue', 'invoice', 'payroll', 'operating_cost', 'expense', 'inventory', 'budget'].map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label>
+      <label className="flex flex-col gap-1.5 text-xs font-medium">Record type<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3">{['revenue', 'invoice', 'payroll', 'operating_cost', 'expense', 'inventory'].map((kind) => <option key={kind} value={kind}>{kind.replaceAll('_', ' ')}</option>)}</select></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Description<input required value={form.label} onChange={(event) => setForm({ ...form, label: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Amount (NGN)<input required min="0" step="any" type="number" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3" /></label>
       <label className="flex flex-col gap-1.5 text-xs font-medium">Client<select value={form.clientId} onChange={(event) => setForm({ ...form, clientId: event.target.value })} className="h-10 rounded-lg border border-zinc-200 px-3"><option value="">No client</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
@@ -418,10 +418,6 @@ export function SettingsDataPage() {
   const [data, setData] = useState<WorkspaceData | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [guardCode, setGuardCode] = useState('')
-  const [codeError, setCodeError] = useState('')
-  const [codeNote, setCodeNote] = useState('')
-  const [rotating, setRotating] = useState(false)
   const [shift, setShift] = useState({ startHour: 8, endHour: 18 })
   const [shiftNote, setShiftNote] = useState('')
   const [shiftError, setShiftError] = useState('')
@@ -438,35 +434,6 @@ export function SettingsDataPage() {
       setError(cause instanceof Error ? cause.message : 'Unable to load organization settings.')
     } finally {
       setLoading(false)
-    }
-  }
-
-  async function loadGuardCode() {
-    try {
-      const response = await fetch('/api/guard/access', { cache: 'no-store' })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to load the guard app code.')
-      setGuardCode(payload.code ?? '')
-      setCodeError('')
-    } catch (cause) {
-      setCodeError(cause instanceof Error ? cause.message : 'Unable to load the guard app code.')
-    }
-  }
-
-  async function rotateGuardCode() {
-    if (!window.confirm('Replace the guard app code? Every phone using the old code will stop working.')) return
-    setRotating(true)
-    try {
-      const response = await fetch('/api/guard/access', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to replace the code.')
-      setGuardCode(payload.code ?? '')
-      setCodeError('')
-      setCodeNote('New code created. Give it to your supervisors.')
-    } catch (cause) {
-      setCodeError(cause instanceof Error ? cause.message : 'Unable to replace the code.')
-    } finally {
-      setRotating(false)
     }
   }
 
@@ -500,7 +467,7 @@ export function SettingsDataPage() {
     }
   }
 
-  useEffect(() => { void load(); void loadGuardCode(); void loadShift() }, [])
+  useEffect(() => { void load(); void loadShift() }, [])
 
   return <>
     <PageHeader title="Settings" subtitle="Organization, team access, and recorded workspace activity.">
@@ -511,17 +478,6 @@ export function SettingsDataPage() {
       <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
         <h2 className="text-sm font-semibold">Organization</h2>
         <dl className="mt-4 grid gap-4 text-xs sm:grid-cols-3"><div><dt className="text-zinc-500">Name</dt><dd className="mt-1 font-semibold">{data.organization.name}</dd></div><div><dt className="text-zinc-500">Organization ID</dt><dd className="mt-1 font-mono">{data.organization.slug}</dd></div><div><dt className="text-zinc-500">Your access</dt><dd className="mt-1 capitalize font-semibold">{data.user.role}</dd></div></dl>
-      </section>
-      <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
-        <h2 className="text-sm font-semibold">Guard app access</h2>
-        <p className="mt-1 text-xs text-zinc-500">Guard phones enter this code once at <span className="font-mono">/guard-app</span>, so nobody needs a manager login on the phone.</p>
-        {codeError && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">{codeError}</p>}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <code className="rounded-lg bg-zinc-100 px-3 py-2 font-mono text-sm font-semibold tracking-wider">{guardCode || '—'}</code>
-          <button onClick={() => guardCode && void navigator.clipboard.writeText(guardCode)} disabled={!guardCode} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-zinc-200 bg-white px-3 text-xs font-semibold disabled:opacity-60">Copy code</button>
-          <button onClick={() => void rotateGuardCode()} disabled={rotating} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white disabled:opacity-60">{rotating ? 'Replacing…' : 'Replace code'}</button>
-        </div>
-        {codeNote && <p role="status" className="mt-3 text-xs text-emerald-700">{codeNote}</p>}
       </section>
       <section className="mb-5 rounded-[18px] border border-zinc-200 bg-white p-5">
         <h2 className="text-sm font-semibold">Patrol shift</h2>
