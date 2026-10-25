@@ -21,7 +21,7 @@ export function useList<T>(url: string) {
   return { rows, error, load }
 }
 
-export const FINANCE_TABS = [['Overview', '/finance', 'overview'], ['Invoices', '/finance/invoices', 'invoices'], ['Expenses', '/finance/expenses', 'expenses'], ['Contracts', '/finance/contracts', 'contracts'], ['Inventory', '/finance/inventory', 'inventory'], ['Budgets', '/finance/budgets', 'budgets'], ['Payroll', '/finance/payroll', 'payroll']] as const
+export const FINANCE_TABS = [['Overview', '/finance', 'overview'], ['Invoices', '/finance/invoices', 'invoices'], ['Expenses', '/finance/expenses', 'expenses'], ['Contracts', '/finance/contracts', 'contracts'], ['Inventory', '/finance/inventory', 'inventory'], ['Payroll', '/finance/payroll', 'payroll']] as const
 
 /** The one tab bar shared by every Finance page. */
 export function FinanceTabs({ active }: { active: string }) {
@@ -39,7 +39,7 @@ export function ContractSummary() {
   const soon = live.filter((c) => { const n = daysUntil(c.nextDueDate); return n >= 0 && n <= 30 })
   const overdue = live.filter((c) => daysUntil(c.nextDueDate) < 0)
   const margin = monthly - grossPayroll
-  const cards: [string, string, string][] = [['Contract income / month', naira(monthly), `${live.length} active contract${live.length === 1 ? '' : 's'}`], ['Due in 30 days', naira(soon.reduce((t, c) => t + c.monthlyFee, 0)), `${soon.length} payment${soon.length === 1 ? '' : 's'}`], ['Overdue', naira(overdue.reduce((t, c) => t + c.monthlyFee, 0)), `${overdue.length} contract${overdue.length === 1 ? '' : 's'}`], ['Income less payroll', naira(margin), 'Contract income minus gross payroll']]
+  const cards: [string, string, string][] = [['Contract value', naira(monthly), `${live.length} active contract${live.length === 1 ? '' : 's'}`], ['Due in 30 days', naira(soon.reduce((t, c) => t + c.monthlyFee, 0)), `${soon.length} payment${soon.length === 1 ? '' : 's'}`], ['Overdue', naira(overdue.reduce((t, c) => t + c.monthlyFee, 0)), `${overdue.length} contract${overdue.length === 1 ? '' : 's'}`], ['Income less payroll', naira(margin), 'Contract income minus gross payroll']]
   const upcoming = [...live].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate)).slice(0, 5)
   return <>
     <section className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">{cards.map(([k, v, sub]) => <div key={k} className="rounded-[18px] border border-zinc-200 bg-white p-4"><p className="text-xs text-zinc-500">{k}</p><p className="mt-2 font-mono text-[22px] font-semibold tracking-tight">{v}</p><p className="mt-1 text-[11px] text-zinc-500">{sub}</p></div>)}</section>
@@ -56,7 +56,7 @@ function ContractSheet({ row, onClose, onSaved }: { row: Contract | null; onClos
       <Field label="Client"><input required className={inputClass} value={v.clientName} onChange={(e) => setV({ ...v, clientName: e.target.value })} placeholder="e.g. Arbico Plc" /></Field>
       <Field label="Contract title"><input required className={inputClass} value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} /></Field>
       <Field label="Sites covered" hint="Optional, e.g. Eko Atlantic Tower, Gate 2"><input className={inputClass} value={v.sites} onChange={(e) => setV({ ...v, sites: e.target.value })} /></Field>
-      <Field label="Monthly fee (₦)"><input required type="number" min={0} className={inputClass} value={v.monthlyFee} onChange={(e) => setV({ ...v, monthlyFee: e.target.value })} /></Field>
+      <Field label="Contract value (₦)"><input required type="number" min={0} className={inputClass} value={v.monthlyFee} onChange={(e) => setV({ ...v, monthlyFee: e.target.value })} /></Field>
       <div className="grid grid-cols-2 gap-3"><Field label="Starts"><input required type="date" className={inputClass} value={v.startDate} onChange={(e) => setV({ ...v, startDate: e.target.value })} /></Field><Field label="Ends"><input required type="date" className={inputClass} value={v.endDate} onChange={(e) => setV({ ...v, endDate: e.target.value })} /></Field></div>
       <Field label="Next payment due"><input required type="date" className={inputClass} value={v.nextDueDate} onChange={(e) => setV({ ...v, nextDueDate: e.target.value })} /></Field>
     </form></Sheet>
