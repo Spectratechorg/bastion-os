@@ -20,7 +20,7 @@ export function PatrolsPage() {
   const load = useCallback(async () => {
     try { setData(await api<Data>(`/api/patrols${date ? `?date=${date}` : ''}`)); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load patrols.') } finally { setLoading(false) }
   }, [date])
-  useEffect(() => { setLoading(true); void load(); const timer = window.setInterval(() => void load(), 10000); return () => window.clearInterval(timer) }, [load])
+  useEffect(() => { setLoading(true); void load(); const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
   const s = data?.summary
   return <>
     <PageHeader title="Patrols" subtitle={data ? `Every hour from ${data.slots[0] ?? '08:00'} to ${data.slots[data.slots.length - 1] ?? '17:00'} (Lagos time). ${data.slots.length} signatures complete a patrol.` : 'Hourly checkpoints inside your shift.'} />

@@ -166,7 +166,7 @@ export async function POST(request: Request) {
       site: siteName,
       initials: parsed.data.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
       status: 'active',
-      nfcToken: `BOS-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+      nfcToken: crypto.randomUUID(),
       monthlySalary: parsed.data.monthlySalary,
       photoUrl: parsed.data.photoUrl ?? null,
       createdAt: now,
@@ -288,7 +288,7 @@ export async function PATCH(request: Request) {
     let changes: Partial<typeof guards.$inferInsert>
     if (action === 'suspend') changes = { status: 'suspended', suspendedAt: now }
     else if (action === 'reactivate') changes = { status: 'active', suspendedAt: null }
-    else if (action === 'reissue-nfc') changes = { nfcToken: `BOS-${crypto.randomUUID().slice(0, 8).toUpperCase()}` }
+    else if (action === 'reissue-nfc') changes = { nfcToken: crypto.randomUUID() }
     else if (action === 'update') changes = {
       name: parsed.data.name,
       nin: parsed.data.nin,

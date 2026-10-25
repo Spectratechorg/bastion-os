@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     db.select().from(guards).where(eq(guards.organizationId, current.organizationId)),
     db.select().from(sites).where(eq(sites.organizationId, current.organizationId)),
     db.select().from(patrols).where(and(eq(patrols.organizationId, current.organizationId), gte(patrols.loggedAt, since))).orderBy(desc(patrols.loggedAt)).limit(2000),
-    db.select().from(patrolCheckpoints).where(and(eq(patrolCheckpoints.organizationId, current.organizationId), gte(patrolCheckpoints.signedAt, since))),
+    db.select().from(patrolCheckpoints).where(and(eq(patrolCheckpoints.organizationId, current.organizationId), gte(patrolCheckpoints.signedAt, since))).limit(10000),
   ])
   const guardById = new Map(guardRows.map((guard) => [guard.id, guard])); const siteById = new Map(siteRows.map((site) => [site.id, site]))
   const signed = new Map<string, Record<string, string>>()

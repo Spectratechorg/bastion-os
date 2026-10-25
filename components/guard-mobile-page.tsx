@@ -36,10 +36,12 @@ export function GuardMobilePage() {
   const [local, setLocal] = useState<{ who: Identity; today: Today } | null>(null)
   const [nfc, setNfc] = useState(false); const [scanning, setScanning] = useState<Action | null>(null); const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [manual, setManual] = useState(false); const [token, setToken] = useState(''); const [manualAction, setManualAction] = useState<Action>('attendance')
+  const [receipt, setReceipt] = useState<{ action: Action; guardName: string; siteName: string | null; withinBounds: boolean | null; checkpoint?: string; at: string } | null>(null)
+  const [lastCode, setLastCode] = useState('')
   const controller = useRef<AbortController | null>(null)
 
   const loadMe = useCallback(() => fetch('/api/guard/me', { cache: 'no-store' }).then(async (r) => { if (!r.ok) { setSignedIn(false); return } setSignedIn(true); setMe(await r.json()) }).catch(() => setSignedIn(false)), [])
-  useEffect(() => { void loadMe(); const t = window.setInterval(() => void loadMe(), 30000); return () => window.clearInterval(t) }, [loadMe])
+  useEffect(() => { void loadMe(); const t = window.setInterval(() => { if (!document.hidden) void loadMe() }, 60000); return () => window.clearInterval(t) }, [loadMe])
   useEffect(() => { setNfc(Boolean(window.NDEFReader && window.isSecureContext)); setCode(window.localStorage.getItem(CODE_KEY) ?? ''); return () => controller.current?.abort() }, [])
 
   const isGuard = me?.role === 'guard'
@@ -59,7 +61,7 @@ export function GuardMobilePage() {
   function forgetCode() { window.localStorage.removeItem(CODE_KEY); setCode(''); setCompany(''); setLocal(null); setMessage('') }
 
   async function submit(action: Action, tag: string) {
-    setBusy(true); setError(''); setMessage('')
+    setBusy(true); setError(''); setMessage(''); setReceipt(null); setLastCode(tag.trim())
     try {
       const where = await position()
       if (!where) throw new Error('Allow location access so your supervisor can confirm you are at your post, then try again.')
@@ -68,6 +70,7 @@ export function GuardMobilePage() {
       if (!response.ok) throw new Error(body.error ?? 'Could not verify this tag.')
       if (tag) window.localStorage.setItem(TAG_KEY, tag.trim())
       setMessage(body.withinBounds === false ? `${body.message} You are outside the site area, so your supervisor has been told.` : body.message)
+      setReceipt({ action, guardName: body.guardName ?? 'Unknown guard', siteName: body.siteName ?? null, withinBounds: body.withinBounds ?? null, checkpoint: body.checkpoint, at: clock(new Date().toISOString()) })
       setManual(false); setToken('')
       if (body.status) setLocal({ who: { name: body.guardName, site: body.siteName ?? null, photoUrl: null }, today: body.status })
       if (signedIn) void loadMe()
@@ -155,10 +158,23 @@ export function GuardMobilePage() {
           {scanning && <button onClick={stop} className={`${big} mt-3 border border-zinc-300 bg-white`}><X className="size-4" />Cancel</button>}
           {busy && <p className="mt-3 text-center text-xs text-zinc-500">Checking…</p>}
           {message && !busy && <p role="status" className="mt-3 rounded-xl border border-[#16794A]/30 bg-[#E3F4EA] p-3 text-sm text-[#16794A]">{message}</p>}
-          {error && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {receipt && !busy && <div role="status" className="mt-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{receipt.action === 'attendance' ? 'Attendance recorded' : receipt.action === 'patrol' ? 'Patrol checkpoint recorded' : 'SOS sent'}</p>
+            <dl className="mt-1.5 grid grid-cols-[70px_1fr] gap-x-3 gap-y-1">
+              <dt className="text-zinc-500">Guard</dt><dd className="font-semibold">{receipt.guardName}</dd>
+              <dt className="text-zinc-500">Site</dt><dd>{receipt.siteName ?? 'No site assigned'}</dd>
+              <dt className="text-zinc-500">Time</dt><dd className="font-mono">{receipt.at}</dd>
+              {receipt.checkpoint && <><dt className="text-zinc-500">Checkpoint</dt><dd className="font-mono">{receipt.checkpoint}</dd></>}
+              <dt className="text-zinc-500">Location</dt><dd className={receipt.withinBounds === false ? 'font-semibold text-[#B42318]' : 'text-[#16794A]'}>{receipt.withinBounds === false ? 'Outside the geofence — supervisor alerted' : 'Inside the site geofence'}</dd>
+            </dl>
+          </div>}
+          {error && <div role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p>{error}</p>
+            {lastCode && <p className="mt-1.5 border-t border-red-200 pt-1.5 font-mono text-[10px] text-red-800/80">Tag read: {lastCode}</p>}
+          </div>}
 
           <button onClick={() => setManual((m) => !m)} className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 text-xs font-semibold text-zinc-600"><KeyRound className="size-4" />{nfc ? 'Tag not reading? Type the tag code' : 'No NFC on this phone? Type the tag code'}</button>
-          {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-zinc-200 bg-white p-4"><label className="text-xs font-semibold">What is the code for?<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-xs font-semibold">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. BOS-1A2B3C4D" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[48px] bg-[#2A2B2E] text-white`}>Send</button></form>}
+          {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-zinc-200 bg-white p-4"><label className="text-xs font-semibold">What is the code for?<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-xs font-semibold">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. 9f2b7c41-3a5e-4d18-9c6b-2f7e8a1d4b90" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[48px] bg-[#2A2B2E] text-white`}>Send</button></form>}
 
           <div className="mt-8 border-t border-zinc-200 pt-5"><button onClick={() => { if (window.confirm('Send an emergency SOS to your supervisors now?')) void scan('sos') }} disabled={busy || scanning !== null} className={`${big} bg-[#B42318] text-white`}><ShieldAlert className="size-5" />Emergency SOS</button>
             <p className="mt-2 text-center text-[11px] text-zinc-500">Only press this if you are in danger or need urgent help. Supervisors are alerted straight away with your location.{!me?.linked && !identity ? ' The first time, you will be asked for your tag code so we know who needs help.' : ''}</p></div>

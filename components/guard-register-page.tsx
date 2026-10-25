@@ -6,6 +6,7 @@ import { Camera, Check, ChevronLeft } from 'lucide-react'
 import { PageHeader } from '@/components/workspace-shell'
 import { Avatar, ErrorBanner, Field, btn, btnPrimary, inputClass } from '@/components/ui-bits'
 import { api, photoToDataUrl } from '@/lib/client'
+import { WriteTagButton } from '@/components/write-tag-button'
 
 type Site = { id: string; name: string; status: string }
 type Created = { id: string; name: string; nfcToken: string }
@@ -41,8 +42,9 @@ export function GuardRegisterPage() {
     <PageHeader title="Guard registered" subtitle={`${created.name} is on the roster and ready to scan.`} />
     <section className="max-w-xl rounded-[18px] border border-zinc-200 bg-white p-6">
       <div className="flex items-center gap-4"><Avatar name={created.name} src={photo} size={64} /><div><p className="text-lg font-medium">{created.name}</p><p className="text-xs text-zinc-500">NFC tag to write onto the guard’s card</p></div></div>
-      <p className="mt-5 rounded-lg bg-zinc-50 p-4 text-center font-mono text-xl tracking-widest">{created.nfcToken}</p>
-      <p className="mt-2 text-xs text-zinc-500">Write this value as a plain-text NDEF record on the guard’s NFC tag. Scans match it to this guard.</p>
+      <p className="mt-5 break-all rounded-lg bg-zinc-50 p-4 text-center font-mono text-sm tracking-wide">{created.nfcToken}</p>
+      <p className="mt-2 text-xs text-zinc-500">Write this code onto the guard’s NFC tag now, or copy it for a tag-writer app. Scans match it to this guard.</p>
+      <WriteTagButton token={created.nfcToken} owner={created.name} />
       <div className="mt-6 flex flex-wrap gap-2"><Link href="/guards" className={btnPrimary}><Check className="size-4" />Go to guards</Link><button className={btn} onClick={() => { setCreated(null); setPhoto(null); setV({ name: '', nin: '', phone: '', site: '', monthlySalary: '150000' }) }}>Register another</button></div>
     </section>
   </>
