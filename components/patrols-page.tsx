@@ -1,13 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { Check, Download, RefreshCw } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, inputClass } from '@/components/ui-bits'
 import { api } from '@/lib/client'
 
-const LiveMap = dynamic(() => import('@/components/live-map').then((module) => module.LiveMap), { ssr: false, loading: () => <div className="h-80 animate-pulse bg-zinc-100" /> })
 type Patrol = { id: string; date: string; guardName: string; photoUrl: string | null; site: string; checkpoints: Record<string, string>; signedCount: number; status: string }
 type Data = { date: string; today: string; slots: string[]; shift: { startHour: number; endHour: number }; rows: Patrol[]; notStarted: { guardId: string; guardName: string; site: string }[]; summary: { completedToday: number; inProgressToday: number; missedToday: number; completedThisMonth: number } }
 
@@ -18,23 +16,21 @@ function Slots({ patrol, slots }: { patrol: Patrol; slots: string[] }) {
 }
 
 export function PatrolsPage() {
-  const [date, setDate] = useState(''); const [data, setData] = useState<Data | null>(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(true); const [sites, setSites] = useState<Record<string, unknown>[]>([]); const [guards, setGuards] = useState<Record<string, unknown>[]>([])
+  const [date, setDate] = useState(''); const [data, setData] = useState<Data | null>(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(true)
   const load = useCallback(async () => {
-    try { const [patrolData, siteRows, guardRows] = await Promise.all([api<Data>(`/api/patrols${date ? `?date=${date}` : ''}`), api<Record<string, unknown>[]>('/api/operations?section=sites'), api<Record<string, unknown>[]>('/api/operations?section=guards')]); setData(patrolData); setSites(siteRows); setGuards(guardRows); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load patrols.') } finally { setLoading(false) }
+    try { const patrolData = await api<Data>(`/api/patrols${date ? `?date=${date}` : ''}`); setData(patrolData); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load patrols.') } finally { setLoading(false) }
   }, [date])
   useEffect(() => { setLoading(true); void load(); const timer = window.setInterval(() => void load(), 10000); return () => window.clearInterval(timer) }, [load])
   const s = data?.summary
   return <>
     <PageHeader title="Patrols" subtitle={data ? `Every hour from ${data.slots[0] ?? '08:00'} to ${data.slots[data.slots.length - 1] ?? '17:00'} (Lagos time). ${data.slots.length} signatures complete a patrol.` : 'Hourly checkpoints inside your shift.'} />
     <StatStrip stats={[[String(s?.completedToday ?? '—'), 'Completed today'], [String(s?.inProgressToday ?? '—'), 'In progress'], [String(s?.missedToday ?? '—'), 'Missed today'], [String(s?.completedThisMonth ?? '—'), 'Completed this month']]} />
-    <StatStrip stats={[[String(s?.completedToday ?? '—'), 'Completed today'], [String(s?.missedToday ?? '—'), 'Missed today'], [String(s?.completedThisMonth ?? '—'), 'Completed this month'], [String(s?.completedToday ?? '—'), 'Routes today']]} />
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <input type="date" aria-label="Patrol date" value={date || data?.today || ''} max={data?.today} onChange={(e) => setDate(e.target.value)} className={`${inputClass.replace("w-full", "w-auto")}`} />
       <button className={btn} onClick={() => { setLoading(true); void load() }}><RefreshCw className="size-3.5" />Refresh</button>
       <a href="/api/export?section=patrols" className={btn}><Download className="size-3.5" />Export CSV</a>
     </div>
     <ErrorBanner message={error} retry={() => void load()} />
-    <div className="mb-4 overflow-hidden rounded-[18px] border border-zinc-200 bg-white"><div className="border-b border-zinc-100 p-4"><h2 className="text-sm font-semibold">Guard locations</h2><p className="mt-1 text-[11px] text-zinc-500">Profile pins show each guard&apos;s latest check-in on the standard map.</p></div><LiveMap sites={sites as never} guards={guards as never} height="h-80 sm:h-96" /></div>
     <div className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
       {loading && !data ? <Spinner label="Loading patrols…" /> : !data || (data.rows.length === 0 && data.notStarted.length === 0) ? <Empty title="No patrols on this date" text="Patrols appear when a guard signs a checkpoint in the guard app." /> : <ul className="divide-y divide-zinc-100">
         {data.rows.map((p) => <li key={p.id} className="flex flex-wrap items-center gap-3 p-4">
