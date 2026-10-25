@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, Bell, Map as MapIcon, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
+  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
   Search, Settings, Sparkles, Users, Wallet, X,
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
@@ -15,7 +15,6 @@ const allNavigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
   { label: 'Guards', href: '/guards', icon: Users },
   { label: 'Sites', href: '/sites', icon: MapPin },
-  { label: 'Live map', href: '/map', icon: MapIcon },
   { label: 'Attendance', href: '/attendance', icon: Clock3 },
   { label: 'Patrols', href: '/patrols', icon: Route },
   { label: 'Incidents', href: '/incidents', icon: FileText },

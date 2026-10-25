@@ -10,7 +10,19 @@ Guard, site, attendance, patrol, incident, client, finance, and overview pages r
 2. Run `pnpm install`.
 3. Generate migrations with `pnpm db:generate` and review them.
 4. Run `pnpm db:migrate` only against the intended database.
-5. Start the app with `pnpm dev`.
+5. Fill the workspace with demo data (optional): `pnpm db:seed`.
+6. Start the app with `pnpm dev`.
+
+## Demo data
+
+`pnpm db:seed` writes a full demo workspace — clients, sites, guards, 30 days of check-ins, five
+days of patrols, incidents, alerts, finance, staff, inventory and contracts — into the
+organization you already belong to, so it appears in the app immediately. It uses your only
+Better Auth user automatically; with several users, name the owner:
+
+    SEED_EMAIL=you@company.com pnpm db:seed
+
+Re-running it on an organization that already has guards does nothing, so it is safe to repeat.
 
 ## Checks
 

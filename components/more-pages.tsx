@@ -16,23 +16,6 @@ function useSections(names: string[]) {
   useEffect(() => { void load() }, [load])
   return { data, error, load }
 }
-export function ClientsPage() {
-  const { data, error, load } = useSections(['sites', 'guards', 'incidents'])
-  const [open, setOpen] = useState(false); const [siteId, setSiteId] = useState(''); const [client, setClient] = useState(''); const [formError, setFormError] = useState('')
-  const sites = data?.sites ?? []
-  const groups = new Map<string, Row[]>(); for (const s of sites) { const key = s.clientName || 'No client assigned'; groups.set(key, [...(groups.get(key) ?? []), s]) }
-  const list = [...groups.entries()].map(([name, ss]) => { const names = new Set(ss.map((s) => s.name)); return { name, sites: ss.length, guards: (data?.guards ?? []).filter((g) => g.site && names.has(g.site) && g.status === 'active').length, open: (data?.incidents ?? []).filter((i) => names.has(i.site) && i.status !== 'resolved').length, siteList: ss.map((x) => ({ name: x.name as string, guards: (data?.guards ?? []).filter((g) => g.site === x.name && g.status === 'active').length })) } })
-  async function submit(event: FormEvent) { event.preventDefault(); setFormError(''); try { await api('/api/operations', { method: 'PATCH', json: { section: 'sites', id: siteId, action: 'update', clientName: client.trim() || null } }); setOpen(false); setClient(''); setSiteId(''); void load() } catch (e) { setFormError(e instanceof Error ? e.message : 'Unable to save.') } }
-  return <>
-    <PageHeader title="Clients" subtitle="Companies you protect, with their sites, guards and open incidents."><button className={btnPrimary} onClick={() => setOpen(true)} disabled={sites.length === 0}><Plus className="size-4" />Assign client to site</button></PageHeader>
-    <StatStrip stats={[[String(list.filter((c) => c.name !== 'No client assigned').length), 'Clients'], [String(sites.length), 'Sites'], [String(list.reduce((t, c) => t + c.guards, 0)), 'Guards deployed'], [String(list.reduce((t, c) => t + c.open, 0)), 'Open incidents']]} />
-    <ErrorBanner message={error} retry={() => void load()} />
-    <div className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">{!data ? <Spinner /> : list.length === 0 ? <Empty title="No clients yet" text="Add a site, then assign a client to it." /> : <ul className="divide-y divide-zinc-100">{list.map((c) => <li key={c.name} className="p-4 text-xs"><div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:items-center"><b className="col-span-2 text-sm font-semibold sm:col-span-1">{c.name}</b>{([['Sites', c.sites], ['Guards deployed', c.guards], ['Open incidents', c.open]] as const).map(([k, v]) => <div key={k}><span className="block text-[10px] uppercase tracking-wide text-zinc-500">{k}</span><span className="font-mono text-sm">{v}</span></div>)}</div>
-      <ul className="mt-3 flex flex-wrap gap-2">{c.siteList.map((x) => <li key={x.name} className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5"><b className="font-semibold">{x.name}</b><span className="ml-1.5 text-zinc-500">{x.guards} guard{x.guards === 1 ? '' : 's'}</span></li>)}</ul></li>)}</ul>}</div>
-    {open && <Sheet title="Assign client to site" kicker="CLIENT" onClose={() => setOpen(false)} footer={<><button className={btn} onClick={() => setOpen(false)}>Cancel</button><button form="client-form" className={btnPrimary} disabled={!siteId}>Save</button></>}><form id="client-form" onSubmit={submit} className="grid gap-4"><ErrorBanner message={formError} /><Field label="Site"><select required className={inputClass} value={siteId} onChange={(e) => { setSiteId(e.target.value); setClient(sites.find((s) => s.id === e.target.value)?.clientName ?? '') }}><option value="">Select a site</option>{sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field><Field label="Client name" hint="Leave empty to remove the client from this site"><input className={inputClass} value={client} onChange={(e) => setClient(e.target.value)} placeholder="e.g. Arbico Plc" /></Field></form></Sheet>}
-  </>
-}
-
 type Summary = { summary?: { clients: number; finance: { revenue: number; costs: number; pending: number } | null }; attendance: { total: number; outside: number; guards: number }; incidents: { total: number; resolved: number; serious: number }; alerts: { total: number; acknowledged: number }; patrols: { total: number; completed: number }; guards: { total: number }; sites: { total: number }; payroll: { total: number | null; net: string | number | null } }
 const lagosDay = (offset = 0) => new Date(Date.now() + offset * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' })
 
