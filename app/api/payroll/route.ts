@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { and, eq, gte, lt } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@/lib/db'
-import { activityEvents, attendance, guards, payrollRecords } from '@/lib/db/schema'
-import { actor, fail, isModerator, lagosParts } from '@/lib/server'
+import { activityEvents, attendance, guards, payrollRecords, staff as staffTable } from '@/lib/db/schema'
+import { actor, can, denyGuard, fail, isModerator, lagosParts } from '@/lib/server'
 import { computePayroll, monthBounds } from '@/lib/payroll'
 
 export const dynamic = 'force-dynamic'
@@ -13,6 +13,8 @@ const dayKey = (date: Date) => lagosParts(date).date
 /** Returns payroll for a month. Unpaid rows are recalculated from attendance; paid rows are frozen. */
 export async function GET(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization to view payroll.', 401)
+  { const denied = denyGuard(current); if (denied) return denied }
+  if (!(await can(current, 'viewFinance'))) return fail('Your role cannot view finance. An administrator can change this in Settings.', 403)
   const period = periodSchema.safeParse(new URL(request.url).searchParams.get('period') ?? lagosParts().month)
   if (!period.success) return fail('Period must look like 2026-10')
   const { year, month, daysInMonth } = monthBounds(period.data)
@@ -22,6 +24,7 @@ export async function GET(request: Request) {
   const upTo = today < lastDay ? today : lastDay
   const from = new Date(Date.UTC(year, month - 1, 1) - 3600000)
   const to = new Date(Date.UTC(year, month, 1))
+  const staffRows = await db.select().from(staffTable).where(eq(staffTable.organizationId, current.organizationId))
   const [guardRows, attendanceRows, existing] = await Promise.all([
     db.select().from(guards).where(eq(guards.organizationId, current.organizationId)),
     db.select({ guardId: attendance.guardId, at: attendance.checkedInAt }).from(attendance).where(and(eq(attendance.organizationId, current.organizationId), gte(attendance.checkedInAt, from), lt(attendance.checkedInAt, to))),
@@ -38,15 +41,38 @@ export async function GET(request: Request) {
   const output = []
   for (const guard of guardRows.filter((item) => item.status !== 'suspended' || byGuard.has(item.id))) {
     const stored = byGuard.get(guard.id)
-    const extra = { guardName: guard.name, photoUrl: guard.photoUrl, site: guard.site }
+    const extra = { guardName: guard.name, photoUrl: guard.photoUrl, site: guard.site, kind: 'guard' as const }
     if (stored?.status === 'paid') { output.push({ ...stored, ...extra }); continue }
     const created = dayKey(guard.createdAt)
     const start = created > first ? created : first
     if (start > upTo) continue
     const daysCounted = Number(upTo.slice(8)) - Number(start.slice(8)) + 1
     const daysPresent = [...(presentDays.get(guard.id) ?? [])].filter((key) => key >= start && key <= upTo).length
-    const values = { baseSalary: guard.monthlySalary, daysInPeriod: daysInMonth, ...computePayroll({ baseSalary: guard.monthlySalary, daysInMonth, daysCounted, daysPresent }) }
+    const computed = computePayroll({ baseSalary: guard.monthlySalary, daysInMonth, daysCounted, daysPresent, prorated: created > first })
+    const values = {
+      baseSalary: computed.basePay,
+      daysInPeriod: daysInMonth,
+      daysPresent: computed.daysPresent,
+      daysAbsent: computed.daysAbsent,
+      absenceDeduction: computed.absenceDeduction,
+      pension: 0,
+      netPay: computed.netPay,
+    }
     const [row] = await db.insert(payrollRecords).values({ ...current, guardId: guard.id, period: period.data, status: 'pending', createdAt: new Date(), ...values })
+      .onConflictDoUpdate({ target: [payrollRecords.guardId, payrollRecords.period], set: values, setWhere: eq(payrollRecords.status, 'pending') }).returning()
+    output.push({ ...(row ?? stored), ...extra })
+  }
+  // Office and other non-guard staff are not scanned, so every counted day is a worked day. No pension, same pro-rata rule.
+  for (const person of staffRows.filter((item) => item.status === 'active' || byGuard.has(item.id))) {
+    const stored = byGuard.get(person.id)
+    const extra = { guardName: person.name, photoUrl: null, site: person.title, kind: 'staff' as const }
+    if (stored?.status === 'paid') { output.push({ ...stored, ...extra }); continue }
+    const start = person.startDate > first ? person.startDate : first
+    if (start > upTo) continue
+    const daysCounted = Number(upTo.slice(8)) - Number(start.slice(8)) + 1
+    const computed = computePayroll({ baseSalary: person.monthlySalary, daysInMonth, daysCounted, daysPresent: daysCounted, prorated: person.startDate > first })
+    const values = { kind: 'staff', baseSalary: computed.basePay, daysInPeriod: daysInMonth, daysPresent: computed.daysPresent, daysAbsent: computed.daysAbsent, absenceDeduction: computed.absenceDeduction, pension: 0, netPay: computed.netPay }
+    const [row] = await db.insert(payrollRecords).values({ ...current, guardId: person.id, period: period.data, status: 'pending', createdAt: new Date(), ...values })
       .onConflictDoUpdate({ target: [payrollRecords.guardId, payrollRecords.period], set: values, setWhere: eq(payrollRecords.status, 'pending') }).returning()
     output.push({ ...(row ?? stored), ...extra })
   }
@@ -58,6 +84,7 @@ const markInput = z.object({ id: z.string().uuid(), status: z.enum(['paid', 'pen
 /** Moderators tick a row to mark it paid (or untick to return it to pending). */
 export async function PATCH(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization.', 401)
+  { const denied = denyGuard(current); if (denied) return denied }
   if (!(await isModerator(current))) return fail('Only a moderator or administrator can change payment status.', 403)
   const parsed = markInput.safeParse(await request.json().catch(() => null)); if (!parsed.success) return fail('Invalid request')
   const paid = parsed.data.status === 'paid'

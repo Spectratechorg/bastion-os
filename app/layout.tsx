@@ -5,7 +5,6 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'BastionOS · Fortewings Security',
   description: 'Real-time security operations, guard attendance, incidents, and live site monitoring.',
-  
   icons: {
     icon: [
       {
@@ -38,7 +37,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased">
         {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {process.env.VERCEL ? <Analytics /> : null}
       </body>
     </html>
   )

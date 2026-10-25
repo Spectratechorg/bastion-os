@@ -1,0 +1,1 @@
+ALTER TABLE "attendance" ADD COLUMN "checked_out_at" timestamp with time zone;

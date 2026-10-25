@@ -1,91 +1,158 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Check, ChevronLeft, Clock3, KeyRound, MapPin, Route, ShieldAlert, X } from 'lucide-react'
+import { Check, ChevronLeft, Circle, KeyRound, LogOut, MapPin, ShieldAlert, X } from 'lucide-react'
+import { authClient } from '@/lib/auth-client'
 import { Logo } from '@/components/brand'
 import { Avatar } from '@/components/ui-bits'
 
 interface NfcReader extends EventTarget {
-  onreading: ((event: { message: { records: Array<{ data?: DataView | string }> } }) => void) | null
+  onreading: ((event: { message: { records: Array<{ recordType?: string; data?: DataView | string }> } }) => void) | null
   onreadingerror: (() => void) | null
   scan(options?: { signal?: AbortSignal }): Promise<void>
 }
 declare global { interface Window { NDEFReader?: new () => NfcReader } }
 
 type Action = 'attendance' | 'patrol' | 'sos'
-type Result = { message: string; guard?: { name: string; photoUrl: string | null; site: string | null }; slot?: string; signed?: number; total?: number; complete?: boolean }
-const SLOTS = ['10:00', '11:00', '12:00']
+type Today = { today: string; hour: number; shift: { startHour: number; endHour: number }; slots: string[]; checkedInAt: string | null; checkedOutAt: string | null; insideGeofence: boolean | null; signed: Record<string, string> }
+type Identity = { name: string; site: string | null; photoUrl: string | null }
+type Me = { linked: boolean; role: string; guard?: Identity & { id: string } } & Partial<Today>
+
+const CODE_KEY = 'bastion.guardCode'
+const clock = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) : ''
+const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
 function position(): Promise<{ latitude: number; longitude: number } | null> {
-  return new Promise((resolve) => { if (!navigator.geolocation) return resolve(null); navigator.geolocation.getCurrentPosition((p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }), () => resolve(null), { timeout: 6000, maximumAge: 30000 }) })
+  return new Promise((resolve) => { if (!navigator.geolocation) return resolve(null); navigator.geolocation.getCurrentPosition((p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }), () => resolve(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }) })
 }
 
+/** Guard app. A guard signs in with their own login, or a phone is set up once with the company guard app code. */
 export function GuardMobilePage() {
+  const [me, setMe] = useState<Me | null>(null); const [signedIn, setSignedIn] = useState<boolean | null>(null)
+  const [code, setCode] = useState(''); const [codeDraft, setCodeDraft] = useState(''); const [company, setCompany] = useState(''); const [codeError, setCodeError] = useState(''); const [codeBusy, setCodeBusy] = useState(false)
+  const [local, setLocal] = useState<{ who: Identity; today: Today } | null>(null)
   const [nfc, setNfc] = useState(false); const [scanning, setScanning] = useState<Action | null>(null); const [busy, setBusy] = useState(false)
-  const [guard, setGuard] = useState<Result['guard'] | null>(null); const [signed, setSigned] = useState<string[]>([]); const [signedCount, setSignedCount] = useState<[number, number] | null>(null)
   const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [manual, setManual] = useState(false); const [token, setToken] = useState(''); const [manualAction, setManualAction] = useState<Action>('attendance')
   const controller = useRef<AbortController | null>(null)
-  useEffect(() => { setNfc(Boolean(window.NDEFReader && window.isSecureContext)); return () => controller.current?.abort() }, [])
+
+  const loadMe = useCallback(() => fetch('/api/guard/me', { cache: 'no-store' }).then(async (r) => { if (!r.ok) { setSignedIn(false); return } setSignedIn(true); setMe(await r.json()) }).catch(() => setSignedIn(false)), [])
+  useEffect(() => { void loadMe(); const t = window.setInterval(() => void loadMe(), 30000); return () => window.clearInterval(t) }, [loadMe])
+  useEffect(() => { setNfc(Boolean(window.NDEFReader && window.isSecureContext)); setCode(window.localStorage.getItem(CODE_KEY) ?? ''); return () => controller.current?.abort() }, [])
+
+  const isGuard = me?.role === 'guard'
+  const identity: Identity | null = me?.guard ?? local?.who ?? null
+  const today: Today | null = me?.slots ? (me as Today) : local?.today ?? null
+  const ready = signedIn === true || Boolean(code)
+
+  async function saveCode(event: FormEvent) {
+    event.preventDefault(); setCodeError(''); setCodeBusy(true)
+    try {
+      const response = await fetch('/api/guard/access/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: codeDraft }) })
+      const body = await response.json()
+      if (!response.ok || body.error) throw new Error(body.error ?? 'That code was not accepted.')
+      const clean = codeDraft.trim().toUpperCase(); window.localStorage.setItem(CODE_KEY, clean); setCode(clean); setCompany(body.organizationName ?? ''); setCodeDraft('')
+    } catch (e) { setCodeError(e instanceof Error ? e.message : 'That code was not accepted.') } finally { setCodeBusy(false) }
+  }
+  function forgetCode() { window.localStorage.removeItem(CODE_KEY); setCode(''); setCompany(''); setLocal(null); setMessage('') }
 
   async function submit(action: Action, tag: string) {
     setBusy(true); setError(''); setMessage('')
     try {
       const where = await position()
-      const response = await fetch('/api/guard/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: action, token: tag, ...where }) })
-      const body: Result & { error?: string } = await response.json()
+      if (!where) throw new Error('Allow location access so your supervisor can confirm you are at your post, then try again.')
+      const response = await fetch('/api/guard/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: action, token: tag, ...where, ...(signedIn ? {} : { code }) }) })
+      const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? 'Could not verify this tag.')
-      setMessage(body.message); if (body.guard) setGuard(body.guard)
-      if (action === 'patrol' && body.slot) { setSigned((c) => (c.includes(body.slot!) ? c : [...c, body.slot!])); setSignedCount([body.signed ?? 0, body.total ?? 3]) }
+      setMessage(body.withinBounds === false ? `${body.message} You are outside the site area, so your supervisor has been told.` : body.message)
+      setManual(false); setToken('')
+      if (body.status) setLocal({ who: { name: body.guardName, site: body.siteName ?? null, photoUrl: null }, today: body.status })
+      if (signedIn) void loadMe()
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not verify this tag.') } finally { setBusy(false) }
   }
 
   async function scan(action: Action) {
+    if (action === 'sos' && me?.linked) return void submit('sos', '')
     const Reader = window.NDEFReader
-    if (!Reader) return setManual(true)
+    if (!Reader) { setManualAction(action); return setManual(true) }
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort
-    setError(''); setMessage('Hold the guard’s NFC tag near the back of the phone.'); setScanning(action)
+    setError(''); setMessage(''); setScanning(action)
     try {
       const reader = new Reader()
       reader.onreading = (event) => {
-        const data = event.message.records[0]?.data
-        const text = typeof data === 'string' ? data : data ? new TextDecoder().decode(data) : ''
+        const data = event.message.records.find((record) => record.data)?.data
+        let text = ''
+        if (typeof data === 'string') text = data
+        else if (data) { const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength); text = new TextDecoder().decode(bytes.subarray(1 + ((bytes[0] ?? 0) & 0x3f))) }
         abort.abort(); setScanning(null); void submit(action, text.trim())
       }
       reader.onreadingerror = () => { setError('That tag could not be read. Try again.'); setScanning(null) }
       await reader.scan({ signal: abort.signal })
-    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) { setError('NFC could not start. Enter the tag code instead.'); setManual(true) } setScanning(null) }
+    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) { setError('NFC could not start. Type the tag code instead.'); setManualAction(action); setManual(true) } setScanning(null) }
   }
-  const stop = () => { controller.current?.abort(); setScanning(null); setMessage('') }
-  const big = 'flex min-h-[56px] w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:opacity-60'
+  const stop = () => { controller.current?.abort(); setScanning(null) }
+  const big = 'flex min-h-[60px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-base font-semibold disabled:opacity-60'
+
+  const slots = today?.slots ?? []; const signed = today?.signed ?? {}; const signedCount = slots.filter((slot) => signed[slot]).length
+  const checkedIn = Boolean(today?.checkedInAt) && !today?.checkedOutAt; const checkedOut = Boolean(today?.checkedOutAt)
+  const patrolDone = slots.length > 0 && signedCount >= slots.length
+  const hour = today?.hour ?? 0; const shift = today?.shift
+  const windowOpen = shift ? hour >= shift.startHour && hour < shift.endHour : false
+  const nextSlot = slots.find((slot) => !signed[slot])
+  const currentSlot = shift && windowOpen ? hourLabel(hour) : null
+  let next: { action: Action; label: string; help: string; disabled?: boolean } | null = null
+  if (!today) next = { action: 'attendance', label: 'Scan your tag', help: 'Tap, then hold your tag to the back of the phone. This checks you in, or out if you are already in.' }
+  else if (!checkedIn && !checkedOut) next = { action: 'attendance', label: 'Check in', help: 'You have not checked in yet today. Tap, then hold your tag to the back of the phone.' }
+  else if (checkedOut) next = { action: 'attendance', label: 'Check in again', help: `You checked out at ${clock(today.checkedOutAt)}. Tap to start a new check-in.` }
+  else if (!patrolDone && windowOpen) next = currentSlot && signed[currentSlot] ? { action: 'patrol', label: `${currentSlot} checkpoint signed`, help: 'Come back at the next hour to sign the next checkpoint.', disabled: true } : { action: 'patrol', label: `Sign checkpoint ${currentSlot ?? nextSlot ?? ''}`.trim(), help: 'Walk to the checkpoint, tap, then hold your tag to the back of the phone.' }
+  else if (!patrolDone) next = { action: 'patrol', label: 'Patrol window closed', help: shift && hour < shift.startHour ? `Patrol checkpoints open at ${hourLabel(shift.startHour)}.` : `The patrol shift ended at ${hourLabel(shift?.endHour ?? 0)}.`, disabled: true }
+  const step = (done: boolean, title: string, detail: string) => <li className="flex items-start gap-3"><span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${done ? 'bg-[#16794A] text-white' : 'border border-zinc-300 text-zinc-400'}`}>{done ? <Check className="size-3.5" /> : <Circle className="size-3.5" />}</span><span><b className="block text-sm font-semibold">{title}</b><span className="text-xs text-zinc-500">{detail}</span></span></li>
 
   return (
     <main className="min-h-screen bg-[#F5F5F6] pb-10 text-[#18181B]">
       <header className="sticky top-0 z-10 flex h-14 items-center gap-3 bg-[#2A2B2E] px-4 text-white">
-        <Link href="/overview" aria-label="Back to dashboard" className="flex size-11 items-center justify-center rounded-lg hover:bg-white/10"><ChevronLeft className="size-5" /></Link>
-        <Logo size={32} /><div className="flex-1"><p className="text-sm font-semibold leading-none">BastionOS Guard</p><p className="mt-1 text-[10px] text-zinc-400">Scan to check in and sign patrols</p></div>
+        {isGuard || (!signedIn && signedIn !== null) ? <span className="size-2" /> : <Link href="/overview" aria-label="Back to dashboard" className="flex size-11 items-center justify-center rounded-lg hover:bg-white/10"><ChevronLeft className="size-5" /></Link>}
+        <Logo size={32} /><div className="flex-1"><p className="text-sm font-semibold leading-none">BastionOS Guard</p></div>
+        {isGuard && <button onClick={() => void authClient.signOut().then(() => { window.location.href = '/sign-in' })} className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-xs hover:bg-white/10"><LogOut className="size-4" />Sign out</button>}
       </header>
       <div className="mx-auto max-w-[480px] px-4 pt-5">
-        {guard && <section className="mb-4 flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4"><Avatar name={guard.name} src={guard.photoUrl} size={56} /><div><p className="text-lg font-medium leading-tight">{guard.name}</p><p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-500"><MapPin className="size-3" />{guard.site ?? 'Unassigned'}</p></div></section>}
+        {signedIn === null ? <p className="py-10 text-center text-xs text-zinc-500">Loading…</p> : !ready ? (
+          <form onSubmit={saveCode} className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-5">
+            <h1 className="text-lg font-semibold">Set up this phone</h1>
+            <p className="text-xs leading-5 text-zinc-600">Enter the company guard app code your supervisor gave you. You only do this once. Or <Link href="/sign-in" className="font-semibold underline">sign in</Link> with your own login.</p>
+            <input required value={codeDraft} onChange={(e) => setCodeDraft(e.target.value.toUpperCase())} placeholder="GRD-XXXX-XXXX" autoCapitalize="characters" className="h-12 rounded-xl border border-zinc-300 px-3 font-mono text-base" />
+            {codeError && <p role="alert" className="text-xs text-red-700">{codeError}</p>}
+            <button disabled={codeBusy} className={`${big} bg-[#2A2B2E] text-white`}>{codeBusy ? 'Checking…' : 'Use this code'}</button>
+          </form>
+        ) : <>
+          {!signedIn && code && <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-600"><span>Company code <b className="font-mono text-zinc-900">{code}</b>{company ? ` · ${company}` : ''}</span><button onClick={forgetCode} className="font-semibold underline">Change</button></div>}
+          {identity ? <section className="mb-4 flex items-center gap-3"><Avatar name={identity.name} src={identity.photoUrl} size={56} /><div><p className="text-xs text-zinc-500">Good day,</p><p className="text-xl font-medium leading-tight">{identity.name}</p><p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-500"><MapPin className="size-3" />{identity.site ?? 'No site assigned yet'}</p></div></section>
+            : signedIn && me ? <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{isGuard ? 'Your login is not linked to a guard record yet. Ask your supervisor to link it in Settings. You can still scan your own tag.' : 'You are viewing the guard app as staff. Guards see their own name and progress here.'}</p>
+            : <p className="mb-4 text-xs text-zinc-500">Scan your tag to begin. Your name and site appear after the first scan.</p>}
 
-        <section className="rounded-2xl border border-zinc-200 bg-white p-4"><h2 className="flex items-center gap-2 text-sm font-semibold"><Clock3 className="size-4" />Attendance</h2><p className="mb-3 mt-1 text-xs text-zinc-500">Scan your tag at the gate to check in. Your location is checked against the site geofence.</p>
-          <button className={`${big} bg-[#2A2B2E] text-white`} disabled={busy || scanning !== null} onClick={() => void scan('attendance')}>{scanning === 'attendance' ? 'Waiting for tag…' : 'Scan NFC to check in'}</button></section>
+          <section className="rounded-2xl border border-zinc-200 bg-white p-4"><h2 className="text-xs font-semibold tracking-wide text-zinc-500">TODAY</h2>
+            <ol className="mt-3 grid gap-4">
+              {step(checkedIn, checkedIn ? `Checked in at ${clock(today?.checkedInAt)}` : checkedOut ? `Checked out at ${clock(today?.checkedOutAt)}` : 'Check in', checkedIn ? (today?.insideGeofence === false ? 'You were outside the site area. Your supervisor has been told.' : 'You are marked present for today.') : checkedOut ? 'Your shift is marked complete.' : 'Scan your tag when you arrive at your post.')}
+              {step(patrolDone, `Patrol checkpoints ${signedCount} of ${slots.length || '–'}`, shift ? `Sign one checkpoint every hour from ${hourLabel(shift.startHour)} to ${hourLabel(shift.endHour)}.` : 'Your shift hours appear after your first scan.')}
+            </ol>
+            {slots.length > 0 && <div className="mt-3 grid grid-cols-4 gap-2">{slots.map((slot) => <span key={slot} className={`flex min-h-[48px] flex-col items-center justify-center rounded-lg border text-xs ${signed[slot] ? 'border-[#2A2B2E] bg-[#2A2B2E] text-white' : 'border-zinc-200 text-zinc-500'}`}><b className="font-mono">{slot}</b><span className="text-[10px]">{signed[slot] ? clock(signed[slot]) : 'Open'}</span></span>)}</div>}
+          </section>
 
-        <section className="mt-4 rounded-2xl border border-zinc-200 bg-white p-4"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-sm font-semibold"><Route className="size-4" />Patrol</h2><span className="font-mono text-xs">{signedCount ? `${signedCount[0]} of ${signedCount[1]}` : '0 of 3'}</span></div>
-          <p className="mb-3 mt-1 text-xs text-zinc-500">Sign 10:00, 11:00 and 12:00 between 09:00 and 12:59 to complete the patrol.</p>
-          <div className="mb-3 grid grid-cols-3 gap-2">{SLOTS.map((slot) => <span key={slot} className={`flex min-h-[48px] flex-col items-center justify-center rounded-lg border text-xs ${signed.includes(slot) ? 'border-[#2A2B2E] bg-[#2A2B2E] text-white' : 'border-zinc-200 text-zinc-500'}`}><b className="font-mono">{slot}</b>{signed.includes(slot) && <Check className="size-3" />}</span>)}</div>
-          <button className={`${big} border border-zinc-300 bg-white`} disabled={busy || scanning !== null} onClick={() => void scan('patrol')}>{scanning === 'patrol' ? 'Waiting for tag…' : 'Scan checkpoint tag'}</button></section>
+          {next && <section className="mt-4"><button className={`${big} bg-[#2A2B2E] text-white`} disabled={busy || scanning !== null || next.disabled} onClick={() => void scan(next!.action)}>{scanning ? 'Hold your tag to the phone…' : next.label}</button><p className="mt-2 text-center text-xs text-zinc-500">{next.help}</p></section>}
+          {!next && <p className="mt-4 rounded-2xl border border-[#16794A]/30 bg-[#E3F4EA] p-4 text-center text-sm font-semibold text-[#16794A]">All checkpoints signed. Well done.</p>}
+          {checkedIn && <button className={`${big} mt-3 border border-zinc-300 bg-white`} disabled={busy || scanning !== null} onClick={() => void scan('attendance')}>Check out</button>}
 
-        {scanning && <button onClick={stop} className={`${big} mt-3 border border-zinc-300 bg-white`}><X className="size-4" />Cancel scan</button>}
-        {busy && <p className="mt-3 text-center text-xs text-zinc-500">Verifying…</p>}
-        {message && !busy && <p role="status" className="mt-3 rounded-xl border border-zinc-200 bg-white p-3 text-sm">{message}</p>}
-        {error && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          {scanning && <button onClick={stop} className={`${big} mt-3 border border-zinc-300 bg-white`}><X className="size-4" />Cancel</button>}
+          {busy && <p className="mt-3 text-center text-xs text-zinc-500">Checking…</p>}
+          {message && !busy && <p role="status" className="mt-3 rounded-xl border border-[#16794A]/30 bg-[#E3F4EA] p-3 text-sm text-[#16794A]">{message}</p>}
+          {error && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-        <button onClick={() => setManual((m) => !m)} className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 text-xs font-semibold text-zinc-600"><KeyRound className="size-4" />{nfc ? 'Tag not reading? Enter tag code' : 'This phone has no NFC. Enter tag code'}</button>
-        {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-zinc-200 bg-white p-4"><select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="h-11 rounded-lg border border-zinc-200 px-3 text-sm"><option value="attendance">Check in</option><option value="patrol">Sign patrol checkpoint</option></select><input value={token} onChange={(e) => setToken(e.target.value)} placeholder="BOS-1A2B3C4D" autoCapitalize="characters" className="h-11 rounded-lg border border-zinc-200 px-3 font-mono text-sm outline-none focus:border-zinc-500" /><button className={`${big} bg-[#2A2B2E] text-white`} disabled={busy}>Submit</button></form>}
+          <button onClick={() => setManual((m) => !m)} className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 text-xs font-semibold text-zinc-600"><KeyRound className="size-4" />{nfc ? 'Tag not reading? Type the tag code' : 'No NFC on this phone? Type the tag code'}</button>
+          {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-zinc-200 bg-white p-4"><label className="text-xs font-semibold">What is the code for?<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-xs font-semibold">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. BOS-1A2B3C4D" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[48px] bg-[#2A2B2E] text-white`}>Send</button></form>}
 
-        <button onClick={() => { if (window.confirm('Send an SOS to your supervisor?')) void scan('sos') }} disabled={busy || scanning !== null} className={`${big} mt-6 bg-[#B42318] text-white`}><ShieldAlert className="size-5" />Emergency SOS</button>
-        <p className="mt-2 text-center text-[11px] text-zinc-500">SOS asks you to scan your tag so your supervisor knows who needs help.</p>
+          <div className="mt-8 border-t border-zinc-200 pt-5"><button onClick={() => { if (window.confirm('Send an emergency SOS to your supervisors now?')) void scan('sos') }} disabled={busy || scanning !== null} className={`${big} bg-[#B42318] text-white`}><ShieldAlert className="size-5" />Emergency SOS</button>
+            <p className="mt-2 text-center text-[11px] text-zinc-500">Only press this if you are in danger or need urgent help. Supervisors are alerted straight away with your location.</p></div>
+        </>}
       </div>
     </main>
   )

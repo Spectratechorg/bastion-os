@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "sites_organization_name_unique" ON "sites" USING btree ("organization_id","name");

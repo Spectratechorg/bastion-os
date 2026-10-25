@@ -1,9 +1,21 @@
-export const PATROL_SLOTS = ['10:00', '11:00', '12:00'] as const
-export const PATROL_WINDOW = { startHour: 9, endHour: 12 }
+export type Shift = { startHour: number; endHour: number }
 
-/** Which of the three checkpoints a signature at this Lagos hour counts for, or null outside the 09:00-12:59 window. */
-export function slotForHour(hour: number): (typeof PATROL_SLOTS)[number] | null {
-  if (hour < PATROL_WINDOW.startHour || hour > PATROL_WINDOW.endHour) return null
-  return PATROL_SLOTS[Math.min(Math.max(hour, 10), 12) - 10]
+/** One patrol checkpoint per hour, from the shift start up to (but not including) the shift end. */
+export const DEFAULT_SHIFT: Shift = { startHour: 8, endHour: 18 }
+
+export function normalizeShift(startHour: unknown, endHour: unknown): Shift {
+  const start = Number(startHour)
+  const end = Number(endHour)
+  const valid = Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end <= 24 && end > start
+  return valid ? { startHour: start, endHour: end } : DEFAULT_SHIFT
 }
 
+export function patrolSlots({ startHour, endHour }: Shift) {
+  return Array.from({ length: Math.max(endHour - startHour, 0) }, (_, index) => `${String(startHour + index).padStart(2, '0')}:00`)
+}
+
+/** The checkpoint a signature at this Lagos hour belongs to, or null when outside the shift. */
+export function slotForHour(hour: number, shift: Shift = DEFAULT_SHIFT) {
+  if (hour < shift.startHour || hour >= shift.endHour) return null
+  return `${String(hour).padStart(2, '0')}:00`
+}

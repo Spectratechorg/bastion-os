@@ -1,124 +1,248 @@
-import { headers } from 'next/headers'
 import { NextResponse } from 'next/server'
-import { and, eq } from 'drizzle-orm'
+import { and, count, desc, eq, isNull } from 'drizzle-orm'
+import { z } from 'zod'
 
-import { auth } from '@/lib/auth'
+import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
-import { alerts, attendance, guards, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
-import { distanceMetres, lagosParts, PATROL_SLOTS, slotForHour } from '@/lib/server'
+import { attendance, guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
+import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
+import { raiseAlert } from '@/lib/alerts'
+import { todayStatus } from '@/lib/guard-today'
+import { lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
-async function resolveActiveOrganizationId() {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) return null
-  return (session.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId ?? null
+const scanSchema = z.object({
+  type: z.enum(['attendance', 'patrol', 'sos']),
+  /** Optional for a guard signed in with their own login: their linked record is used. */
+  token: z.string().trim().max(200).default(''),
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
+  /** Shared guard-app code, used by phones that are not signed in. */
+  code: z.string().trim().max(64).optional(),
+})
+
+function isWithinSite(latitude: number, longitude: number, site: typeof sites.$inferSelect) {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180
+  const earthRadiusMeters = 6_371_000
+  const deltaLatitude = radians(site.latitude - latitude)
+  const deltaLongitude = radians(site.longitude - longitude)
+  const distance = 2 * earthRadiusMeters * Math.asin(Math.sqrt(
+    Math.sin(deltaLatitude / 2) ** 2
+      + Math.cos(radians(latitude)) * Math.cos(radians(site.latitude)) * Math.sin(deltaLongitude / 2) ** 2,
+  ))
+  return distance <= site.geofenceRadius
 }
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local before enabling NFC verification.' }, { status: 503 })
   }
 
-  const organizationId = await resolveActiveOrganizationId()
-  if (!organizationId) {
-    return NextResponse.json({ error: 'No active organization. Create or join an organization before scanning tags.' }, { status: 403 })
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch (cause) {
+    if (cause instanceof SyntaxError) return NextResponse.json({ error: 'Request body must be valid JSON.' }, { status: 400 })
+    throw cause
   }
+  const parsed = scanSchema.safeParse(body)
+  if (!parsed.success) return NextResponse.json({ error: 'Provide a scan type, registered token, and valid phone location.' }, { status: 400 })
 
-  const body = await request.json()
-  const action = String(body.type ?? 'attendance')
-  const rawToken = String(body.token ?? '').trim()
-
-  if (!rawToken) {
-    return NextResponse.json({ error: 'A registered NFC token is required.' }, { status: 400 })
+  const session = await getActiveOrganization()
+  let currentUser: { userId: string; organizationId: string } | null = null
+  if (session?.organizationId) {
+    currentUser = { userId: session.userId, organizationId: session.organizationId }
+  } else if (parsed.data.code) {
+    const organization = await organizationForGuardAppCode(parsed.data.code)
+    if (!organization) return NextResponse.json({ error: 'That guard app code is not recognised. Ask your supervisor for the current code.' }, { status: 401 })
+    const ownerId = await ownerUserId(organization.id)
+    if (!ownerId) return NextResponse.json({ error: 'This organization has no administrator to record scans against.' }, { status: 403 })
+    currentUser = { userId: ownerId, organizationId: organization.id }
   }
+  if (!currentUser) return NextResponse.json({ error: 'Enter your company guard app code, or sign in, before scanning a guard tag.' }, { status: 401 })
 
-  const token = rawToken.replace(/^nfc:/i, '').trim()
+  const { type, latitude, longitude } = parsed.data
+  const token = parsed.data.token.replace(/^nfc:/i, '').trim()
+  // A guard signed in with their own login can only act as their linked guard record.
+  const linkedGuardId = session?.organizationId && currentUser.userId === session.userId && (await memberRole(currentUser.organizationId, currentUser.userId)) === 'guard'
+    ? (await db.select({ id: guards.id }).from(guards).where(and(eq(guards.organizationId, currentUser.organizationId), eq(guards.loginUserId, currentUser.userId))).limit(1))[0]?.id ?? 'none'
+    : null
+  if (!token && !linkedGuardId) return NextResponse.json({ error: 'Tap your NFC tag or type its code to continue.' }, { status: 400 })
+
   const [guard] = await db
     .select()
     .from(guards)
-    .where(and(eq(guards.organizationId, organizationId), eq(guards.nfcToken, token)))
+    .where(and(
+      eq(guards.organizationId, currentUser.organizationId),
+      linkedGuardId && !token ? eq(guards.id, linkedGuardId) : eq(guards.nfcToken, token),
+    ))
     .limit(1)
 
   if (!guard) {
-    return NextResponse.json({ error: 'This NFC token is not registered for your active organization.' }, { status: 404 })
+    return NextResponse.json({ error: 'This NFC tag is not registered for your company.' }, { status: 404 })
   }
-  if (guard.status === 'suspended') {
-    return NextResponse.json({ error: `${guard.name} is suspended and cannot check in or patrol.` }, { status: 403 })
+  if (linkedGuardId && guard.id !== linkedGuardId) return NextResponse.json({ error: 'This tag belongs to another guard. Use your own tag.' }, { status: 403 })
+  if (guard.status === 'suspended') return NextResponse.json({ error: `${guard.name} is suspended and cannot check in or patrol.` }, { status: 403 })
+
+  if (type === 'sos') {
+    await raiseAlert({ userId: currentUser.userId, organizationId: currentUser.organizationId, type: 'sos', title: 'SOS activated', body: `${guard.name} at ${guard.site ?? 'an unassigned site'} needs help (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`, severity: 'critical', key: `sos:${guard.id}:${Math.floor(Date.now() / 60000)}` })
+    await db.update(guards).set({ lastLatitude: latitude, lastLongitude: longitude }).where(eq(guards.id, guard.id))
+    return NextResponse.json({ ok: true, action: 'sos', guardId: guard.id, guardName: guard.name, message: 'SOS sent. Your supervisor has been alerted.' })
   }
 
+  const site = guard.site
+    ? (await db.select().from(sites).where(and(
+      eq(sites.organizationId, currentUser.organizationId),
+      eq(sites.name, guard.site),
+      eq(sites.status, 'active'),
+    )).limit(1))[0]
+    : undefined
+  if (!site) {
+    return NextResponse.json({ error: 'This guard has no active assigned site. Assign the guard to an active site before scanning.' }, { status: 409 })
+  }
+  const withinBounds = isWithinSite(latitude, longitude, site)
   const now = new Date()
-  const latitude = body.latitude != null && Number.isFinite(Number(body.latitude)) ? Number(body.latitude) : null
-  const longitude = body.longitude != null && Number.isFinite(Number(body.longitude)) ? Number(body.longitude) : null
-  const [site] = guard.site ? await db.select().from(sites).where(and(eq(sites.organizationId, organizationId), eq(sites.name, guard.site))).limit(1) : []
-  const siteId = site?.id ?? null
-  const inside = site && latitude !== null && longitude !== null ? distanceMetres(latitude, longitude, site.latitude, site.longitude) <= site.geofenceRadius : true
-  const guardInfo = { id: guard.id, name: guard.name, photoUrl: guard.photoUrl, site: guard.site }
+  const siteId = site.id
 
-  if (action === 'sos') {
-    await db.insert(alerts).values({ userId: session.user.id, organizationId, type: 'sos', title: 'SOS activated', body: `${guard.name} at ${guard.site ?? 'unassigned site'} needs help${latitude !== null ? ` (${latitude.toFixed(5)}, ${longitude?.toFixed(5)})` : ''}`, severity: 'critical', acknowledged: false, createdAt: now })
-    return NextResponse.json({ ok: true, action: 'sos', guard: guardInfo, message: 'SOS sent. Your supervisor has been alerted.' })
-  }
+  if (type === 'attendance') {
+    const [activeAttendance] = await db
+      .select()
+      .from(attendance)
+      .where(and(
+        eq(attendance.organizationId, currentUser.organizationId),
+        eq(attendance.guardId, guard.id),
+        isNull(attendance.checkedOutAt),
+      ))
+      .orderBy(desc(attendance.checkedInAt))
+      .limit(1)
 
-  if (action === 'attendance') {
+    if (activeAttendance) {
+      await db.update(attendance)
+        .set({ checkedOutAt: now })
+        .where(eq(attendance.id, activeAttendance.id))
+
+      return NextResponse.json({
+        ok: true,
+        status: await todayStatus(currentUser.organizationId, guard.id),
+        action: 'attendance',
+        checkedIn: false,
+        guardId: guard.id,
+        guardName: guard.name,
+        siteName: site?.name ?? null,
+        withinBounds,
+        message: `Checked out ${guard.name}${site ? ` at ${site.name}` : ''}.`,
+      })
+    }
+
     const [record] = await db.insert(attendance).values({
-      userId: session.user.id,
-      organizationId,
+      userId: currentUser.userId,
+      organizationId: currentUser.organizationId,
       guardId: guard.id,
       siteId,
       checkedInAt: now,
-      latitude: latitude ?? 0,
-      longitude: longitude ?? 0,
+      latitude,
+      longitude,
       method: 'nfc',
-      withinGeofence: inside,
-      reviewStatus: inside ? 'approved' : 'flagged',
+      withinGeofence: withinBounds,
       createdAt: now,
     }).returning()
 
-    await db.update(guards).set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude }).where(eq(guards.id, guard.id))
-    if (!inside) await db.insert(alerts).values({ userId: session.user.id, organizationId, type: 'geofence', title: 'Outside geofence', body: `${guard.name} checked in outside ${guard.site}`, severity: 'high', acknowledged: false, createdAt: now })
+    await db.update(guards)
+      .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude })
+      .where(eq(guards.id, guard.id))
+    if (!withinBounds) await raiseAlert({ userId: currentUser.userId, organizationId: currentUser.organizationId, type: 'geofence', title: 'Outside geofence', body: `${guard.name} checked in outside ${site.name}`, severity: 'high', key: `geofence:${record.id}` })
 
     return NextResponse.json({
       ok: true,
+      status: await todayStatus(currentUser.organizationId, guard.id),
       action: 'attendance',
-      guard: guardInfo,
-      inside,
-      message: inside ? `Attendance recorded for ${guard.name}.` : `Attendance recorded for ${guard.name}, but outside the site geofence. It was flagged for review.`,
+      checkedIn: true,
+      guardId: guard.id,
+      guardName: guard.name,
+      siteName: site?.name ?? null,
+      withinBounds,
+      message: `Checked in ${guard.name}${site ? ` at ${site.name}` : ''}.`,
       record,
     })
   }
 
-  // Patrol: one patrol per guard per day. Signing the 10:00, 11:00 and 12:00 checkpoints completes it.
-  const parts = lagosParts(now)
-  const slot = slotForHour(parts.hour)
-  if (!slot) return NextResponse.json({ error: 'Patrol checkpoints can only be signed between 09:00 and 12:59.' }, { status: 400 })
+  const lagos = lagosParts(now)
+  const [organization] = await db.select({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour })
+    .from(organizations).where(eq(organizations.id, currentUser.organizationId)).limit(1)
+  const shift = normalizeShift(organization?.startHour, organization?.endHour)
+  const slots = patrolSlots(shift)
+  const slot = slotForHour(lagos.hour, shift)
+  if (!slot) return NextResponse.json({ error: `Patrol checkpoints can only be signed between ${String(shift.startHour).padStart(2, '0')}:00 and ${String(shift.endHour - 1).padStart(2, '0')}:59 Lagos time. Ask your supervisor to change the patrol shift in Settings.` }, { status: 409 })
 
-  let [patrol] = await db.select().from(patrols).where(and(eq(patrols.organizationId, organizationId), eq(patrols.guardId, guard.id), eq(patrols.patrolDate, parts.date))).limit(1)
+  let [patrol] = await db.select().from(patrols).where(and(
+    eq(patrols.organizationId, currentUser.organizationId),
+    eq(patrols.guardId, guard.id),
+    eq(patrols.patrolDate, lagos.date),
+  )).limit(1)
   if (!patrol) {
     ;[patrol] = await db.insert(patrols).values({
-      userId: session.user.id, organizationId, guardId: guard.id, siteId, loggedAt: now, latitude: latitude ?? 0, longitude: longitude ?? 0,
-      method: 'nfc', withinBounds: inside, routeName: 'Daily patrol', checkpoint: slot, progress: 0, status: 'in_progress', patrolDate: parts.date, createdAt: now,
-    }).returning()
+      userId: currentUser.userId,
+      organizationId: currentUser.organizationId,
+      guardId: guard.id,
+      siteId,
+      loggedAt: now,
+      patrolDate: lagos.date,
+      latitude,
+      longitude,
+      method: 'nfc',
+      withinBounds,
+      createdAt: now,
+    }).onConflictDoNothing().returning()
+    if (!patrol) {
+      ;[patrol] = await db.select().from(patrols).where(and(
+        eq(patrols.organizationId, currentUser.organizationId),
+        eq(patrols.guardId, guard.id),
+        eq(patrols.patrolDate, lagos.date),
+      )).limit(1)
+    }
   }
-  const inserted = await db.insert(patrolCheckpoints).values({ userId: session.user.id, organizationId, patrolId: patrol.id, guardId: guard.id, slot, signedAt: now, latitude, longitude }).onConflictDoNothing().returning()
-  if (inserted.length === 0) return NextResponse.json({ error: `${slot} checkpoint is already signed for ${guard.name}.` }, { status: 409 })
+  if (!patrol) return NextResponse.json({ error: 'Could not open today’s patrol record.' }, { status: 500 })
 
-  const signed = (await db.select().from(patrolCheckpoints).where(eq(patrolCheckpoints.patrolId, patrol.id))).length
-  const complete = signed >= PATROL_SLOTS.length
-  const [record] = await db.update(patrols).set({ progress: Math.round((signed / PATROL_SLOTS.length) * 100), status: complete ? 'completed' : 'in_progress', checkpoint: slot }).where(eq(patrols.id, patrol.id)).returning()
+  const [checkpoint] = await db.insert(patrolCheckpoints).values({
+    userId: currentUser.userId,
+    organizationId: currentUser.organizationId,
+    patrolId: patrol.id,
+    slot,
+    signedAt: now,
+  }).onConflictDoNothing().returning()
+  if (!checkpoint) return NextResponse.json({ error: `The ${slot} checkpoint has already been signed today.` }, { status: 409 })
+
+  const checkpointRows = await db.select({ id: patrolCheckpoints.id }).from(patrolCheckpoints).where(and(
+    eq(patrolCheckpoints.organizationId, currentUser.organizationId),
+    eq(patrolCheckpoints.patrolId, patrol.id),
+  ))
+  const signedCount = checkpointRows.length
+  await db.update(patrols).set({
+    progress: Math.round((signedCount / Math.max(slots.length, 1)) * 100),
+    status: signedCount >= slots.length ? 'completed' : 'in_progress',
+  }).where(eq(patrols.id, patrol.id))
+  const [todayPatrols] = await db.select({ total: count() })
+    .from(patrolCheckpoints)
+    .innerJoin(patrols, eq(patrolCheckpoints.patrolId, patrols.id))
+    .where(and(
+      eq(patrolCheckpoints.organizationId, currentUser.organizationId),
+      eq(patrols.guardId, guard.id),
+      eq(patrols.patrolDate, lagos.date),
+    ))
 
   return NextResponse.json({
     ok: true,
+    status: await todayStatus(currentUser.organizationId, guard.id),
     action: 'patrol',
-    guard: guardInfo,
-    slot,
-    signed,
-    total: PATROL_SLOTS.length,
-    complete,
-    message: complete ? `${slot} signed. Patrol complete for ${guard.name} (${signed} of ${PATROL_SLOTS.length}).` : `${slot} checkpoint signed for ${guard.name} (${signed} of ${PATROL_SLOTS.length}).`,
-    record,
+    checkedIn: true,
+    guardId: guard.id,
+    guardName: guard.name,
+    siteName: site?.name ?? null,
+    withinBounds,
+    checkpoint: slot,
+    patrolCount: Number(todayPatrols?.total ?? 0),
+    message: `Patrol checkpoint recorded for ${guard.name}${site ? ` at ${site.name}` : ''}.`,
+    record: patrol,
   })
 }

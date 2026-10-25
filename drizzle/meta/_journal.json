@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1792319769802,
+      "tag": "0000_bizarre_blizzard",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792320388575,
+      "tag": "0001_wealthy_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792322286761,
+      "tag": "0002_motionless_kingpin",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792327317717,
+      "tag": "0003_ancient_forgotten_one",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792407640265,
+      "tag": "0004_clammy_the_captain",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792572509121,
+      "tag": "0005_massive_preak",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792584332236,
+      "tag": "0006_freezing_sersi",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792597733233,
+      "tag": "0007_rare_blue_shield",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792602500950,
+      "tag": "0008_dark_triton",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792717427067,
+      "tag": "0009_lowly_magma",
+      "breakpoints": true
+    }
+  ]
+}

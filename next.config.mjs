@@ -10,7 +10,10 @@ const security = [
 
 const nextConfig = {
   poweredByHeader: false,
-  images: { unoptimized: true },
+  allowedDevOrigins: ['192.168.1.156', 'DESKTOP-N1SDAHP'],
+  images: {
+    unoptimized: true,
+  },
   async headers() { return [{ source: '/:path*', headers: security }] },
 }
 

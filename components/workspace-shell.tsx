@@ -4,17 +4,18 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
+  Activity, Bell, Map as MapIcon, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
   Search, Settings, Sparkles, Users, Wallet, X,
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { Logo, Wordmark } from '@/components/brand'
 import { Avatar } from '@/components/ui-bits'
 
-const navigation = [
+const allNavigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
   { label: 'Guards', href: '/guards', icon: Users },
   { label: 'Sites', href: '/sites', icon: MapPin },
+  { label: 'Live map', href: '/map', icon: MapIcon },
   { label: 'Attendance', href: '/attendance', icon: Clock3 },
   { label: 'Patrols', href: '/patrols', icon: Route },
   { label: 'Incidents', href: '/incidents', icon: FileText },
@@ -38,6 +39,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   const organization = authClient.useActiveOrganization()
   const [more, setMore] = useState(false)
   const [unread, setUnread] = useState(0)
+  const [role, setRole] = useState<string | null>(null)
+  const [perms, setPerms] = useState<Record<string, boolean>>({})
   const search = useRef<HTMLInputElement>(null)
   const user = session.data?.user
 
@@ -52,11 +55,17 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     else if (!(session.data.session as { activeOrganizationId?: string | null }).activeOrganizationId) router.replace('/onboarding')
   }, [session.isPending, session.data, router])
   useEffect(() => {
+    if (session.isPending || !session.data?.user) return
+    fetch('/api/me', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).then((me: { role: string; permissions: Record<string, boolean> } | null) => { if (me) { setRole(me.role); setPerms(me.permissions); if (me.role === 'guard') router.replace('/guard-app') } }).catch(() => undefined)
+  }, [session.isPending, session.data, router])
+  useEffect(() => {
+    if (role === 'guard') return
     let live = true
     const load = () => fetch('/api/operations?section=alerts', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).then((rows: { acknowledged: boolean }[]) => { if (live) setUnread(rows.filter((row) => !row.acknowledged).length) }).catch(() => undefined)
     void load(); const timer = window.setInterval(load, 20000); return () => { live = false; window.clearInterval(timer) }
   }, [pathname])
 
+  const navigation = allNavigation.filter((item) => !(item.label === 'Finance' && role !== null && perms.viewFinance === false))
   const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
   function runSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -65,6 +74,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     router.push(page ? page.href : `/guards?q=${encodeURIComponent(query)}`)
   }
   async function signOut() { await authClient.signOut(); router.push('/sign-in'); router.refresh() }
+
+  if (role === 'guard') return <div className="flex min-h-screen items-center justify-center bg-[#F5F5F6] text-xs text-zinc-500">Opening the guard app…</div>
 
   return (
     <div className="workspace-theme min-h-screen bg-[#F5F5F6] text-[#18181B]">
@@ -130,8 +141,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   )
 }
 
-export function PageHeader({ title, subtitle, action, children }: { title: string; subtitle: string; action?: React.ReactNode; children?: React.ReactNode }) {
-  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h1 className="text-[24px] font-normal leading-tight tracking-[-0.02em] sm:text-[28px]">{title}</h1><p className="mt-1 text-[13px] text-[#6B6B72]">{subtitle}</p></div><div className="flex flex-wrap items-center gap-2">{children}{action}</div></header>
+export function PageHeader({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: React.ReactNode; children?: React.ReactNode }) {
+  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h1 className="text-[24px] font-normal leading-tight tracking-[-0.02em] sm:text-[28px]">{title}</h1>{subtitle && <p className="mt-1 text-[13px] text-[#6B6B72]">{subtitle}</p>}</div><div className="flex flex-wrap items-center gap-2">{children}{action}</div></header>
 }
 
 export function PageAction({ children, primary = false, href, onClick }: { children: React.ReactNode; primary?: boolean; href?: string; onClick?: () => void }) {

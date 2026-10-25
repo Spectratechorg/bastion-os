@@ -1,19 +1,18 @@
-export const PENSION_RATE = 0.08 // employee contribution, 8% of monthly salary
-
-export type PayrollInput = { baseSalary: number; daysInMonth: number; daysCounted: number; daysPresent: number }
+export type PayrollInput = { baseSalary: number; daysInMonth: number; daysCounted: number; daysPresent: number; prorated: boolean }
 
 /**
- * Pay = base salary - (daily rate x days absent) - pension. There is no overtime.
- * Days absent are the counted days (from the guard's start date up to today, or month end)
- * on which the guard has no attendance record.
+ * Whole-month guards earn the full monthly salary minus a day's pay per uncounted day.
+ * Guards who joined during the month earn only the days since they joined (pro-rata).
+ * There is no overtime or pension deduction.
  */
-export function computePayroll({ baseSalary, daysInMonth, daysCounted, daysPresent }: PayrollInput) {
+export function computePayroll({ baseSalary, daysInMonth, daysCounted, daysPresent, prorated }: PayrollInput) {
+  const dailyRate = baseSalary / daysInMonth
   const present = Math.min(daysPresent, daysCounted)
   const daysAbsent = Math.max(daysCounted - present, 0)
-  const absenceDeduction = Math.round((baseSalary / daysInMonth) * daysAbsent)
-  const pension = Math.round(baseSalary * PENSION_RATE)
-  const netPay = Math.max(baseSalary - absenceDeduction - pension, 0)
-  return { daysPresent: present, daysAbsent, absenceDeduction, pension, netPay }
+  const basePay = prorated ? Math.round(dailyRate * daysCounted) : baseSalary
+  const absenceDeduction = Math.round(dailyRate * daysAbsent)
+  const netPay = Math.max(basePay - absenceDeduction, 0)
+  return { daysPresent: present, daysAbsent, absenceDeduction, basePay, netPay }
 }
 
 export function monthBounds(period: string) {

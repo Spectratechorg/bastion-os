@@ -1,29 +1,50 @@
-import { headers } from 'next/headers'
+import { and, eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
-import { pool } from '@/lib/db'
+import { getActiveOrganization } from '@/lib/auth/organization'
+import { db } from '@/lib/db'
+import { members, rolePermissions } from '@/lib/db/schema'
+import { DEFAULT_PERMISSIONS, type PermissionKey } from '@/lib/permissions'
 
-export type Actor = { userId: string; organizationId: string }
+export type Actor = { userId: string; organizationId: string; role: string }
 
-/** Signed-in user plus their active organization, or null. */
+export const ROLES = ['owner', 'admin', 'moderator', 'member', 'guard'] as const
+
+/** Highest-privilege role the user holds in the organization, or null when they are not a member. */
+export async function memberRole(organizationId: string, userId: string): Promise<string | null> {
+  const [membership] = await db.select({ role: members.role }).from(members).where(and(eq(members.organizationId, organizationId), eq(members.userId, userId))).limit(1)
+  if (!membership) return null
+  const held = membership.role.split(',').map((role) => role.trim()).filter(Boolean)
+  return ROLES.find((role) => held.includes(role)) ?? held[0] ?? 'member'
+}
+
+/** Signed-in user plus their active organization and role, or null. */
 export async function actor(): Promise<Actor | null> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  const organizationId = (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId
-  return session?.user && organizationId ? { userId: session.user.id, organizationId } : null
+  const current = await getActiveOrganization()
+  if (!current?.organizationId) return null
+  const role = await memberRole(current.organizationId, current.userId)
+  return role ? { userId: current.userId, organizationId: current.organizationId, role } : null
 }
 
 export const fail = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-/** Only owners, admins and moderators may approve payroll. */
-export async function isModerator(current: Actor) {
-  try {
-    const result = await pool.query('select role from member where "organizationId" = $1 and "userId" = $2 limit 1', [current.organizationId, current.userId])
-    const roles = String(result.rows[0]?.role ?? '').split(',').map((role) => role.trim())
-    return roles.some((role) => ['owner', 'admin', 'moderator'].includes(role))
-  } catch {
-    return false
-  }
+/** Guards are limited to the guard app. Returns an error response for them, otherwise null. */
+export const denyGuard = (current: Actor) => (current.role === 'guard' ? fail('Guard accounts can only use the guard app.', 403) : null)
+/** Only owners and administrators manage people and roles. */
+export const isAdminRole = (role: string) => role === 'owner' || role === 'admin'
+
+/** Permission switches for a role: built-in defaults overridden by the organization's saved settings. */
+export async function permissionsFor(organizationId: string, role: string) {
+  const base = { ...(DEFAULT_PERMISSIONS[role] ?? DEFAULT_PERMISSIONS.member) }
+  if (role === 'owner' || role === 'guard') return base
+  const rows = await db.select({ permission: rolePermissions.permission, allowed: rolePermissions.allowed }).from(rolePermissions)
+    .where(and(eq(rolePermissions.organizationId, organizationId), eq(rolePermissions.role, role)))
+  for (const row of rows) if (row.permission in base) base[row.permission as PermissionKey] = row.allowed
+  return base
 }
+export async function can(current: Actor, permission: PermissionKey) { return (await permissionsFor(current.organizationId, current.role))[permission] }
+
+/** Approving payroll and other sensitive actions follow the "runPayroll" switch. */
+export async function isModerator(current: Actor) { return can(current, 'runPayroll') }
 
 const zone = 'Africa/Lagos'
 /** Date (YYYY-MM-DD) and hour in Lagos time. */
@@ -32,7 +53,7 @@ export function lagosParts(date = new Date()) {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour), month: `${parts.year}-${parts.month}` }
 }
 
-export { PATROL_SLOTS, PATROL_WINDOW, slotForHour } from '@/lib/server-rules'
+export { patrolSlots, DEFAULT_SHIFT, normalizeShift, slotForHour } from '@/lib/server-rules'
 
 export function distanceMetres(lat1: number, lon1: number, lat2: number, lon2: number) {
   const rad = (value: number) => (value * Math.PI) / 180
