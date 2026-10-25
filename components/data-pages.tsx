@@ -5,6 +5,7 @@ import { Download, Plus, RefreshCw, Search } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { photoToDataUrl } from '@/lib/client'
 import { ContractSummary, FinanceTabs, InventoryTab } from '@/components/finance-extra'
+import { Badge } from '@/components/ui-bits'
 
 type ClientRecord = {
   id: string
@@ -333,7 +334,16 @@ export function FinanceDataPage({ tab }: { tab: string }) {
       <button onClick={() => { setEditingId(null); setForm(emptyForm(defaultKind[page] ?? 'revenue')); setOpen(!open) }} className="inline-flex h-10 items-center gap-2 rounded-[10px] bg-[#2A2B2E] px-3.5 text-xs font-semibold text-white"><Plus className="size-3.5" />Add record</button>
     </PageHeader>
     <FinanceTabs active={page} />
-    {page === 'overview' && <ContractSummary />}
+    {page === 'overview' && <>
+      <ContractSummary />
+      <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        {[[money(inflow), 'Revenue', 'This period'], [money(outflow), 'Operating costs', 'Recorded expenses'], [money(inflow - outflow), 'Net position', 'Revenue less costs'], [money(unsettled), 'Receivables', 'Outstanding'], [money(statement.income), 'Client income', statementMonth], [money(statement.cost), 'Client costs', statementMonth]].map(([value, label, note]) => <article key={label} className="rounded-2xl border border-zinc-200 bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{label}</p><p className="mt-2 font-mono text-lg font-semibold tracking-tight">{value}</p><p className="mt-1 text-[11px] text-zinc-500">{note}</p></article>)}
+      </section>
+      <section className="mb-5 grid gap-4 xl:grid-cols-[1.65fr_1fr]">
+        <article className="rounded-2xl border border-zinc-200 bg-white p-5"><div className="flex items-start justify-between"><div><h2 className="text-sm font-semibold">Revenue vs costs</h2><p className="mt-1 text-[11px] text-zinc-500">Live finance records grouped by type.</p></div><Badge value={`${filtered.length} records`} /></div><div className="mt-6 flex h-44 items-end gap-2 border-b border-zinc-100 px-2">{filtered.slice(0, 12).reverse().map((row) => <div key={row.id} className="flex min-w-0 flex-1 flex-col items-center justify-end gap-1" title={`${row.label}: ${money(Number(row.amount))}`}><div className={`w-full max-w-8 rounded-t-md ${moneyIn.includes(row.kind) ? 'bg-[#2A2B2E]' : 'bg-zinc-300'}`} style={{ height: `${Math.max(10, Math.min(100, Number(row.amount) / Math.max(inflow, outflow, 1) * 100))}%` }} /><span className="w-full truncate text-center text-[9px] text-zinc-400">{row.label}</span></div>)}</div><div className="mt-3 flex gap-4 text-[10px] text-zinc-500"><span><i className="mr-1 inline-block size-2 rounded-full bg-[#2A2B2E]" />Revenue</span><span><i className="mr-1 inline-block size-2 rounded-full bg-zinc-300" />Costs</span></div></article>
+        <article className="rounded-2xl border border-zinc-200 bg-white p-5"><h2 className="text-sm font-semibold">Cash position</h2><p className="mt-1 text-[11px] text-zinc-500">Current recorded inflow and outflow.</p><div className="mt-7 flex items-center justify-center"><div className="flex size-36 items-center justify-center rounded-full" style={{ background: `conic-gradient(#2A2B2E ${Math.min(100, inflow ? outflow / inflow * 100 : 0)}%, #E4E4E7 0)` }}><div className="flex size-24 flex-col items-center justify-center rounded-full bg-white"><b className="font-mono text-lg">{money(inflow - outflow)}</b><span className="text-[10px] text-zinc-500">net</span></div></div></div><div className="mt-5 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-4 text-xs"><span className="text-zinc-500">Money in <b className="float-right font-mono text-zinc-900">{money(inflow)}</b></span><span className="text-zinc-500">Money out <b className="float-right font-mono text-zinc-900">{money(outflow)}</b></span></div></article>
+      </section>
+    </>}
     {page === 'inventory' && <><h2 className="mb-2 text-sm font-semibold">Stock on hand</h2><InventoryTab /><h2 className="mb-2 mt-6 text-sm font-semibold">Inventory purchases and costs</h2></>}
     <StatStrip stats={[[String(filtered.length), 'Records'], [money(inflow), 'Money in'], [money(outflow), 'Money out'], [money(unsettled), 'Unsettled']]} />
     {page === 'overview' && <section className="mb-5 overflow-hidden rounded-[18px] border border-zinc-200 bg-white">

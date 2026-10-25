@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import 'leaflet/dist/leaflet.css'
 
 type Site = { id: string; name: string; latitude: number; longitude: number; geofenceRadius: number; dangerLevel: string; status: string }
-type Guard = { id: string; name: string; site: string | null; status: string; lastCheckIn: string | null; lastLatitude: number | null; lastLongitude: number | null }
+type Guard = { id: string; name: string; site: string | null; status: string; photoUrl?: string | null; lastCheckIn: string | null; lastLatitude: number | null; lastLongitude: number | null }
 
 const risk: Record<string, string> = { low: '#16A34A', medium: '#D97706', high: '#DC2626' }
 const TILES = process.env.NEXT_PUBLIC_MAP_TILES_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -55,8 +55,9 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
       if (fresh) points.push(at)
       const when = new Date(guard.lastCheckIn).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
       const initials = guard.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+      const photo = guard.photoUrl ? `<img src="${esc(guard.photoUrl)}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%" />` : initials
       const chosen = guard.id === selectedGuardId
-      const icon = L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], html: `<div style="width:34px;height:34px;border-radius:50%;background:${fresh ? '#2A2B2E' : '#A1A1AA'};color:#fff;border:${chosen ? '3px solid #16A34A' : '2px solid #fff'};box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font:600 11px system-ui">${esc(initials)}</div>` })
+      const icon = L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], html: `<div style="width:34px;height:34px;border-radius:50%;background:${fresh ? '#2A2B2E' : '#A1A1AA'};color:#fff;border:${chosen ? '3px solid #16A34A' : '2px solid #fff'};box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font:600 11px system-ui">${photo}</div>` })
       const marker = L.marker(at, { icon, title: guard.name }).bindPopup(`<b>${esc(guard.name)}</b><br>${esc(guard.site ?? 'Unassigned')}<br>Last checked in ${when}<br><span style="color:#71717A">${fresh ? 'On the map as of their last scan' : 'Older than 12 hours'}</span>`).addTo(s.layer)
       if (chosen && !s.opened.has(guard.id)) { s.opened.add(guard.id); marker.openPopup() }
     }
@@ -70,5 +71,5 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
     else if (!s.fitted && points.length) { s.map.fitBounds(L.latLngBounds(points).pad(0.3), { maxZoom: 16 }); s.fitted = true }
   }
 
-  return <div ref={box} role="application" aria-label="Live map of sites and guards" className={`relative z-0 w-full ${height} [&_.leaflet-tile-pane]:grayscale`} />
+  return <div ref={box} role="application" aria-label="Live map of sites and guards" className={`relative z-0 w-full ${height}`} />
 }
