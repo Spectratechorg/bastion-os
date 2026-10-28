@@ -8,6 +8,7 @@ import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { api, when } from '@/lib/client'
 import { GuardMetrics } from '@/components/guard-metrics'
+import { WriteTagButton } from '@/components/write-tag-button'
 import { ALERT_RULES } from '@/lib/alerts-client'
 
 export type Section = 'guards' | 'sites' | 'attendance' | 'incidents' | 'alerts'
@@ -15,7 +16,7 @@ type Row = Record<string, any> & { id: string } // eslint-disable-line @typescri
 type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void }
 type Column = { head: string; cell: (row: Row, ctx: Ctx) => ReactNode }
 
-const guardName = (ctx: Ctx, id: string) => ctx.guards.find((guard) => guard.id === id)?.name ?? 'Unknown guard'
+const guardName = (ctx: Ctx, id: string) => ctx.guards.find((guard) => guard.id === id)?.name ?? 'Former guard'
 const siteName = (ctx: Ctx, id: string | null) => ctx.sites.find((site) => site.id === id)?.name ?? '—'
 
 const meta: Record<Section, { title: string; subtitle: string; search: string; columns: Column[]; stats: (rows: Row[]) => [string, string][]; addLabel?: string }> = {
@@ -203,7 +204,7 @@ export function RecordsPage({ section }: { section: Section }) {
       setRecords(main); setGuards(g ?? main); setSites(s ?? main); setError('')
     } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load records.') } finally { setLoading(false) }
   }, [section])
-  useEffect(() => { setLoading(true); setFilter('all'); void load(); const timer = window.setInterval(() => void load(), 15000); return () => window.clearInterval(timer) }, [load])
+  useEffect(() => { setLoading(true); setFilter('all'); void load(); const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
   useEffect(() => { const q = new URLSearchParams(window.location.search).get('q'); if (q) setQuery(q) }, [])
 
   const ctx: Ctx = useMemo(() => ({
@@ -264,7 +265,7 @@ export function RecordsPage({ section }: { section: Section }) {
     {dialog?.kind === 'detail' && dialog.row && <IncidentDetail row={records.find((r) => r.id === dialog.row?.id) ?? dialog.row} close={() => setDialog(null)} act={ctx.act} />}
     {dialog?.kind === 'metrics' && dialog.row && <GuardMetrics guard={dialog.row as never} photoUrl={dialog.row.photoUrl} close={() => setDialog(null)} />}
     {dialog?.kind === 'reissue' && dialog.row && <ReissueDialog row={dialog.row} close={() => setDialog(null)} done={(tag) => { setDialog({ kind: 'tag', row: dialog.row, tag }); void load() }} />}
-    {dialog?.kind === 'tag' && dialog.row && <Sheet title="New tag code" kicker={dialog.row.name} onClose={() => setDialog(null)} footer={<button className={btnPrimary} onClick={() => setDialog(null)}>Done</button>}><p className="text-sm">The old tag no longer works. Write this code to the replacement tag, or give it to {dialog.row.name} to type in the guard app:</p><p className="mt-4 rounded-xl bg-zinc-100 p-4 text-center font-mono text-xl font-semibold tracking-wider">{dialog.tag}</p></Sheet>}
+    {dialog?.kind === 'tag' && dialog.row && <Sheet title="New tag code" kicker={dialog.row.name} onClose={() => setDialog(null)} footer={<button className={btnPrimary} onClick={() => setDialog(null)}>Done</button>}><p className="text-sm">The old tag no longer works. Write this code to the replacement tag, or give it to {dialog.row.name} to type in the guard app:</p><p className="mt-4 break-all rounded-xl bg-zinc-100 p-4 text-center font-mono text-sm font-semibold tracking-wide">{dialog.tag}</p>{dialog.tag && <WriteTagButton token={dialog.tag} owner={dialog.row.name} />}</Sheet>}
     {dialog?.kind === 'assign' && dialog.row && <AssignDialog row={dialog.row} guards={guards} close={() => setDialog(null)} act={ctx.act} />}
   </>
 }

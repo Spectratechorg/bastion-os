@@ -6,6 +6,7 @@ import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { ASSIGNABLE_ROLES, EDITABLE_ROLES, PERMISSIONS, ROLE_LABELS } from '@/lib/permissions'
 import { api, when } from '@/lib/client'
+import { GuardAppSettings } from '@/components/guard-app-settings'
 
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -15,23 +16,6 @@ function useSections(names: string[]) {
   useEffect(() => { void load() }, [load])
   return { data, error, load }
 }
-export function ClientsPage() {
-  const { data, error, load } = useSections(['sites', 'guards', 'incidents'])
-  const [open, setOpen] = useState(false); const [siteId, setSiteId] = useState(''); const [client, setClient] = useState(''); const [formError, setFormError] = useState('')
-  const sites = data?.sites ?? []
-  const groups = new Map<string, Row[]>(); for (const s of sites) { const key = s.clientName || 'No client assigned'; groups.set(key, [...(groups.get(key) ?? []), s]) }
-  const list = [...groups.entries()].map(([name, ss]) => { const names = new Set(ss.map((s) => s.name)); return { name, sites: ss.length, guards: (data?.guards ?? []).filter((g) => g.site && names.has(g.site) && g.status === 'active').length, open: (data?.incidents ?? []).filter((i) => names.has(i.site) && i.status !== 'resolved').length, siteList: ss.map((x) => ({ name: x.name as string, guards: (data?.guards ?? []).filter((g) => g.site === x.name && g.status === 'active').length })) } })
-  async function submit(event: FormEvent) { event.preventDefault(); setFormError(''); try { await api('/api/operations', { method: 'PATCH', json: { section: 'sites', id: siteId, action: 'update', clientName: client.trim() || null } }); setOpen(false); setClient(''); setSiteId(''); void load() } catch (e) { setFormError(e instanceof Error ? e.message : 'Unable to save.') } }
-  return <>
-    <PageHeader title="Clients" subtitle="Companies you protect, with their sites, guards and open incidents."><button className={btnPrimary} onClick={() => setOpen(true)} disabled={sites.length === 0}><Plus className="size-4" />Assign client to site</button></PageHeader>
-    <StatStrip stats={[[String(list.filter((c) => c.name !== 'No client assigned').length), 'Clients'], [String(sites.length), 'Sites'], [String(list.reduce((t, c) => t + c.guards, 0)), 'Guards deployed'], [String(list.reduce((t, c) => t + c.open, 0)), 'Open incidents']]} />
-    <ErrorBanner message={error} retry={() => void load()} />
-    <div className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">{!data ? <Spinner /> : list.length === 0 ? <Empty title="No clients yet" text="Add a site, then assign a client to it." /> : <ul className="divide-y divide-zinc-100">{list.map((c) => <li key={c.name} className="p-4 text-xs"><div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:items-center"><b className="col-span-2 text-sm font-semibold sm:col-span-1">{c.name}</b>{([['Sites', c.sites], ['Guards deployed', c.guards], ['Open incidents', c.open]] as const).map(([k, v]) => <div key={k}><span className="block text-[10px] uppercase tracking-wide text-zinc-500">{k}</span><span className="font-mono text-sm">{v}</span></div>)}</div>
-      <ul className="mt-3 flex flex-wrap gap-2">{c.siteList.map((x) => <li key={x.name} className="rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5"><b className="font-semibold">{x.name}</b><span className="ml-1.5 text-zinc-500">{x.guards} guard{x.guards === 1 ? '' : 's'}</span></li>)}</ul></li>)}</ul>}</div>
-    {open && <Sheet title="Assign client to site" kicker="CLIENT" onClose={() => setOpen(false)} footer={<><button className={btn} onClick={() => setOpen(false)}>Cancel</button><button form="client-form" className={btnPrimary} disabled={!siteId}>Save</button></>}><form id="client-form" onSubmit={submit} className="grid gap-4"><ErrorBanner message={formError} /><Field label="Site"><select required className={inputClass} value={siteId} onChange={(e) => { setSiteId(e.target.value); setClient(sites.find((s) => s.id === e.target.value)?.clientName ?? '') }}><option value="">Select a site</option>{sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field><Field label="Client name" hint="Leave empty to remove the client from this site"><input className={inputClass} value={client} onChange={(e) => setClient(e.target.value)} placeholder="e.g. Arbico Plc" /></Field></form></Sheet>}
-  </>
-}
-
 type Summary = { summary?: { clients: number; finance: { revenue: number; costs: number; pending: number } | null }; attendance: { total: number; outside: number; guards: number }; incidents: { total: number; resolved: number; serious: number }; alerts: { total: number; acknowledged: number }; patrols: { total: number; completed: number }; guards: { total: number }; sites: { total: number }; payroll: { total: number | null; net: string | number | null } }
 const lagosDay = (offset = 0) => new Date(Date.now() + offset * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' })
 
@@ -91,7 +75,7 @@ function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: () =
 }
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<'org' | 'team' | 'roles'>('org')
+  const [tab, setTab] = useState<'org' | 'team' | 'roles' | 'guardapp'>('org')
   const [team, setTeam] = useState<TeamData | null>(null); const [matrix, setMatrix] = useState<Matrix | null>(null); const [problem, setProblem] = useState('')
   const [editing, setEditing] = useState<Member | 'new' | null>(null); const [viewing, setViewing] = useState<Member | null>(null)
   const refreshTeam = useCallback(async () => { try { const [t, m] = await Promise.all([api<TeamData>('/api/team'), api<Matrix>('/api/permissions')]); setTeam(t); setMatrix(m); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to load your team.') } }, [])
@@ -102,7 +86,7 @@ export function SettingsPage() {
     setMatrix({ ...matrix, matrix: { ...matrix.matrix, [role]: { ...matrix.matrix[role], [permission]: next } } })
     try { await api('/api/permissions', { method: 'PATCH', json: { role, permission, allowed: next } }); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to save.'); void refreshTeam() }
   }
-  const tabs = [['org', 'Organisation & defaults'], ['team', 'Team members'], ['roles', 'Roles & permissions']] as const
+  const tabs = [['org', 'Organisation & defaults'], ['team', 'Team members'], ['roles', 'Roles & permissions'], ['guardapp', 'Guard app & patrol shift']] as const
   return <>
     <PageHeader title="Settings" subtitle="Your organisation, the defaults new records start with, your team and what each role can do.">{tab === 'team' && team?.canManage && <button className={btnPrimary} onClick={() => setEditing('new')}><Plus className="size-4" />Add user</button>}</PageHeader>
     <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
@@ -110,7 +94,7 @@ export function SettingsPage() {
     <div className="min-w-0">
     <ErrorBanner message={problem} retry={() => void refreshTeam()} />
     {tab === 'org' && <OrgSettings />}
-   
+    {tab === 'guardapp' && <GuardAppSettings />}
     {tab === 'team' && <section className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
       {!team ? <Spinner /> : <ul className="divide-y divide-zinc-100">{team.members.map((m) => <li key={m.id} className="flex flex-wrap items-center gap-3 p-4 text-xs"><button onClick={() => setViewing(m)} aria-label={`Open ${m.name}'s profile`} className="flex min-w-0 flex-1 items-center gap-3 text-left"><Avatar name={m.name} src={m.image} size={36} /><span className="min-w-0 flex-1"><b className="block truncate text-[13px] font-semibold">{m.name}{m.userId === team.me && <span className="ml-1.5 font-normal text-zinc-500">(you)</span>}</b><span className="block truncate text-zinc-500">{m.email}</span></span></button><Badge value={ROLE_LABELS[m.role] ?? m.role} />{team.canManage && <button className={smallBtn} onClick={() => setEditing(m)}>Edit</button>}</li>)}</ul>}
       {team && !team.canManage && <p className="border-t border-zinc-100 p-4 text-[11px] text-zinc-500">Only the owner or an administrator can add or edit people.</p>}

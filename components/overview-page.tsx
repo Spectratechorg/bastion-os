@@ -22,7 +22,7 @@ export function OverviewPage() {
       setD({ guards, sites, attendance, incidents, alerts, activity, patrols, payroll }); setError('')
     } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load the overview.') }
   }, [])
-  useEffect(() => { void load(); const t = window.setInterval(() => void load(), 10000); return () => window.clearInterval(t) }, [load])
+  useEffect(() => { void load(); const t = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(t) }, [load])
 
   async function acknowledge(alert: Row) { try { await api('/api/operations', { method: 'PATCH', json: { section: 'alerts', id: alert.id, action: 'acknowledge' } }); setD((c) => c && { ...c, alerts: c.alerts.map((a) => a.id === alert.id ? { ...a, acknowledged: true } : a) }) } catch (e) { setError(e instanceof Error ? e.message : 'Unable to acknowledge.') } }
 
