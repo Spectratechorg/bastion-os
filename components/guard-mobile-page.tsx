@@ -25,8 +25,37 @@ const TAG_KEY = 'bastion.guardTag'
 const clock = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) : ''
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
-function position(): Promise<{ latitude: number; longitude: number } | null> {
-  return new Promise((resolve) => { if (!navigator.geolocation) return resolve(null); navigator.geolocation.getCurrentPosition((p) => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }), () => resolve(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }) })
+/** Pull the guard code out of whatever the tag holds. Text records carry a status byte plus a language code. */
+function decodeRecord(record: { recordType?: string; data?: DataView | string }): string {
+  const data = record.data
+  if (data === undefined || data === null) return ''
+  if (typeof data === 'string') return data
+  const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+  if (record.recordType === 'text') return new TextDecoder().decode(bytes.subarray(1 + ((bytes[0] ?? 0) & 0x3f)))
+  return new TextDecoder().decode(bytes)
+}
+
+type Fix = { latitude: number; longitude: number }
+
+/** One geolocation attempt. Resolves a reason instead of null so the app can say what went wrong. */
+function attempt(highAccuracy: boolean, timeout: number): Promise<{ fix?: Fix; error?: string }> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve({ error: 'This browser cannot report a location.' })
+    navigator.geolocation.getCurrentPosition(
+      (p) => resolve({ fix: { latitude: p.coords.latitude, longitude: p.coords.longitude } }),
+      (e) => resolve({ error: e.code === e.PERMISSION_DENIED ? 'Location is blocked for this site. Allow Location in Chrome’s site settings, then reload.' : e.code === e.POSITION_UNAVAILABLE ? 'The phone cannot get a GPS fix. Step outside or near a window and try again.' : 'Getting a GPS fix took too long.' }),
+      { enableHighAccuracy: highAccuracy, timeout, maximumAge: 60_000 },
+    )
+  })
+}
+
+/** High accuracy first, then a cheaper attempt. Indoors the precise attempt often times out where the coarse one succeeds. */
+async function locate(): Promise<{ fix?: Fix; error?: string }> {
+  const precise = await attempt(true, 15_000)
+  if (precise.fix) return precise
+  if (precise.error?.startsWith('Location is blocked')) return precise
+  const coarse = await attempt(false, 20_000)
+  return coarse.fix ? coarse : { error: precise.error ?? coarse.error }
 }
 
 /** Guard app. A guard signs in with their own login, or a phone is set up once with the company guard app code. */
@@ -37,12 +66,14 @@ export function GuardMobilePage() {
   const [nfc, setNfc] = useState(false); const [scanning, setScanning] = useState<Action | null>(null); const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState(''); const [error, setError] = useState(''); const [manual, setManual] = useState(false); const [token, setToken] = useState(''); const [manualAction, setManualAction] = useState<Action>('attendance')
   const [receipt, setReceipt] = useState<{ action: Action; guardName: string; siteName: string | null; withinBounds: boolean | null; checkpoint?: string; at: string } | null>(null)
-  const [lastCode, setLastCode] = useState('')
+  const [lastCode, setLastCode] = useState(''); const [stage, setStage] = useState('')
+  const alertRef = useRef<HTMLDivElement>(null)
   const controller = useRef<AbortController | null>(null)
 
   const loadMe = useCallback(() => fetch('/api/guard/me', { cache: 'no-store' }).then(async (r) => { if (!r.ok) { setSignedIn(false); return } setSignedIn(true); setMe(await r.json()) }).catch(() => setSignedIn(false)), [])
   useEffect(() => { void loadMe(); const t = window.setInterval(() => { if (!document.hidden) void loadMe() }, 60000); return () => window.clearInterval(t) }, [loadMe])
   useEffect(() => { setNfc(Boolean(window.NDEFReader && window.isSecureContext)); setCode(window.localStorage.getItem(CODE_KEY) ?? ''); return () => controller.current?.abort() }, [])
+  useEffect(() => { if (error) alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, [error])
 
   const isGuard = me?.role === 'guard'
   const identity: Identity | null = me?.guard ?? local?.who ?? null
@@ -61,11 +92,12 @@ export function GuardMobilePage() {
   function forgetCode() { window.localStorage.removeItem(CODE_KEY); setCode(''); setCompany(''); setLocal(null); setMessage('') }
 
   async function submit(action: Action, tag: string) {
-    setBusy(true); setError(''); setMessage(''); setReceipt(null); setLastCode(tag.trim())
+    setBusy(true); setError(''); setMessage(''); setReceipt(null); setLastCode(tag.trim()); setStage('Getting your location…')
     try {
-      const where = await position()
-      if (!where) throw new Error('Allow location access so your supervisor can confirm you are at your post, then try again.')
-      const response = await fetch('/api/guard/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: action, token: tag, ...where, ...(signedIn ? {} : { code }) }) })
+      const located = await locate()
+      if (!located.fix) throw new Error(located.error ?? 'Your location could not be read. Move near a window and try again.')
+      setStage('Sending…')
+      const response = await fetch('/api/guard/scan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: action, token: tag, ...located.fix, ...(signedIn ? {} : { code }) }) })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error ?? 'Could not verify this tag.')
       if (tag) window.localStorage.setItem(TAG_KEY, tag.trim())
@@ -74,7 +106,7 @@ export function GuardMobilePage() {
       setManual(false); setToken('')
       if (body.status) setLocal({ who: { name: body.guardName, site: body.siteName ?? null, photoUrl: null }, today: body.status })
       if (signedIn) void loadMe()
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not verify this tag.') } finally { setBusy(false) }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not verify this tag.') } finally { setStage(''); setBusy(false) }
   }
 
   async function scan(action: Action) {
@@ -89,21 +121,21 @@ export function GuardMobilePage() {
     const Reader = window.NDEFReader
     if (!Reader) { setManualAction(action); return setManual(true) }
     controller.current?.abort(); const abort = new AbortController(); controller.current = abort
-    setError(''); setMessage(''); setScanning(action)
+    setError(''); setMessage(''); setScanning(action); setStage('Hold the tag flat against the back of the phone…')
     try {
       const reader = new Reader()
       reader.onreading = (event) => {
-        const data = event.message.records.find((record) => record.data)?.data
-        let text = ''
-        if (typeof data === 'string') text = data
-        else if (data) { const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength); text = new TextDecoder().decode(bytes.subarray(1 + ((bytes[0] ?? 0) & 0x3f))) }
-        abort.abort(); setScanning(null); void submit(action, text.trim())
+        const record = event.message.records.find((item) => item.data)
+        const text = record ? decodeRecord(record).trim() : ''
+        abort.abort(); setScanning(null)
+        if (!text) { setStage(''); setError('That tag is blank or holds something other than a guard code. Write it from the guard’s registration page.'); return }
+        setLastCode(text); void submit(action, text)
       }
-      reader.onreadingerror = () => { setError('That tag could not be read. Try again.'); setScanning(null) }
+      reader.onreadingerror = () => { setError('That tag could not be read. Try again.'); setScanning(null); setStage('') }
       await reader.scan({ signal: abort.signal })
-    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) { setError('NFC could not start. Type the tag code instead.'); setManualAction(action); setManual(true) } setScanning(null) }
+    } catch (e) { if (!(e instanceof DOMException && e.name === 'AbortError')) { setError('NFC could not start. Type the tag code instead.'); setManualAction(action); setManual(true) } setScanning(null); setStage('') }
   }
-  const stop = () => { controller.current?.abort(); setScanning(null) }
+  const stop = () => { controller.current?.abort(); setScanning(null); setStage('') }
   const big = 'flex min-h-[60px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-base font-semibold disabled:opacity-60'
 
   const slots = today?.slots ?? []; const signed = today?.signed ?? {}; const signedCount = slots.filter((slot) => signed[slot]).length
@@ -156,7 +188,9 @@ export function GuardMobilePage() {
           {checkedIn && <button className={`${big} mt-3 border border-zinc-300 bg-white`} disabled={busy || scanning !== null} onClick={() => void scan('attendance')}>Check out</button>}
 
           {scanning && <button onClick={stop} className={`${big} mt-3 border border-zinc-300 bg-white`}><X className="size-4" />Cancel</button>}
-          {busy && <p className="mt-3 text-center text-xs text-zinc-500">Checking…</p>}
+          {stage && <p role="status" className="mt-3 rounded-xl border border-zinc-300 bg-white p-3 text-center text-sm font-semibold">{stage}</p>}
+          {!stage && lastCode && !error && <p className="mt-2 text-center text-[10px] text-zinc-500">Last tag read: <span className="font-mono">{lastCode}</span></p>}
+          {busy && !stage && <p className="mt-3 text-center text-xs text-zinc-500">Checking…</p>}
           {message && !busy && <p role="status" className="mt-3 rounded-xl border border-[#16794A]/30 bg-[#E3F4EA] p-3 text-sm text-[#16794A]">{message}</p>}
           {receipt && !busy && <div role="status" className="mt-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{receipt.action === 'attendance' ? 'Attendance recorded' : receipt.action === 'patrol' ? 'Patrol checkpoint recorded' : 'SOS sent'}</p>
@@ -168,7 +202,7 @@ export function GuardMobilePage() {
               <dt className="text-zinc-500">Location</dt><dd className={receipt.withinBounds === false ? 'font-semibold text-[#B42318]' : 'text-[#16794A]'}>{receipt.withinBounds === false ? 'Outside the geofence — supervisor alerted' : 'Inside the site geofence'}</dd>
             </dl>
           </div>}
-          {error && <div role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error && <div ref={alertRef} role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             <p>{error}</p>
             {lastCode && <p className="mt-1.5 border-t border-red-200 pt-1.5 font-mono text-[10px] text-red-800/80">Tag read: {lastCode}</p>}
           </div>}
