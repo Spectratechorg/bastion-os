@@ -105,8 +105,16 @@ export async function POST(request: Request) {
 
   if (!guard) {
     if (!token) return NextResponse.json({ error: 'Tap your NFC tag or type its code to continue.' }, { status: 400 })
+    // The code may belong to a guard in another organization in the same database. Say so, rather than
+    // reporting a plain mismatch, because the fix is completely different (sign in as the right account).
+    const [elsewhere] = await db.select({ id: guards.id }).from(guards).where(eq(guards.nfcToken, token)).limit(1)
+    if (elsewhere) {
+      return NextResponse.json({
+        error: `This tag is registered to a guard in a different organization (code ${token}). Sign in, or enter the guard app code, for the organization that registered this guard.`,
+      }, { status: 409 })
+    }
     return NextResponse.json({
-      error: `No guard in this company has the tag code this tag holds (${token}). Either the guard was deleted after the tag was written, or the tag was replaced. Open Guards, compare the NFC tag column, and write the current code to the tag again.`,
+      error: `No guard anywhere in this database has the tag code this tag holds (${token}). The guard was probably deleted after the tag was written, or the tag was replaced. Open Guards, compare the NFC tag column, and write the current code to the tag again.`,
     }, { status: 404 })
   }
   if (linkedGuardId && guard.id !== linkedGuardId) return NextResponse.json({ error: 'This tag belongs to another guard. Use your own tag.' }, { status: 403 })
