@@ -104,7 +104,10 @@ export async function POST(request: Request) {
     .limit(1)
 
   if (!guard) {
-    return NextResponse.json({ error: 'This NFC tag is not registered for your company.' }, { status: 404 })
+    if (!token) return NextResponse.json({ error: 'Tap your NFC tag or type its code to continue.' }, { status: 400 })
+    return NextResponse.json({
+      error: `No guard in this company has the tag code this tag holds (${token}). Either the guard was deleted after the tag was written, or the tag was replaced. Open Guards, compare the NFC tag column, and write the current code to the tag again.`,
+    }, { status: 404 })
   }
   if (linkedGuardId && guard.id !== linkedGuardId) return NextResponse.json({ error: 'This tag belongs to another guard. Use your own tag.' }, { status: 403 })
   if (guard.status === 'suspended') return NextResponse.json({ error: `${guard.name} is suspended and cannot check in or patrol.` }, { status: 403 })
