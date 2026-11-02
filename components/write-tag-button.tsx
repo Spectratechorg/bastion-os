@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Nfc, RotateCcw } from 'lucide-react'
 import { btn, smallBtn } from '@/components/ui-bits'
+import { decodeTagText, tagHex } from '@/lib/nfc-decode'
 
 /**
  * Web NFC surface we use. Declared locally rather than on `window` because the guard app already
@@ -20,13 +21,6 @@ const reader = () => (window as unknown as { NDEFReader?: new () => NfcDevice })
 /** Web NFC writing needs Chrome on Android over HTTPS (or localhost). Everything else falls back to typing the code. */
 export function canWriteTag() {
   return typeof window !== 'undefined' && Boolean(reader()) && window.isSecureContext
-}
-
-/** Text records carry a status byte plus a language code before the payload. Mirrors the decoder in the guard app. */
-function decodeRecord(data: DataView | string): string {
-  if (typeof data === 'string') return data
-  const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-  return new TextDecoder().decode(bytes.subarray(1 + ((bytes[0] ?? 0) & 0x3f)))
 }
 
 type Status = 'idle' | 'writing' | 'written' | 'checking' | 'verified' | 'mismatch' | 'error'
@@ -77,8 +71,12 @@ export function WriteTagButton({ token, owner }: { token: string; owner?: string
     setStatus('checking'); setDetail('Hold the tag to the back of the phone to verify…')
     try {
       const device = new Reader()
+      let seen: { recordType?: string; data?: DataView | string } | undefined
       const result = new Promise<string>((resolve, reject) => {
-        device.onreading = (event) => resolve(decodeRecord(event.message.records.find((record) => record.data)?.data ?? ''))
+        device.onreading = (event) => {
+          seen = event.message.records.find((item) => item.data !== undefined && item.data !== null)
+          resolve(seen ? decodeTagText(seen) : '')
+        }
         device.onreadingerror = () => reject(new Error('unreadable'))
         controller.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
       })
@@ -86,7 +84,11 @@ export function WriteTagButton({ token, owner }: { token: string; owner?: string
       const read = (await result).trim()
       controller.abort()
       if (read === token.trim()) { setStatus('verified'); setDetail('Verified — the tag holds this guard’s code.') }
-      else { setStatus('mismatch'); setDetail(`This tag holds “${read || 'nothing'}”, not this guard’s code.` ) }
+      else {
+        setStatus('mismatch')
+        const hex = seen ? tagHex(seen) : ''
+        setDetail(`This tag holds “${read || 'nothing'}”, not this guard’s code.${hex ? ` Raw bytes: ${hex}` : ''}`)
+      }
     } catch (cause) {
       controller.abort()
       if (cause instanceof DOMException && cause.name === 'AbortError') return

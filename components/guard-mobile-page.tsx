@@ -7,6 +7,7 @@ import { authClient } from '@/lib/auth-client'
 import { Logo } from '@/components/brand'
 import { Avatar } from '@/components/ui-bits'
 import { NfcDiagnostics } from '@/components/nfc-diagnostics'
+import { decodeTagText as decodeRecord, tagHex } from '@/lib/nfc-decode'
 
 interface NfcReader extends EventTarget {
   onreading: ((event: { message: { records: Array<{ recordType?: string; data?: DataView | string }> } }) => void) | null
@@ -25,16 +26,6 @@ const CODE_KEY = 'bastion.guardCode'
 const TAG_KEY = 'bastion.guardTag'
 const clock = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) : ''
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
-
-/** Pull the guard code out of whatever the tag holds. Text records carry a status byte plus a language code. */
-function decodeRecord(record: { recordType?: string; data?: DataView | string }): string {
-  const data = record.data
-  if (data === undefined || data === null) return ''
-  if (typeof data === 'string') return data
-  const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-  if (record.recordType === 'text') return new TextDecoder().decode(bytes.subarray(1 + ((bytes[0] ?? 0) & 0x3f)))
-  return new TextDecoder().decode(bytes)
-}
 
 type Fix = { latitude: number; longitude: number }
 
@@ -126,10 +117,16 @@ export function GuardMobilePage() {
     try {
       const reader = new Reader()
       reader.onreading = (event) => {
-        const record = event.message.records.find((item) => item.data)
+        const record = event.message.records.find((item) => item.data !== undefined && item.data !== null)
         const text = record ? decodeRecord(record).trim() : ''
+        const hex = record ? tagHex(record) : ''
         abort.abort(); setScanning(null)
-        if (!text) { setStage(''); setError('That tag is blank or holds something other than a guard code. Write it from the guard’s registration page.'); return }
+        if (!text) {
+          setStage('')
+          setLastCode(hex || '(no payload)')
+          setError(`That tag holds no readable guard code. Raw bytes: ${hex || '(nothing)'}. Open NFC diagnostics to see the full record list.`)
+          return
+        }
         setLastCode(text); void submit(action, text)
       }
       reader.onreadingerror = () => { setError('That tag could not be read. Try again.'); setScanning(null); setStage('') }
