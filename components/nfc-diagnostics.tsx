@@ -55,6 +55,10 @@ export function NfcDiagnostics() {
     if (!Reader) return push('cannot scan: NDEFReader is missing')
     abort.current?.abort(); const controller = new AbortController(); abort.current = controller
     setListening(true); push('scan() starting…')
+    const pending = window.setTimeout(() => {
+      push('scan() is STILL PENDING after 10s. Chrome has not granted NFC to this site, so no tag will ever arrive. Open the address-bar site controls (or Chrome → Settings → Site settings) and set NFC to Allow, then try again.')
+      push('Also confirm Android Settings → Connected devices → NFC is on, and that Chrome is allowed to use it.')
+    }, 10_000)
     try {
       const device = new Reader()
       device.onreading = (event) => {
@@ -69,8 +73,10 @@ export function NfcDiagnostics() {
       }
       device.onreadingerror = () => push('readingerror fired: tag seen but unreadable')
       await device.scan({ signal: controller.signal })
+      window.clearTimeout(pending)
       push('scan() accepted. Hold the tag to the phone now.')
     } catch (cause) {
+      window.clearTimeout(pending)
       const name = cause instanceof DOMException || cause instanceof Error ? cause.name : 'Error'
       const message = cause instanceof Error ? cause.message : String(cause)
       push(`scan() FAILED: ${name} — ${message}`)
