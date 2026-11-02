@@ -48,16 +48,28 @@ export function WriteTagButton({ token, owner }: { token: string; owner?: string
 
   const write = useCallback(async () => {
     const Reader = reader(); if (!Reader) return
+    abort.current?.abort(); const controller = new AbortController(); abort.current = controller
     setStatus('writing'); setDetail('')
     try {
-      await new Reader().write({ records: [{ recordType: 'text', data: token }] })
+      await new Reader().write({ records: [{ recordType: 'text', data: token }] }, { signal: controller.signal })
       setStatus('written')
       setDetail('Tag written. Hold it to the phone again to verify it.')
     } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') { setStatus('idle'); setDetail(''); return }
+      const name = cause instanceof DOMException || cause instanceof Error ? cause.name : ''
+      const reason =
+        name === 'NotAllowedError' ? 'Permission was refused, or this tag is read-only or locked.' :
+          name === 'NotSupportedError' ? 'This tag cannot be written; it may be locked or an unsupported type.' :
+            name === 'NotReadableError' ? 'The phone lost contact with the tag part-way through.' :
+              name === 'NetworkError' ? 'The transfer broke part-way through.' :
+                name === 'InvalidStateError' ? 'NFC is switched off on this phone.' :
+                  'The tag could not be written.'
       setStatus('error')
-      setDetail(cause instanceof Error && cause.name === 'NotAllowedError' ? 'NFC permission was denied. Allow NFC for this site and try again.' : 'The tag could not be written. Hold it flat against the back of the phone and try again.')
+      setDetail(`${reason}${name ? ` (${name})` : ''} Hold the tag flat against the back of the phone and try again.`)
     }
   }, [token])
+
+  const cancelWrite = () => { abort.current?.abort(); setStatus('idle'); setDetail('') }
 
   const verify = useCallback(async () => {
     const Reader = reader(); if (!Reader) return
@@ -93,13 +105,15 @@ export function WriteTagButton({ token, owner }: { token: string; owner?: string
 
   return <div className="mt-3">
     <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={() => void write()} disabled={status === 'writing' || status === 'checking'} className={btn}>
-        {showSuccess ? <RotateCcw className="size-3.5" /> : <Nfc className="size-3.5" />}
-        {status === 'writing' ? 'Hold the tag to the phone…' : showSuccess ? 'Write again' : 'Write tag'}
-      </button>
+      {status === 'writing'
+        ? <button type="button" onClick={cancelWrite} className={btn}>Cancel</button>
+        : <button type="button" onClick={() => void write()} disabled={status === 'checking'} className={btn}>
+          {showSuccess ? <RotateCcw className="size-3.5" /> : <Nfc className="size-3.5" />}
+          {showSuccess ? 'Write again' : 'Write tag'}
+        </button>}
       {canVerify && <button type="button" onClick={() => void verify()} disabled={status === 'checking'} className={smallBtn}>{status === 'checking' ? 'Reading…' : 'Verify tag'}</button>}
     </div>
-    {status === 'writing' && <p className="mt-2 text-[11px] text-zinc-600">Hold {owner ? `${owner}’s` : 'the'} tag flat against the back of the phone.</p>}
+    {status === 'writing' && <p className="mt-2 text-[11px] text-zinc-600">Waiting for a tag. Hold {owner ? `${owner}’s` : 'the'} tag flat against the back of the phone, or tap Cancel.</p>}
     {status === 'checking' && <p className="mt-2 text-[11px] text-zinc-600">Reading the tag back…</p>}
     {showSuccess && <p role="status" className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-[#16794A]"><Check className="size-3.5" />{detail}</p>}
     {(status === 'error' || status === 'mismatch') && <p role="alert" className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-[11px] text-red-700">{detail}</p>}
