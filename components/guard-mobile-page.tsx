@@ -6,6 +6,7 @@ import { Check, ChevronLeft, Circle, KeyRound, LogOut, MapPin, ShieldAlert, X } 
 import { authClient } from '@/lib/auth-client'
 import { Logo } from '@/components/brand'
 import { Avatar } from '@/components/ui-bits'
+import { NfcDiagnostics } from '@/components/nfc-diagnostics'
 
 interface NfcReader extends EventTarget {
   onreading: ((event: { message: { records: Array<{ recordType?: string; data?: DataView | string }> } }) => void) | null
@@ -209,6 +210,8 @@ export function GuardMobilePage() {
 
           <button onClick={() => setManual((m) => !m)} className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 text-xs font-semibold text-zinc-600"><KeyRound className="size-4" />{nfc ? 'Tag not reading? Type the tag code' : 'No NFC on this phone? Type the tag code'}</button>
           {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-zinc-200 bg-white p-4"><label className="text-xs font-semibold">What is the code for?<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-xs font-semibold">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. 9f2b7c41-3a5e-4d18-9c6b-2f7e8a1d4b90" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[48px] bg-[#2A2B2E] text-white`}>Send</button></form>}
+
+          <NfcDiagnostics />
 
           <div className="mt-8 border-t border-zinc-200 pt-5"><button onClick={() => { if (window.confirm('Send an emergency SOS to your supervisors now?')) void scan('sos') }} disabled={busy || scanning !== null} className={`${big} bg-[#B42318] text-white`}><ShieldAlert className="size-5" />Emergency SOS</button>
             <p className="mt-2 text-center text-[11px] text-zinc-500">Only press this if you are in danger or need urgent help. Supervisors are alerted straight away with your location.{!me?.linked && !identity ? ' The first time, you will be asked for your tag code so we know who needs help.' : ''}</p></div>
