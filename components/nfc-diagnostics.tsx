@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { decodeTagText, tagHex } from '@/lib/nfc-decode'
 
 type Line = { at: string; text: string }
 
@@ -67,8 +68,10 @@ export function NfcDiagnostics() {
         for (const record of records) {
           const shown = typeof record.data === 'string' ? JSON.stringify(record.data) : 'DataView'
           push(`  type=${record.recordType ?? '?'} enc=${record.encoding ?? '-'} lang=${record.lang ?? '-'} data=${shown}`)
-          const hex = hexOf(record.data)
+          const hex = tagHex(record)
           if (hex) push(`  hex=${hex.slice(0, 180)}`)
+          const decoded = decodeTagText(record)
+          if (decoded) push(`  decoded=${JSON.stringify(decoded)}`)
         }
       }
       device.onreadingerror = () => push('readingerror fired: tag seen but unreadable')
