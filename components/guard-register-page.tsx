@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/workspace-shell'
 import { Avatar, ErrorBanner, Field, btn, btnPrimary, inputClass } from '@/components/ui-bits'
 import { api, photoToDataUrl } from '@/lib/client'
 import { WriteTagButton } from '@/components/write-tag-button'
+import { NfcDiagnostics } from '@/components/nfc-diagnostics'
 
 type Site = { id: string; name: string; status: string }
 type Created = { id: string; name: string; nfcToken: string }
@@ -45,6 +46,7 @@ export function GuardRegisterPage() {
       <p className="mt-5 break-all rounded-lg bg-zinc-50 p-4 text-center font-mono text-sm tracking-wide">{created.nfcToken}</p>
       <p className="mt-2 text-xs text-zinc-500">Write this code onto the guard’s NFC tag now, or copy it for a tag-writer app. Scans match it to this guard.</p>
       <WriteTagButton token={created.nfcToken} owner={created.name} />
+      <NfcDiagnostics />
       <div className="mt-6 flex flex-wrap gap-2"><Link href="/guards" className={btnPrimary}><Check className="size-4" />Go to guards</Link><button className={btn} onClick={() => { setCreated(null); setPhoto(null); setV({ name: '', nin: '', phone: '', site: '', monthlySalary: '150000' }) }}>Register another</button></div>
     </section>
   </>
