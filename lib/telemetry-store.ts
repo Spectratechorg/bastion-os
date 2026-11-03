@@ -23,6 +23,7 @@ export async function persistSamples(batch: StoredSample[]): Promise<void> {
     rating: sample.rating ?? null,
     device: sample.device ?? null,
     navigationType: sample.navigationType ?? null,
+    replayRun: sample.replayRun ?? null,
     createdAt: new Date(),
   })))
 }

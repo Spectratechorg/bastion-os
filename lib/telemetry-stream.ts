@@ -38,6 +38,15 @@ export function telemetryRedis(): Promise<RedisClientType[]> {
   return globalForRedis.__bastionTelemetryRedis
 }
 
+/** Closes the publisher connections so a one-off script can exit. Safe to call repeatedly. */
+export async function closeTelemetryRedis(): Promise<void> {
+  const pending = globalForRedis.__bastionTelemetryRedis
+  globalForRedis.__bastionTelemetryRedis = undefined
+  if (!pending) return
+  const clients = await pending.catch(() => [] as RedisClientType[])
+  await Promise.all(clients.map((client) => client.quit().catch(() => undefined)))
+}
+
 let cursor = 0
 function pick(clients: RedisClientType[]): RedisClientType {
   const client = clients[cursor % clients.length]
@@ -77,6 +86,7 @@ function isStoredSample(value: unknown): value is StoredSample {
     && typeof sample.metric === 'string'
     && typeof sample.value === 'number'
     && (sample.organizationId === null || typeof sample.organizationId === 'string')
+    && (sample.replayRun === undefined || typeof sample.replayRun === 'string')
 }
 
 /**

@@ -327,11 +327,14 @@ export const telemetrySamples = pgTable('telemetry_samples', {
   rating: text('rating'),
   device: text('device'),
   navigationType: text('navigation_type'),
+  /** Set when the row came from a dark-launch replay; excluded from the dashboard. */
+  replayRun: text('replay_run'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index('telemetry_samples_created_idx').on(table.createdAt),
   index('telemetry_samples_org_created_idx').on(table.organizationId, table.createdAt),
   index('telemetry_samples_kind_metric_idx').on(table.kind, table.metric),
+  index('telemetry_samples_replay_idx').on(table.replayRun),
 ])
 
 export const schema = {

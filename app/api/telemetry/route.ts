@@ -9,7 +9,7 @@ import {
   submitSamples,
   summaryForOrganization,
 } from '@/lib/telemetry'
-import { isTelemetryWindow, SAMPLE_KINDS, TRACKED_SCREENS, type TelemetrySampleInput } from '@/lib/telemetry-shared'
+import { isTelemetryWindow, REPLAY_RUN_PATTERN, SAMPLE_KINDS, TRACKED_SCREENS, type TelemetrySampleInput } from '@/lib/telemetry-shared'
 import { timed } from '@/lib/timing'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +27,8 @@ const sampleSchema = z.object({
   rating: z.string().trim().max(20).optional(),
   device: z.string().trim().max(40).optional(),
   navigationType: z.string().trim().max(30).optional(),
+  /** Dark-launch tag; only honoured for authenticated callers (see below). */
+  replayRun: z.string().trim().regex(REPLAY_RUN_PATTERN).optional(),
 })
 
 const bodySchema = z.object({ samples: z.array(sampleSchema).min(1).max(MAX_SAMPLES) })
@@ -55,6 +57,8 @@ async function handlePost(request: Request) {
   const parsed = bodySchema.safeParse(json)
   if (!parsed.success) return fail('That telemetry payload is not valid.')
 
+  // Resolved before mapping so only a signed-in caller can tag rows as a replay.
+  const organizationId = await cachedOrganization()
   const samples: TelemetrySampleInput[] = parsed.data.samples.map((sample) => ({
     kind: sample.kind,
     metric: sample.metric,
@@ -64,9 +68,8 @@ async function handlePost(request: Request) {
     rating: sample.rating,
     device: sample.device,
     navigationType: sample.navigationType,
+    replayRun: organizationId ? sample.replayRun : undefined,
   }))
-
-  const organizationId = await cachedOrganization()
   const { accepted, rejected, mode } = await submitSamples(samples, organizationId)
 
   if (rejected > 0 && accepted === 0) {

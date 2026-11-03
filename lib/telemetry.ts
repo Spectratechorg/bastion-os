@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { headers } from 'next/headers'
-import { and, desc, eq, gte } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull } from 'drizzle-orm'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
@@ -168,7 +168,12 @@ export async function summaryForOrganization(organizationId: string, window: Tel
         value: telemetrySamples.value,
         createdAt: telemetrySamples.createdAt,
       }).from(telemetrySamples)
-        .where(and(eq(telemetrySamples.organizationId, organizationId), gte(telemetrySamples.createdAt, since)))
+        .where(and(
+          eq(telemetrySamples.organizationId, organizationId),
+          gte(telemetrySamples.createdAt, since),
+          // Dark-launch replays must never appear in production latency numbers.
+          isNull(telemetrySamples.replayRun),
+        ))
         .orderBy(desc(telemetrySamples.createdAt))
         .limit(20_000)
     : []

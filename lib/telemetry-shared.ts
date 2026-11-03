@@ -57,7 +57,13 @@ export type TelemetrySampleInput = {
   rating?: string
   device?: string
   navigationType?: string
+  /** Dark-launch tag. Tagged rows are excluded from the dashboard. */
+  replayRun?: string
 }
+
+/** Header the replay tool sends so server timings from the replay are tagged too. */
+export const REPLAY_HEADER = 'x-telemetry-replay'
+export const REPLAY_RUN_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 export type MetricBudget = { p50: number; p95: number }
 
