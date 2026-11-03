@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, doublePrecision, integer, boolean, uniqueIndex, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core'
+import { pgTable, text, uuid, timestamp, doublePrecision, integer, boolean, uniqueIndex, index, jsonb, type AnyPgColumn } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('user', {
   id: text('id').primaryKey(),
@@ -311,6 +311,29 @@ export const inventoryItems = pgTable('inventory_items', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
+/**
+ * One latency observation. `kind` is `web-vital`, `route-transition`, `screen-load` or `api`.
+ * Client samples can arrive before a session exists, so the organization is nullable and
+ * filled in only when the reporter is signed in.
+ */
+export const telemetrySamples = pgTable('telemetry_samples', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
+  kind: text('kind').notNull(),
+  screen: text('screen'),
+  route: text('route'),
+  metric: text('metric').notNull(),
+  value: doublePrecision('value').notNull(),
+  rating: text('rating'),
+  device: text('device'),
+  navigationType: text('navigation_type'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index('telemetry_samples_created_idx').on(table.createdAt),
+  index('telemetry_samples_org_created_idx').on(table.organizationId, table.createdAt),
+  index('telemetry_samples_kind_metric_idx').on(table.kind, table.metric),
+])
+
 export const schema = {
   users,
   authSessions,
@@ -335,4 +358,5 @@ export const schema = {
   staff,
   contracts,
   inventoryItems,
+  telemetrySamples,
 }

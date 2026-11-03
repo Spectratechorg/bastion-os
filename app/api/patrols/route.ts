@@ -4,11 +4,12 @@ import { db } from '@/lib/db'
 import { guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
 import { actor, denyGuard, fail, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
 import { raiseAlert } from '@/lib/alerts'
+import { timed } from '@/lib/timing'
 
 export const dynamic = 'force-dynamic'
 
 /** Daily patrols (one per guard per day) with the hourly checkpoints from the organization shift. */
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization to view patrols.', 401)
   { const denied = denyGuard(current); if (denied) return denied }
   const now = lagosParts()
@@ -58,3 +59,5 @@ export async function GET(request: Request) {
     },
   })
 }
+
+export const GET = timed('/api/patrols', handleGet)
