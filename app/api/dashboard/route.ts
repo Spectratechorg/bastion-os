@@ -3,10 +3,11 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { alerts, activityEvents, attendance, finances, guards, incidents, patrols } from '@/lib/db/schema'
 import { actor, denyGuard } from '@/lib/server'
+import { timed } from '@/lib/timing'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+async function handleGet() {
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local and restart the app.' }, { status: 503 })
   }
@@ -32,3 +33,5 @@ export async function GET() {
   const operatingCostYtd = financeRows.filter((row) => row.kind === 'operating_cost' && row.createdAt >= new Date(new Date().getFullYear(), 0, 1)).reduce((sum, row) => sum + Number(row.amount), 0)
   return NextResponse.json({ guards: guardRows, incidents: incidentRows, alerts: alertRows, activities: activityRows, kpis: { activeGuards: Number(counts[0]?.active ?? 0), registeredGuards: Number(counts[0]?.total ?? 0), attendanceRate: todayAttendance ? Math.round((todayAttendance / Math.max(Number(counts[0]?.total ?? 1), 1)) * 1000) / 10 : 0, openIncidents: incidentRows.length, unacknowledgedAlerts: alertRows.length, patrolCompletion: todayPatrols.length ? Math.round((todayPatrols.filter((row) => row.withinBounds).length / todayPatrols.length) * 100) : 0, revenueYtd, operatingCostYtd } })
 }
+
+export const GET = timed('/api/dashboard', handleGet)

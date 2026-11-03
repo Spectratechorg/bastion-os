@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
+  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Gauge, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
   Search, Settings, Sparkles, Users, Wallet, X,
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
@@ -22,6 +22,7 @@ const allNavigation = [
   { label: 'Clients', href: '/clients', icon: BriefcaseBusiness },
   { label: 'Finance', href: '/finance', icon: Wallet },
   { label: 'Reports', href: '/reports', icon: Activity },
+  { label: 'Performance', href: '/performance', icon: Gauge },
   { label: 'Napoleon AI', href: '/napoleon', icon: Sparkles, tag: 'AI' },
   { label: 'Settings', href: '/settings/roles', icon: Settings },
 ]
