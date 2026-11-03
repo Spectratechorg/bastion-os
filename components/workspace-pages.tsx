@@ -7,6 +7,7 @@ import { NapoleonLivePage } from '@/components/napoleon-live-page'
 import { OverviewPage } from '@/components/overview-page'
 import { RecordsPage } from '@/components/records-page'
 import { PatrolsPage } from '@/components/patrols-page'
+import { PerformancePage } from '@/components/performance-page'
 import { FinancePage } from '@/components/finance-page'
 import { GuardRegisterPage } from '@/components/guard-register-page'
 import { ProfilePage } from '@/components/profile-page'
@@ -28,6 +29,7 @@ export function WorkspacePage({ route, financeTab = 'overview' }: { route: strin
     case 'reports': content = <ReportsPage />; break
     case 'profile': content = <ProfilePage />; active = 'profile'; break
     case 'napoleon': content = <NapoleonLivePage />; break
+    case 'performance': content = <PerformancePage />; active = 'performance'; break
     case 'settings': content = <SettingsPage />; active = 'Settings'; break
     default: content = <OverviewPage />
   }

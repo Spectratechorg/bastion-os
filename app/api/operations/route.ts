@@ -7,6 +7,7 @@ import { db, pool } from '@/lib/db'
 import { raiseAlert } from '@/lib/alerts'
 import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
 import { actor, can, denyGuard, isModerator } from '@/lib/server'
+import { timed } from '@/lib/timing'
 import type { PermissionKey } from '@/lib/permissions'
 
 const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map', 'activity'])
@@ -106,7 +107,7 @@ async function withRisk(organizationId: string, rows: (typeof sites.$inferSelect
   })
 }
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
@@ -135,7 +136,7 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
@@ -474,3 +475,6 @@ export async function DELETE(request: Request) {
   }
   return fail('Only guards and sites can be deleted.', 405)
 }
+
+export const GET = timed('/api/operations', handleGet)
+export const POST = timed('/api/operations', handlePost)
