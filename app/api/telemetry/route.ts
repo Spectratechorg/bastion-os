@@ -4,9 +4,9 @@ import { z } from 'zod'
 import { actor, denyGuard, fail } from '@/lib/server'
 import {
   cachedOrganization,
-  enqueueSamples,
   flushSamples,
   pruneOldSamples,
+  submitSamples,
   summaryForOrganization,
 } from '@/lib/telemetry'
 import { isTelemetryWindow, SAMPLE_KINDS, TRACKED_SCREENS, type TelemetrySampleInput } from '@/lib/telemetry-shared'
@@ -67,19 +67,27 @@ async function handlePost(request: Request) {
   }))
 
   const organizationId = await cachedOrganization()
-  const { accepted, rejected } = enqueueSamples(samples, organizationId)
+  const { accepted, rejected, mode } = await submitSamples(samples, organizationId)
 
   if (rejected > 0 && accepted === 0) {
-    return NextResponse.json({ error: 'Telemetry buffer is full. Retry later.' }, { status: 429 })
+    // Explicit backpressure: 503 when the queue is unreachable, 429 when the local buffer is full.
+    // Either way the samples are not acknowledged, so the client retries instead of losing them.
+    const status = mode === 'redis' ? 503 : 429
+    return NextResponse.json(
+      { error: mode === 'redis' ? 'Telemetry queue is unavailable. Retry later.' : 'Telemetry buffer is full. Retry later.' },
+      { status, headers: mode === 'redis' ? { 'retry-after': '1' } : undefined },
+    )
   }
 
-  after(async () => {
-    await flushSamples()
-    // ~1% of ingests sweep expired samples, keeping the table bounded without a scheduler.
-    if (Math.random() < 0.01) await pruneOldSamples()
-  })
+  if (mode === 'memory') {
+    after(async () => {
+      await flushSamples()
+      // ~1% of ingests sweep expired samples, keeping the table bounded without a scheduler.
+      if (Math.random() < 0.01) await pruneOldSamples()
+    })
+  }
 
-  return NextResponse.json({ ok: true, accepted, rejected }, { status: accepted === 0 ? 429 : 202 })
+  return NextResponse.json({ ok: true, accepted, rejected, mode }, { status: 202 })
 }
 
 /** Dashboard data for the active organization. */

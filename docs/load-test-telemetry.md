@@ -50,6 +50,19 @@ figure is dominated by the Next.js server and the HTTP client on one machine —
 `/api/health` round-trip shows the same floor (p95 ~19 ms at 20 in flight). The 5 ms budget is
 therefore asserted per request, plus a server-side p95 check that is independent of that overhead.
 
+## Redis mode
+
+With `REDIS_URL` set, `POST /api/telemetry` XADDs the batch and the worker writes it. Measured the
+same way (local Redis 8.10, 4 pooled connections):
+
+| Phase | p50 | p95 | p99 | max |
+| --- | --- | --- | --- | --- |
+| Latency (1 in flight) | 2.90 ms | **3.55 ms** | 4.05 ms | 4.79 ms |
+| Server handler, latency phase | 0.41 ms | **0.61 ms** | — | — |
+
+12,000 accepted, 0 rejected, 12,000 stored, **0 lost**, `lag` and `pending` both 0 afterwards.
+See [telemetry-queue.md](telemetry-queue.md) for the queue itself and its failure-mode tests.
+
 ## What was fixed to get there
 
 Ingest used to await the database insert. Moving the write behind `after()` dropped the handler to

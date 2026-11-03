@@ -1,12 +1,14 @@
 import { createHash } from 'node:crypto'
 import { headers } from 'next/headers'
-import { and, desc, eq, gte, lt } from 'drizzle-orm'
+import { and, desc, eq, gte } from 'drizzle-orm'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { telemetrySamples } from '@/lib/db/schema'
 import { endpointBudget, screenBudget, TELEMETRY_BASELINE } from '@/lib/telemetry-baseline'
 import { createSampleBuffer, type BufferedSample } from '@/lib/telemetry-buffer'
+import { persistSamples, pruneOldSamples } from '@/lib/telemetry-store'
+import { publishSamples, redisConfigured, streamHealth } from '@/lib/telemetry-stream'
 import {
   percentile,
   WINDOW_HOURS,
@@ -18,21 +20,7 @@ import {
 
 export type { BufferSnapshot, EnqueueResult } from '@/lib/telemetry-buffer'
 
-const buffer = createSampleBuffer(async (batch) => {
-  if (!process.env.DATABASE_URL) return
-  await db.insert(telemetrySamples).values(batch.map((sample) => ({
-    organizationId: sample.organizationId,
-    kind: sample.kind,
-    screen: sample.screen ?? null,
-    route: sample.route ?? null,
-    metric: sample.metric,
-    value: sample.value,
-    rating: sample.rating ?? null,
-    device: sample.device ?? null,
-    navigationType: sample.navigationType ?? null,
-    createdAt: new Date(),
-  })))
-})
+const buffer = createSampleBuffer(persistSamples)
 
 /**
  * Flushes independently of any request. Request-scoped flushes are only a nudge: if a request's
@@ -87,6 +75,35 @@ export function enqueueSamples(samples: TelemetrySampleInput[], organizationId: 
   return buffer.enqueue(rows)
 }
 
+export type SubmitResult = { accepted: number; rejected: number; mode: 'redis' | 'memory' }
+
+/**
+ * Hands a validated batch to the delivery path and returns what the caller may acknowledge.
+ *
+ * With Redis configured the batch is appended to the stream and the worker owns the database write;
+ * without it the in-process buffer keeps previous behaviour so local development needs no Redis.
+ * A Redis failure is reported as a rejection rather than silently falling back, so the client
+ * retries and no sample is quietly lost.
+ */
+export async function submitSamples(samples: TelemetrySampleInput[], organizationId: string | null): Promise<SubmitResult> {
+  if (redisConfigured()) {
+    try {
+      await publishSamples(samples.map((sample) => ({ ...sample, organizationId })))
+      return { accepted: samples.length, rejected: 0, mode: 'redis' }
+    } catch {
+      return { accepted: 0, rejected: samples.length, mode: 'redis' }
+    }
+  }
+  const result = enqueueSamples(samples, organizationId)
+  return { ...result, mode: 'memory' }
+}
+
+/** Delivery-path state for the health endpoint. */
+export async function telemetryQueueSnapshot() {
+  if (!redisConfigured()) return { mode: 'memory' as const, buffer: buffer.snapshot() }
+  return { mode: 'redis' as const, redis: await streamHealth() }
+}
+
 /** Writes everything currently queued. Scheduled with `after()` so it runs past the response. */
 export function flushSamples(): Promise<void> {
   return buffer.flush()
@@ -107,25 +124,18 @@ export function telemetryBufferSnapshot() {
  */
 export async function recordServerSample(route: string, durationMs: number, status: number): Promise<void> {
   const organizationId = await cachedOrganization()
-  enqueueSamples([{
+  const result = await submitSamples([{
     kind: 'api',
     route,
     metric: 'api',
     value: Math.max(0, durationMs),
     rating: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'ok',
   }], organizationId)
-  await flushSamples()
+  // In Redis mode the worker writes server timings too; in memory mode flush right away.
+  if (result.mode === 'memory') await flushSamples()
 }
 
-/** Drops samples older than `maxAgeDays`. Called opportunistically so the table cannot grow forever. */
-export async function pruneOldSamples(maxAgeDays = 30): Promise<void> {
-  if (!process.env.DATABASE_URL) return
-  try {
-    await db.delete(telemetrySamples).where(lt(telemetrySamples.createdAt, new Date(Date.now() - maxAgeDays * 86_400_000)))
-  } catch {
-    // Best-effort housekeeping.
-  }
-}
+export { pruneOldSamples }
 
 function summarizeGroup(key: string, metric: string, values: number[], latest: string | null, budget: { p50: number; p95: number } | null): SummaryRow {
   const sorted = [...values].sort((a, b) => a - b)

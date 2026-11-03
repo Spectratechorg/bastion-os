@@ -1,15 +1,16 @@
 import { NextResponse } from 'next/server'
 
 import { actor, denyGuard, fail } from '@/lib/server'
-import { drainSamples, telemetryBufferSnapshot } from '@/lib/telemetry'
+import { drainSamples, telemetryQueueSnapshot } from '@/lib/telemetry'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * Ingest buffer state for the process serving this request.
+ * Delivery-path state: the Redis stream when configured, otherwise the in-process buffer.
  *
- * `?drain=1` flushes the queue first, which is how a load test proves that every accepted sample
- * reached the database. Counters are per process: with several instances each reports its own.
+ * `?drain=1` flushes the local buffer (memory mode), which is how a load test proves that every
+ * accepted sample reached the database. In Redis mode the worker owns the write, so the stream
+ * length and pending count are reported instead; drain only reports that it was skipped.
  */
 export async function GET(request: Request) {
   const current = await actor()
@@ -18,6 +19,9 @@ export async function GET(request: Request) {
   if (denied) return denied
 
   const url = new URL(request.url)
-  const drained = url.searchParams.get('drain') === '1' ? await drainSamples(10_000) : undefined
-  return NextResponse.json({ ...telemetryBufferSnapshot(), drained })
+  const snapshot = await telemetryQueueSnapshot()
+  const drained = url.searchParams.get('drain') === '1'
+    ? (snapshot.mode === 'memory' ? await drainSamples(10_000) : false)
+    : undefined
+  return NextResponse.json({ ...snapshot, drained })
 }

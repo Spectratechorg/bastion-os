@@ -25,7 +25,7 @@ import { percentile } from '../lib/telemetry-shared'
  */
 
 const baseUrl = (process.env.BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '')
-const latencyRequests = Math.max(1, Number(process.env.LATENCY_REQUESTS ?? '100'))
+const latencyRequests = Math.max(1, Number(process.env.LATENCY_REQUESTS ?? '200'))
 const requests = Math.max(1, Number(process.env.REQUESTS ?? '1000'))
 const batchSize = Math.min(30, Math.max(1, Number(process.env.BATCH ?? '10')))
 const concurrency = Math.min(requests, Math.max(1, Number(process.env.CONCURRENCY ?? '20')))
@@ -120,8 +120,12 @@ async function main() {
   // Warm-up: session cache, route compilation and the connection pool.
   for (let i = 0; i < 10; i += 1) await send(-1)
 
-  const runStartedAt = new Date(Date.now() - 1000)
+  const runStartedAt = new Date()
   const latency = await runPhase('latency', latencyRequests, 1)
+  // Let the asynchronous writes land before the load phase starts, so the server-side window
+  // below contains latency-phase requests only instead of spilling into the concurrency test.
+  await new Promise((resolve) => setTimeout(resolve, 1_500))
+  const latencyEndedAt = new Date()
   const load = await runPhase('load', requests, concurrency)
 
   // Flush the per-response writes, then read the authoritative count from Postgres.
@@ -143,13 +147,14 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
 
-  // The handler's own duration, recorded by timed(). Independent of client and transport overhead.
+  // The handler's own duration, recorded by timed(). Scoped to the latency phase: the load phase
+  // intentionally queues requests, so its p95 describes concurrency, not per-request cost.
   const server = await pool.query<{ p95: string; p50: string; count: string }>(
     `select round(percentile_cont(0.5) within group (order by value)::numeric, 2)::text as p50,
             round(percentile_cont(0.95) within group (order by value)::numeric, 2)::text as p95,
             count(*)::text as count
-     from telemetry_samples where route = '/api/telemetry' and created_at >= $1`,
-    [runStartedAt],
+     from telemetry_samples where route = '/api/telemetry' and created_at between $1 and $2`,
+    [runStartedAt, latencyEndedAt],
   )
 
   for (const phase of [latency, load]) {
@@ -161,7 +166,7 @@ async function main() {
   }
 
   const serverRow = server.rows[0]
-  console.log(`\nServer handler time: p50 ${serverRow?.p50 ?? '—'} ms   p95 ${serverRow?.p95 ?? '—'} ms   (${serverRow?.count ?? 0} samples)`)
+  console.log(`\nServer handler time, latency phase: p50 ${serverRow?.p50 ?? '—'} ms   p95 ${serverRow?.p95 ?? '—'} ms   (${serverRow?.count ?? 0} samples)`)
   console.log(`Messages: accepted ${accepted}, rejected ${rejected}, stored ${stored}, lost ${accepted - stored}`)
   console.log(`Drain: ${drainMs.toFixed(0)} ms`)
 
