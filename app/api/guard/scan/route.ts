@@ -9,6 +9,7 @@ import { raiseAlert } from '@/lib/alerts'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
 import { todayStatus } from '@/lib/guard-today'
 import { lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
+import { timed } from '@/lib/timing'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +59,7 @@ async function raiseBreachAlert(
   })
 }
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   if (!process.env.DATABASE_URL) {
     return NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local before enabling NFC verification.' }, { status: 503 })
   }
@@ -285,3 +286,5 @@ export async function POST(request: Request) {
     record: patrol,
   })
 }
+
+export const POST = timed('/api/guard/scan', handlePost)
