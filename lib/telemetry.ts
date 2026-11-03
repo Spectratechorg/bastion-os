@@ -1,9 +1,12 @@
+import { createHash } from 'node:crypto'
+import { headers } from 'next/headers'
 import { and, desc, eq, gte, lt } from 'drizzle-orm'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { telemetrySamples } from '@/lib/db/schema'
 import { endpointBudget, screenBudget, TELEMETRY_BASELINE } from '@/lib/telemetry-baseline'
+import { createSampleBuffer, type BufferedSample } from '@/lib/telemetry-buffer'
 import {
   percentile,
   WINDOW_HOURS,
@@ -13,52 +16,115 @@ import {
   type TelemetryWindow,
 } from '@/lib/telemetry-shared'
 
-export type StoredTelemetrySample = TelemetrySampleInput & { createdAt: Date }
+export type { BufferSnapshot, EnqueueResult } from '@/lib/telemetry-buffer'
+
+const buffer = createSampleBuffer(async (batch) => {
+  if (!process.env.DATABASE_URL) return
+  await db.insert(telemetrySamples).values(batch.map((sample) => ({
+    organizationId: sample.organizationId,
+    kind: sample.kind,
+    screen: sample.screen ?? null,
+    route: sample.route ?? null,
+    metric: sample.metric,
+    value: sample.value,
+    rating: sample.rating ?? null,
+    device: sample.device ?? null,
+    navigationType: sample.navigationType ?? null,
+    createdAt: new Date(),
+  })))
+})
 
 /**
- * Persists a batch of samples. Telemetry is best-effort: a missing database or a write failure
- * must never break the request that is being measured, so every error is swallowed here.
+ * Flushes independently of any request. Request-scoped flushes are only a nudge: if a request's
+ * async context is torn down mid-write, this timer still drains the queue on the next tick.
+ * Guarded per process so dev hot-reload cannot stack intervals.
  */
-export async function recordSamples(samples: TelemetrySampleInput[], organizationId: string | null): Promise<void> {
-  if (samples.length === 0 || !process.env.DATABASE_URL) return
-  try {
-    await db.insert(telemetrySamples).values(samples.map((sample) => ({
-      organizationId,
-      kind: sample.kind,
-      screen: sample.screen ?? null,
-      route: sample.route ?? null,
-      metric: sample.metric,
-      value: sample.value,
-      rating: sample.rating ?? null,
-      device: sample.device ?? null,
-      navigationType: sample.navigationType ?? null,
-      createdAt: new Date(),
-    })))
-  } catch {
-    // Never surface telemetry failures to the caller.
-  }
+const globalForTelemetry = globalThis as typeof globalThis & { __bastionTelemetryFlusher?: ReturnType<typeof setInterval> }
+if (!globalForTelemetry.__bastionTelemetryFlusher && typeof setInterval === 'function') {
+  const timer = setInterval(() => { void buffer.flush() }, 25)
+  timer.unref?.()
+  globalForTelemetry.__bastionTelemetryFlusher = timer
 }
 
 /**
- * Records an API handler duration after the response has been produced. Resolving the active
- * organization is best-effort: guard routes are unauthenticated and simply record no org.
+ * Resolves the active organization for the current request, cached per session cookie for a minute.
+ * Telemetry must not pay for two database round-trips on every beacon; the cache keeps attribution
+ * correct without putting session lookups on the ingest critical path.
+ *
+ * The cache key is a hash of the cookie, never the cookie itself.
  */
-export function recordServerSample(route: string, durationMs: number, status: number): void {
-  void (async () => {
-    let organizationId: string | null = null
-    try {
-      organizationId = (await getActiveOrganization())?.organizationId ?? null
-    } catch {
-      // No session (guard app) or no database: keep the sample anonymous.
-    }
-    await recordSamples([{
-      kind: 'api',
-      route,
-      metric: 'api',
-      value: Math.max(0, durationMs),
-      rating: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'ok',
-    }], organizationId)
-  })()
+const organizationCache = new Map<string, { organizationId: string | null; expiresAt: number }>()
+const ORGANIZATION_CACHE_MS = 60_000
+const ORGANIZATION_CACHE_MAX = 500
+
+export async function cachedOrganization(): Promise<string | null> {
+  let cookie = ''
+  try {
+    cookie = (await headers()).get('cookie') ?? ''
+  } catch {
+    return null
+  }
+  if (!cookie) return null
+
+  const key = createHash('sha256').update(cookie).digest('base64url').slice(0, 32)
+  const hit = organizationCache.get(key)
+  if (hit && hit.expiresAt > Date.now()) return hit.organizationId
+
+  let organizationId: string | null = null
+  try {
+    organizationId = (await getActiveOrganization())?.organizationId ?? null
+  } catch {
+    organizationId = null
+  }
+  if (organizationCache.size >= ORGANIZATION_CACHE_MAX) organizationCache.clear()
+  organizationCache.set(key, { organizationId, expiresAt: Date.now() + ORGANIZATION_CACHE_MS })
+  return organizationId
+}
+
+/** Enqueues samples without touching the database. Returns how many were accepted. */
+export function enqueueSamples(samples: TelemetrySampleInput[], organizationId: string | null) {
+  const rows: BufferedSample[] = samples.map((sample) => ({ ...sample, organizationId }))
+  return buffer.enqueue(rows)
+}
+
+/** Writes everything currently queued. Scheduled with `after()` so it runs past the response. */
+export function flushSamples(): Promise<void> {
+  return buffer.flush()
+}
+
+/** Flushes until empty or the deadline passes; used by the load test and by health checks. */
+export function drainSamples(timeoutMs?: number): Promise<boolean> {
+  return buffer.drain(timeoutMs)
+}
+
+export function telemetryBufferSnapshot() {
+  return buffer.snapshot()
+}
+
+/**
+ * Records an API handler duration. Called from `after()`, so it can afford to resolve the
+ * organization from the session; the response has already been sent.
+ */
+export async function recordServerSample(route: string, durationMs: number, status: number): Promise<void> {
+  const organizationId = await cachedOrganization()
+  enqueueSamples([{
+    kind: 'api',
+    route,
+    metric: 'api',
+    value: Math.max(0, durationMs),
+    rating: status >= 500 ? 'error' : status >= 400 ? 'warn' : 'ok',
+  }], organizationId)
+  await flushSamples()
+}
+
+/** Drops samples older than `maxAgeDays`. Called opportunistically so the table cannot grow forever. */
+export async function pruneOldSamples(maxAgeDays = 30): Promise<void> {
+  if (!process.env.DATABASE_URL) return
+  try {
+    await db.delete(telemetrySamples).where(lt(telemetrySamples.createdAt, new Date(Date.now() - maxAgeDays * 86_400_000)))
+  } catch {
+    // Best-effort housekeeping.
+  }
 }
 
 function summarizeGroup(key: string, metric: string, values: number[], latest: string | null, budget: { p50: number; p95: number } | null): SummaryRow {
@@ -74,16 +140,6 @@ function summarizeGroup(key: string, metric: string, values: number[], latest: s
     latest,
     budget,
     overBudget: budget ? p95 > budget.p95 : false,
-  }
-}
-
-/** Drops samples older than `maxAgeDays`. Called opportunistically so the table cannot grow forever. */
-export async function pruneOldSamples(maxAgeDays = 30): Promise<void> {
-  if (!process.env.DATABASE_URL) return
-  try {
-    await db.delete(telemetrySamples).where(lt(telemetrySamples.createdAt, new Date(Date.now() - maxAgeDays * 86_400_000)))
-  } catch {
-    // Best-effort housekeeping.
   }
 }
 

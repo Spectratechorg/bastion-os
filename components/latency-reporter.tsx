@@ -11,6 +11,7 @@ const MAX_BATCH = 20
 
 let queue: TelemetrySampleInput[] = []
 let timer: number | null = null
+let retries = 0
 
 function disabled() {
   if (process.env.NEXT_PUBLIC_TELEMETRY_DISABLED === 'true') return true
@@ -34,12 +35,24 @@ function flush(useBeacon = false) {
     // Beacon survives page unload; it cannot read the response, which is fine for telemetry.
     if (navigator.sendBeacon('/api/telemetry', new Blob([body], { type: 'application/json' }))) return
   }
+
+  /** A 429 means the server refused instead of dropping; put the samples back and retry. */
+  const retry = () => {
+    if (retries >= 3) { retries = 0; return }
+    retries += 1
+    queue.unshift(...samples)
+    timer = window.setTimeout(() => flush(), 500 * retries)
+  }
+
   void fetch('/api/telemetry', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body,
     keepalive: true,
-  }).catch(() => undefined)
+  }).then((response) => {
+    if (response.ok) { retries = 0; return }
+    if (response.status === 429 || response.status >= 500) retry()
+  }).catch(retry)
 }
 
 function enqueue(sample: TelemetrySampleInput) {

@@ -1,9 +1,14 @@
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { z } from 'zod'
 
-import { getActiveOrganization } from '@/lib/auth/organization'
 import { actor, denyGuard, fail } from '@/lib/server'
-import { pruneOldSamples, recordSamples, summaryForOrganization } from '@/lib/telemetry'
+import {
+  cachedOrganization,
+  enqueueSamples,
+  flushSamples,
+  pruneOldSamples,
+  summaryForOrganization,
+} from '@/lib/telemetry'
 import { isTelemetryWindow, SAMPLE_KINDS, TRACKED_SCREENS, type TelemetrySampleInput } from '@/lib/telemetry-shared'
 import { timed } from '@/lib/timing'
 
@@ -33,7 +38,10 @@ function normaliseScreen(screen: string | undefined): string | undefined {
 
 /**
  * Client-side ingest. Deliberately unauthenticated so the guard app can report before a session
- * exists; the organization is attached when one is available.
+ * exists; the organization is attached from the session cookie when one is available.
+ *
+ * The handler never awaits the database. It validates, enqueues and answers; the write is
+ * scheduled with `after()`. When the queue is full it answers 429 instead of dropping samples.
  */
 async function handlePost(request: Request) {
   if (process.env.TELEMETRY_DISABLED === 'true') return new NextResponse(null, { status: 204 })
@@ -58,17 +66,20 @@ async function handlePost(request: Request) {
     navigationType: sample.navigationType,
   }))
 
-  let organizationId: string | null = null
-  try {
-    organizationId = (await getActiveOrganization())?.organizationId ?? null
-  } catch {
-    // Anonymous reporter (guard app before sign-in): keep the sample but leave it unscoped.
+  const organizationId = await cachedOrganization()
+  const { accepted, rejected } = enqueueSamples(samples, organizationId)
+
+  if (rejected > 0 && accepted === 0) {
+    return NextResponse.json({ error: 'Telemetry buffer is full. Retry later.' }, { status: 429 })
   }
 
-  await recordSamples(samples, organizationId)
-  // ~1% of ingests sweep expired samples, keeping the table bounded without a scheduler.
-  if (Math.random() < 0.01) void pruneOldSamples()
-  return NextResponse.json({ ok: true, accepted: samples.length }, { status: 202 })
+  after(async () => {
+    await flushSamples()
+    // ~1% of ingests sweep expired samples, keeping the table bounded without a scheduler.
+    if (Math.random() < 0.01) await pruneOldSamples()
+  })
+
+  return NextResponse.json({ ok: true, accepted, rejected }, { status: accepted === 0 ? 429 : 202 })
 }
 
 /** Dashboard data for the active organization. */
