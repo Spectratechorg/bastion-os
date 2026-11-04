@@ -132,7 +132,7 @@ export function ClientsPage() {
     </div>
 
     <div className="overflow-hidden ws-card">
-      {loading ? <Spinner label="Loading clients…" /> : rows.length === 0 ? <Empty title={total ? 'No clients match your search' : 'No clients yet'} text={total ? undefined : 'Add a client, then link their sites.'} /> : <ul className="divide-y divide-[#EFEFF1]">
+      {loading && clients.length === 0 ? <Spinner label="Loading clients…" /> : rows.length === 0 ? <Empty title={total ? 'No clients match your search' : 'No clients yet'} text={total ? undefined : 'Add a client, then link their sites.'} /> : <ul className="divide-y divide-[#EFEFF1]">
         {rows.map((client) => {
           const clientSites = sitesOf(client)
           const deployed = guardsAt(client)
@@ -162,7 +162,7 @@ export function ClientsPage() {
           </li>
         })}
       </ul>}
-      {!loading && <Pagination page={page} pageSize={pageSize} total={total} busy={loading} onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1) }} />}
+      {total > 0 && <Pagination page={page} pageSize={pageSize} total={total} busy={loading} onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1) }} />}
     </div>
 
     {formOpen && <Sheet title={editing ? 'Edit client' : 'Add client'} kicker="CLIENT" onClose={() => setFormOpen(false)}
