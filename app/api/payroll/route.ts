@@ -5,13 +5,14 @@ import { db } from '@/lib/db'
 import { activityEvents, attendance, guards, payrollRecords, staff as staffTable } from '@/lib/db/schema'
 import { actor, can, denyGuard, fail, isModerator, lagosParts } from '@/lib/server'
 import { computePayroll, monthBounds } from '@/lib/payroll'
+import { tenantScoped } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 const periodSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/)
 const dayKey = (date: Date) => lagosParts(date).date
 
 /** Returns payroll for a month. Unpaid rows are recalculated from attendance; paid rows are frozen. */
-export async function GET(request: Request) {
+async function handleGEt(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization to view payroll.', 401)
   { const denied = denyGuard(current); if (denied) return denied }
   if (!(await can(current, 'viewFinance'))) return fail('Your role cannot view finance. An administrator can change this in Settings.', 403)
@@ -24,11 +25,11 @@ export async function GET(request: Request) {
   const upTo = today < lastDay ? today : lastDay
   const from = new Date(Date.UTC(year, month - 1, 1) - 3600000)
   const to = new Date(Date.UTC(year, month, 1))
-  const staffRows = await db.select().from(staffTable).where(eq(staffTable.organizationId, current.organizationId))
+  const staffRows = await db.select().from(staffTable)
   const [guardRows, attendanceRows, existing] = await Promise.all([
-    db.select().from(guards).where(eq(guards.organizationId, current.organizationId)),
-    db.select({ guardId: attendance.guardId, at: attendance.checkedInAt }).from(attendance).where(and(eq(attendance.organizationId, current.organizationId), gte(attendance.checkedInAt, from), lt(attendance.checkedInAt, to))),
-    db.select().from(payrollRecords).where(and(eq(payrollRecords.organizationId, current.organizationId), eq(payrollRecords.period, period.data))),
+    db.select().from(guards),
+    db.select({ guardId: attendance.guardId, at: attendance.checkedInAt }).from(attendance).where(and(gte(attendance.checkedInAt, from), lt(attendance.checkedInAt, to))),
+    db.select().from(payrollRecords).where(and(eq(payrollRecords.period, period.data))),
   ])
   const presentDays = new Map<string, Set<string>>()
   for (const row of attendanceRows) {
@@ -82,15 +83,17 @@ export async function GET(request: Request) {
 const markInput = z.object({ id: z.string().uuid(), status: z.enum(['paid', 'pending']) })
 
 /** Moderators tick a row to mark it paid (or untick to return it to pending). */
-export async function PATCH(request: Request) {
+async function handlePAtch(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization.', 401)
   { const denied = denyGuard(current); if (denied) return denied }
   if (!(await isModerator(current))) return fail('Only a moderator or administrator can change payment status.', 403)
   const parsed = markInput.safeParse(await request.json().catch(() => null)); if (!parsed.success) return fail('Invalid request')
   const paid = parsed.data.status === 'paid'
   const [row] = await db.update(payrollRecords).set({ status: parsed.data.status, paidAt: paid ? new Date() : null, paidBy: paid ? current.userId : null })
-    .where(and(eq(payrollRecords.id, parsed.data.id), eq(payrollRecords.organizationId, current.organizationId))).returning()
+    .where(and(eq(payrollRecords.id, parsed.data.id))).returning()
   if (!row) return fail('Payroll record not found', 404)
   await db.insert(activityEvents).values({ ...current, type: 'payroll.status', title: `Payroll marked ${parsed.data.status}`, body: `${row.period} · ₦${row.netPay.toLocaleString('en-NG')}`, tone: 'neutral', createdAt: new Date() })
   return NextResponse.json(row)
 }
+export const GET = tenantScoped(handleGEt)
+export const PATCH = tenantScoped(handlePAtch)

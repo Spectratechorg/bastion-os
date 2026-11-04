@@ -6,10 +6,11 @@ import { db } from '@/lib/db'
 import { accounts, authSessions, guards, members, users } from '@/lib/db/schema'
 import { actor, denyGuard, fail, isAdminRole } from '@/lib/server'
 import { ASSIGNABLE_ROLES } from '@/lib/permissions'
+import { tenantScoped } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+async function handleGEt() {
   const current = await actor(); if (!current) return fail('Sign in first.', 401)
   const denied = denyGuard(current); if (denied) return denied
   const rows = await db.select({
@@ -18,8 +19,8 @@ export async function GET() {
     guardId: guards.id, guardName: guards.name,
   }).from(members)
     .innerJoin(users, eq(users.id, members.userId))
-    .leftJoin(guards, and(eq(guards.loginUserId, users.id), eq(guards.organizationId, members.organizationId)))
-    .where(eq(members.organizationId, current.organizationId))
+    .leftJoin(guards, and(eq(guards.loginUserId, users.id)))
+    
     .orderBy(members.createdAt)
   const active = await db.select({ userId: authSessions.userId, lastActive: max(authSessions.updatedAt) }).from(authSessions).groupBy(authSessions.userId)
   const lastActive = new Map(active.map((row) => [row.userId, row.lastActive]))
@@ -31,14 +32,14 @@ const createSchema = z.object({ name: z.string().trim().min(2).max(120), email: 
 const editSchema = z.object({ memberId: z.string().min(1), role: roleSchema.optional(), name: z.string().trim().min(2).max(120).optional(), email: z.string().trim().toLowerCase().email().optional(), password: z.string().min(8).max(128).optional(), guardId: z.string().uuid().nullish() })
 
 async function target(organizationId: string, memberId: string) {
-  const [row] = await db.select({ id: members.id, userId: members.userId, role: members.role }).from(members).where(and(eq(members.id, memberId), eq(members.organizationId, organizationId))).limit(1)
+  const [row] = await db.select({ id: members.id, userId: members.userId, role: members.role }).from(members).where(and(eq(members.id, memberId))).limit(1)
   return row
 }
-const unlink = (userId: string, organizationId: string) => db.update(guards).set({ loginUserId: null }).where(and(eq(guards.loginUserId, userId), eq(guards.organizationId, organizationId)))
-const link = (userId: string, guardId: string, organizationId: string) => db.update(guards).set({ loginUserId: userId }).where(and(eq(guards.id, guardId), eq(guards.organizationId, organizationId)))
+const unlink = (userId: string, organizationId: string) => db.update(guards).set({ loginUserId: null }).where(and(eq(guards.loginUserId, userId)))
+const link = (userId: string, guardId: string, organizationId: string) => db.update(guards).set({ loginUserId: userId }).where(and(eq(guards.id, guardId)))
 
 /** Owner/admin adds a person: creates the login (or attaches an existing account) with the chosen role. */
-export async function POST(request: Request) {
+async function handlePOst(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in first.', 401)
   if (!isAdminRole(current.role)) return fail('Only the owner or an administrator can add users.', 403)
   const parsed = createSchema.safeParse(await request.json().catch(() => null)); if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the details and try again.')
@@ -48,7 +49,7 @@ export async function POST(request: Request) {
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
   if (existing) {
     userId = existing.id
-    const [already] = await db.select({ id: members.id }).from(members).where(and(eq(members.organizationId, current.organizationId), eq(members.userId, userId))).limit(1)
+    const [already] = await db.select({ id: members.id }).from(members).where(and(eq(members.userId, userId))).limit(1)
     if (already) return fail('That person is already in your team.', 409)
   } else {
     if (!password) return fail('Set a temporary password of at least 8 characters for the new user.')
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
 }
 
 /** Owner/admin edits a person's role, name, email or password. Only the owner can touch the owner or other administrators' roles. */
-export async function PATCH(request: Request) {
+async function handlePAtch(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in first.', 401)
   if (!isAdminRole(current.role)) return fail('Only the owner or an administrator can edit users.', 403)
   const parsed = editSchema.safeParse(await request.json().catch(() => null)); if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the details and try again.')
@@ -96,7 +97,7 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(request: Request) {
+async function handleDElete(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in first.', 401)
   if (!isAdminRole(current.role)) return fail('Only the owner or an administrator can remove users.', 403)
   const memberId = new URL(request.url).searchParams.get('memberId') ?? ''
@@ -109,3 +110,7 @@ export async function DELETE(request: Request) {
   await db.delete(authSessions).where(eq(authSessions.userId, row.userId))
   return NextResponse.json({ ok: true })
 }
+export const GET = tenantScoped(handleGEt)
+export const POST = tenantScoped(handlePOst)
+export const PATCH = tenantScoped(handlePAtch)
+export const DELETE = tenantScoped(handleDElete)

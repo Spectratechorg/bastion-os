@@ -16,7 +16,8 @@
     "perf:baseline": "tsx scripts/latency-baseline.ts",
     "perf:load": "tsx --env-file=.env.local scripts/load-test-telemetry.ts",
     "telemetry:worker": "tsx --env-file-if-exists=.env.local scripts/telemetry-worker.ts",
-    "perf:replay": "tsx --env-file-if-exists=.env.local scripts/dark-launch-replay.ts"
+    "perf:replay": "tsx --env-file-if-exists=.env.local scripts/dark-launch-replay.ts",
+    "db:rls-check": "tsx --env-file-if-exists=.env.local scripts/rls-verify.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

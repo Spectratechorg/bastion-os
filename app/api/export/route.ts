@@ -3,6 +3,7 @@ import { and, desc, eq, gte, lt } from 'drizzle-orm'
 import { actor, can, denyGuard } from '@/lib/server'
 import { db } from '@/lib/db'
 import { attendance, clients, finances, guards, incidents, patrols, payrollRecords, sites } from '@/lib/db/schema'
+import { tenantScoped } from '@/lib/tenant'
 
 const tables = { guards, sites, attendance, patrols, incidents, finances, clients, payroll: payrollRecords } as const
 
@@ -11,7 +12,7 @@ function csvValue(value: unknown) {
   return `"${text.replaceAll('"', '""')}"`
 }
 
-export async function GET(request: Request) {
+async function handleGEt(request: Request) {
   if (!process.env.DATABASE_URL) return NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local and restart the app.' }, { status: 503 })
   const currentUser = await actor()
   if (!currentUser) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -30,8 +31,9 @@ export async function GET(request: Request) {
   const start = from ? new Date(`${from}T00:00:00+01:00`) : null
   const end = to ? new Date(new Date(`${to}T00:00:00+01:00`).getTime() + 86400000) : null
   const range = [start && gte(dateColumn, start), end && lt(dateColumn, end)].filter(Boolean) as ReturnType<typeof gte>[]
-  const rows = await db.select().from(table).where(and(eq(table.organizationId, currentUser.organizationId), ...range)).orderBy(desc(dateColumn)).limit(20000)
+  const rows = await db.select().from(table).where(and(...range)).orderBy(desc(dateColumn)).limit(20000)
   const keys = (rows.length ? Object.keys(rows[0]) : []).filter((key) => key !== 'photoUrl' && key !== 'receiptUrl')
   const content = [keys.join(','), ...rows.map((row) => keys.map((key) => csvValue(row[key as keyof typeof row])).join(','))].join('\n')
   return new NextResponse(content, { headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="bastion-${section}.csv"` } })
 }
+export const GET = tenantScoped(handleGEt)

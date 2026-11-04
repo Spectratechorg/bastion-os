@@ -3,7 +3,7 @@ import { and, count, desc, eq, gte, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
-import { db } from '@/lib/db'
+import { db, withTenant } from '@/lib/db'
 import { attendance, guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
 import { raiseAlert } from '@/lib/alerts'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
@@ -43,7 +43,6 @@ async function raiseBreachAlert(
   _siteId: string,
 ) {
   const breachesToday = await db.select({ id: attendance.id }).from(attendance).where(and(
-    eq(attendance.organizationId, currentUser.organizationId),
     eq(attendance.guardId, guard.id),
     eq(attendance.withinGeofence, false),
     gte(attendance.checkedInAt, new Date(Date.now() - 86400000)),
@@ -87,11 +86,12 @@ async function handlePost(request: Request) {
   }
   if (!currentUser) return NextResponse.json({ error: 'Enter your company guard app code, or sign in, before scanning a guard tag.' }, { status: 401 })
 
+  return withTenant(currentUser.organizationId, async () => {
   const { type, latitude, longitude } = parsed.data
   const token = parsed.data.token.replace(/^nfc:/i, '').trim()
   // A guard signed in with their own login can only act as their linked guard record.
   const linkedGuardId = session?.organizationId && currentUser.userId === session.userId && (await memberRole(currentUser.organizationId, currentUser.userId)) === 'guard'
-    ? (await db.select({ id: guards.id }).from(guards).where(and(eq(guards.organizationId, currentUser.organizationId), eq(guards.loginUserId, currentUser.userId))).limit(1))[0]?.id ?? 'none'
+    ? (await db.select({ id: guards.id }).from(guards).where(and(eq(guards.loginUserId, currentUser.userId))).limit(1))[0]?.id ?? 'none'
     : null
   if (!token && !linkedGuardId) return NextResponse.json({ error: 'Tap your NFC tag or type its code to continue.' }, { status: 400 })
 
@@ -99,7 +99,6 @@ async function handlePost(request: Request) {
     .select()
     .from(guards)
     .where(and(
-      eq(guards.organizationId, currentUser.organizationId),
       linkedGuardId && !token ? eq(guards.id, linkedGuardId) : eq(guards.nfcToken, token),
     ))
     .limit(1)
@@ -129,7 +128,6 @@ async function handlePost(request: Request) {
 
   const site = guard.site
     ? (await db.select().from(sites).where(and(
-      eq(sites.organizationId, currentUser.organizationId),
       eq(sites.name, guard.site),
       eq(sites.status, 'active'),
     )).limit(1))[0]
@@ -146,7 +144,6 @@ async function handlePost(request: Request) {
       .select()
       .from(attendance)
       .where(and(
-        eq(attendance.organizationId, currentUser.organizationId),
         eq(attendance.guardId, guard.id),
         isNull(attendance.checkedOutAt),
       ))
@@ -216,7 +213,6 @@ async function handlePost(request: Request) {
   if (!slot) return NextResponse.json({ error: `Patrol checkpoints can only be signed between ${String(shift.startHour).padStart(2, '0')}:00 and ${String(shift.endHour - 1).padStart(2, '0')}:59 Lagos time. Ask your supervisor to change the patrol shift in Settings.` }, { status: 409 })
 
   let [patrol] = await db.select().from(patrols).where(and(
-    eq(patrols.organizationId, currentUser.organizationId),
     eq(patrols.guardId, guard.id),
     eq(patrols.patrolDate, lagos.date),
   )).limit(1)
@@ -236,7 +232,6 @@ async function handlePost(request: Request) {
     }).onConflictDoNothing().returning()
     if (!patrol) {
       ;[patrol] = await db.select().from(patrols).where(and(
-        eq(patrols.organizationId, currentUser.organizationId),
         eq(patrols.guardId, guard.id),
         eq(patrols.patrolDate, lagos.date),
       )).limit(1)
@@ -254,7 +249,6 @@ async function handlePost(request: Request) {
   if (!checkpoint) return NextResponse.json({ error: `The ${slot} checkpoint has already been signed today.` }, { status: 409 })
 
   const checkpointRows = await db.select({ id: patrolCheckpoints.id }).from(patrolCheckpoints).where(and(
-    eq(patrolCheckpoints.organizationId, currentUser.organizationId),
     eq(patrolCheckpoints.patrolId, patrol.id),
   ))
   const signedCount = checkpointRows.length
@@ -266,7 +260,6 @@ async function handlePost(request: Request) {
     .from(patrolCheckpoints)
     .innerJoin(patrols, eq(patrolCheckpoints.patrolId, patrols.id))
     .where(and(
-      eq(patrolCheckpoints.organizationId, currentUser.organizationId),
       eq(patrols.guardId, guard.id),
       eq(patrols.patrolDate, lagos.date),
     ))
@@ -284,6 +277,7 @@ async function handlePost(request: Request) {
     patrolCount: Number(todayPatrols?.total ?? 0),
     message: `Patrol checkpoint recorded for ${guard.name}${site ? ` at ${site.name}` : ''}.`,
     record: patrol,
+  })
   })
 }
 

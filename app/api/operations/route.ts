@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
-import { db, pool } from '@/lib/db'
+import { currentClient, db } from '@/lib/db'
 import { raiseAlert } from '@/lib/alerts'
 import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
 import { actor, can, denyGuard, isModerator } from '@/lib/server'
 import { timed } from '@/lib/timing'
 import type { PermissionKey } from '@/lib/permissions'
+import { tenantScoped } from '@/lib/tenant'
 
 const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map', 'activity'])
 const databaseUnavailable = () => NextResponse.json({ error: 'Database is not configured. Add DATABASE_URL to .env.local and restart the app.' }, { status: 503 })
@@ -83,13 +83,13 @@ const SEVERITY_WEIGHT: Record<string, number> = { low: 1, medium: 2, high: 3, cr
  * (low 1, medium 2, high 3, critical 5) and every check-in outside the geofence adds 1.
  * 0-2 points = low, 3-7 = medium, 8 or more = high. `dangerLevel` in the response is this calculated value.
  */
-async function withRisk(organizationId: string, rows: (typeof sites.$inferSelect)[]) {
+async function withRisk(rows: (typeof sites.$inferSelect)[]) {
   const since = new Date(Date.now() - 30 * 86400000)
   const [inc, outside, assigned, clientRows] = await Promise.all([
-    pool.query('select site, severity, count(*)::int as n from incidents where organization_id = $1 and reported_at >= $2 group by site, severity', [organizationId, since]),
-    pool.query('select site_id, count(*)::int as n from attendance where organization_id = $1 and checked_in_at >= $2 and within_geofence = false group by site_id', [organizationId, since]),
-    pool.query("select site, count(*)::int as n from guards where organization_id = $1 and status = 'active' and site is not null group by site", [organizationId]),
-    db.select({ id: clients.id, name: clients.name }).from(clients).where(eq(clients.organizationId, organizationId)),
+    currentClient().query('select site, severity, count(*)::int as n from incidents where reported_at >= $1 group by site, severity', [since]),
+    currentClient().query('select site_id, count(*)::int as n from attendance where checked_in_at >= $1 and within_geofence = false group by site_id', [since]),
+    currentClient().query("select site, count(*)::int as n from guards where status = 'active' and site is not null group by site"),
+    db.select({ id: clients.id, name: clients.name }).from(clients),
   ])
   return rows.map((site) => {
     const incidentRows = inc.rows.filter((r) => r.site === site.name)
@@ -118,21 +118,21 @@ async function handleGet(request: Request) {
 
   switch (section) {
     case 'guards':
-      return NextResponse.json(await db.select().from(guards).where(eq(guards.organizationId, current.organizationId)).orderBy(desc(guards.createdAt)).limit(250))
+      return NextResponse.json(await db.select().from(guards).orderBy(desc(guards.createdAt)).limit(250))
     case 'sites':
-      return NextResponse.json(await withRisk(current.organizationId, await db.select().from(sites).where(eq(sites.organizationId, current.organizationId)).orderBy(desc(sites.createdAt)).limit(250)))
+      return NextResponse.json(await withRisk(await db.select().from(sites).orderBy(desc(sites.createdAt)).limit(250)))
     case 'attendance':
-      return NextResponse.json(await db.select().from(attendance).where(eq(attendance.organizationId, current.organizationId)).orderBy(desc(attendance.createdAt)).limit(250))
+      return NextResponse.json(await db.select().from(attendance).orderBy(desc(attendance.createdAt)).limit(250))
     case 'patrols':
-      return NextResponse.json(await db.select().from(patrols).where(eq(patrols.organizationId, current.organizationId)).orderBy(desc(patrols.createdAt)).limit(250))
+      return NextResponse.json(await db.select().from(patrols).orderBy(desc(patrols.createdAt)).limit(250))
     case 'incidents':
-      return NextResponse.json(await db.select().from(incidents).where(eq(incidents.organizationId, current.organizationId)).orderBy(desc(incidents.createdAt)).limit(250))
+      return NextResponse.json(await db.select().from(incidents).orderBy(desc(incidents.createdAt)).limit(250))
     case 'alerts':
-      return NextResponse.json(await db.select().from(alerts).where(eq(alerts.organizationId, current.organizationId)).orderBy(desc(alerts.createdAt)).limit(250))
+      return NextResponse.json(await db.select().from(alerts).orderBy(desc(alerts.createdAt)).limit(250))
     case 'activity':
-      return NextResponse.json(await db.select().from(activityEvents).where(eq(activityEvents.organizationId, current.organizationId)).orderBy(desc(activityEvents.createdAt)).limit(100))
+      return NextResponse.json(await db.select().from(activityEvents).orderBy(desc(activityEvents.createdAt)).limit(100))
     case 'finances':
-      return NextResponse.json(await db.select().from(finances).where(eq(finances.organizationId, current.organizationId)).orderBy(desc(finances.createdAt)).limit(250))
+      return NextResponse.json(await db.select().from(finances).orderBy(desc(finances.createdAt)).limit(250))
   }
 }
 
@@ -155,7 +155,6 @@ async function handlePost(request: Request) {
     const siteName = parsed.data.site || null
     if (siteName) {
       const [site] = await db.select({ id: sites.id }).from(sites).where(and(
-        eq(sites.organizationId, current.organizationId),
         eq(sites.name, siteName),
         eq(sites.status, 'active'),
       )).limit(1)
@@ -209,14 +208,12 @@ async function handlePost(request: Request) {
     const siteId = parsed.data.siteId || null
     if (clientId) {
       const [client] = await db.select({ id: clients.id }).from(clients).where(and(
-        eq(clients.organizationId, current.organizationId),
         eq(clients.id, clientId),
       )).limit(1)
       if (!client) return fail('Select a client in this organization.')
     }
     if (siteId) {
       const [site] = await db.select({ id: sites.id }).from(sites).where(and(
-        eq(sites.organizationId, current.organizationId),
         eq(sites.id, siteId),
       )).limit(1)
       if (!site) return fail('Select a site in this organization.')
@@ -270,7 +267,7 @@ const updateSchema = z.object({
   receiptUrl: z.string().max(1_500_000).nullable().optional(),
 })
 
-export async function PATCH(request: Request) {
+async function handlePatch(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
@@ -305,7 +302,6 @@ export async function PATCH(request: Request) {
 
     if (changes.site) {
       const [site] = await db.select({ id: sites.id }).from(sites).where(and(
-        eq(sites.organizationId, current.organizationId),
         eq(sites.name, changes.site),
         eq(sites.status, 'active'),
       )).limit(1)
@@ -313,7 +309,7 @@ export async function PATCH(request: Request) {
     }
     const values = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))
     if (Object.keys(values).length === 0) return fail('Provide at least one guard field to update.')
-    const [updated] = await db.update(guards).set(values).where(and(eq(guards.id, id), eq(guards.organizationId, current.organizationId))).returning()
+    const [updated] = await db.update(guards).set(values).where(and(eq(guards.id, id))).returning()
     if (!updated) return fail('Guard not found in this organization.', 404)
     row = updated
     eventTitle = `Guard updated: ${updated.name}`
@@ -333,26 +329,26 @@ export async function PATCH(request: Request) {
     else return fail('Unsupported site action.')
     const values = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined))
     if (Object.keys(values).length === 0) return fail('Provide at least one site field to update.')
-    const [updated] = await db.update(sites).set(values).where(and(eq(sites.id, id), eq(sites.organizationId, current.organizationId))).returning()
+    const [updated] = await db.update(sites).set(values).where(and(eq(sites.id, id))).returning()
     if (!updated) return fail('Site not found in this organization.', 404)
     row = updated
     eventTitle = `Site updated: ${updated.name}`
   } else if (section === 'attendance') {
     if (!['approve', 'flag'].includes(action)) return fail('Unsupported attendance action.')
     const [updated] = await db.update(attendance).set({ reviewStatus: action === 'approve' ? 'approved' : 'flagged' })
-      .where(and(eq(attendance.id, id), eq(attendance.organizationId, current.organizationId))).returning()
+      .where(and(eq(attendance.id, id))).returning()
     if (!updated) return fail('Attendance record not found in this organization.', 404)
     row = updated
     eventTitle = 'Attendance reviewed'
   } else if (section === 'patrols' || section === 'live-map') {
     if (action !== 'complete') return fail('Patrol records are read-only except for marking a patrol complete.', 405)
     const [updated] = await db.update(patrols).set({ status: 'completed', progress: 100 })
-      .where(and(eq(patrols.id, id), eq(patrols.organizationId, current.organizationId))).returning()
+      .where(and(eq(patrols.id, id))).returning()
     if (!updated) return fail('Patrol not found in this organization.', 404)
     row = updated
     eventTitle = `Patrol updated: ${updated.routeName ?? updated.id}`
   } else if (section === 'incidents') {
-    const where = and(eq(incidents.id, id), eq(incidents.organizationId, current.organizationId))
+    const where = and(eq(incidents.id, id))
     const [record] = await db.select().from(incidents).where(where).limit(1)
     if (!record) return fail('Incident not found in this organization.', 404)
     if (action === 'comment') {
@@ -388,12 +384,12 @@ export async function PATCH(request: Request) {
     const acknowledged = action === 'acknowledge' ? true : parsed.data.acknowledged
     if (acknowledged === undefined) return fail('Provide an acknowledgement update.')
     const [updated] = await db.update(alerts).set({ acknowledged })
-      .where(and(eq(alerts.id, id), eq(alerts.organizationId, current.organizationId))).returning()
+      .where(and(eq(alerts.id, id))).returning()
     if (!updated) return fail('Alert not found in this organization.', 404)
     row = updated
     eventTitle = `Alert updated: ${updated.title}`
   } else if (section === 'finances') {
-    const where = and(eq(finances.id, id), eq(finances.organizationId, current.organizationId))
+    const where = and(eq(finances.id, id))
     const [record] = await db.select().from(finances).where(where).limit(1)
     if (!record) return fail('Finance record not found in this organization.', 404)
 
@@ -437,7 +433,7 @@ export async function PATCH(request: Request) {
 }
 
 /** Permanent removal of a guard or site. Needs the "approve payroll" permission. Guards take their attendance, patrol and payroll history with them. */
-export async function DELETE(request: Request) {
+async function handleDelete(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
@@ -446,35 +442,33 @@ export async function DELETE(request: Request) {
   const section = url.searchParams.get('section')
   const id = url.searchParams.get('id') ?? ''
   if (!z.string().uuid().safeParse(id).success) return fail('Invalid id')
-  const inOrg = (table: { organizationId: AnyPgColumn }) => eq(table.organizationId, current.organizationId)
-
   if (section === 'guards') {
-    const [found] = await db.select({ name: guards.name }).from(guards).where(and(eq(guards.id, id), inOrg(guards))).limit(1)
+    const [found] = await db.select({ name: guards.name }).from(guards).where(and(eq(guards.id, id))).limit(1)
     if (!found) return fail('Guard not found', 404)
-    await db.transaction(async (tx) => {
-      await tx.delete(attendance).where(and(eq(attendance.guardId, id), inOrg(attendance)))
-      await tx.delete(patrols).where(and(eq(patrols.guardId, id), inOrg(patrols))) // checkpoints cascade
-      await tx.delete(payrollRecords).where(and(eq(payrollRecords.guardId, id), inOrg(payrollRecords)))
-      await tx.update(incidents).set({ assigneeId: null }).where(and(eq(incidents.assigneeId, id), inOrg(incidents)))
-      await tx.delete(guards).where(and(eq(guards.id, id), inOrg(guards)))
-    })
+    // The handler already runs inside the tenant transaction; a nested BEGIN would commit it.
+    await db.delete(attendance).where(and(eq(attendance.guardId, id)))
+    await db.delete(patrols).where(and(eq(patrols.guardId, id))) // checkpoints cascade
+    await db.delete(payrollRecords).where(and(eq(payrollRecords.guardId, id)))
+    await db.update(incidents).set({ assigneeId: null }).where(and(eq(incidents.assigneeId, id)))
+    await db.delete(guards).where(and(eq(guards.id, id)))
     await log(current, 'guard.deleted', `Guard deleted: ${found.name}`, 'Removed with their attendance, patrol and payroll history')
     return NextResponse.json({ ok: true })
   }
   if (section === 'sites') {
-    const [found] = await db.select({ name: sites.name }).from(sites).where(and(eq(sites.id, id), inOrg(sites))).limit(1)
+    const [found] = await db.select({ name: sites.name }).from(sites).where(and(eq(sites.id, id))).limit(1)
     if (!found) return fail('Site not found', 404)
-    await db.transaction(async (tx) => {
-      await tx.update(guards).set({ site: null }).where(and(eq(guards.site, found.name), inOrg(guards)))
-      await tx.update(attendance).set({ siteId: null }).where(and(eq(attendance.siteId, id), inOrg(attendance)))
-      await tx.update(patrols).set({ siteId: null }).where(and(eq(patrols.siteId, id), inOrg(patrols)))
-      await tx.delete(sites).where(and(eq(sites.id, id), inOrg(sites))) // finances.siteId is set null by the foreign key
-    })
+    // Same tenant transaction as above; no nested BEGIN.
+    await db.update(guards).set({ site: null }).where(and(eq(guards.site, found.name)))
+    await db.update(attendance).set({ siteId: null }).where(and(eq(attendance.siteId, id)))
+    await db.update(patrols).set({ siteId: null }).where(and(eq(patrols.siteId, id)))
+    await db.delete(sites).where(and(eq(sites.id, id))) // finances.siteId is set null by the foreign key
     await log(current, 'site.deleted', `Site deleted: ${found.name}`, 'Guards at this site are now unassigned')
     return NextResponse.json({ ok: true })
   }
   return fail('Only guards and sites can be deleted.', 405)
 }
 
-export const GET = timed('/api/operations', handleGet)
-export const POST = timed('/api/operations', handlePost)
+export const GET = timed('/api/operations', tenantScoped(handleGet))
+export const POST = timed('/api/operations', tenantScoped(handlePost))
+export const PATCH = timed('/api/operations', tenantScoped(handlePatch))
+export const DELETE = timed('/api/operations', tenantScoped(handleDelete))
