@@ -5,6 +5,7 @@ import { Download, Plus, RefreshCw, Search, Trash2, UserPlus } from 'lucide-reac
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { api, naira } from '@/lib/client'
+import { Pagination } from '@/components/pagination'
 
 type ClientRecord = {
   id: string; name: string; contactName: string | null; email: string | null; phone: string | null
@@ -12,6 +13,7 @@ type ClientRecord = {
 }
 type SiteRow = { id: string; name: string; status: string; clientId: string | null }
 type GuardRow = { id: string; name: string; site: string | null; status: string }
+type ClientPage = { rows: ClientRecord[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: { total: number; active: number; monthlyValue: number } }
 
 const emptyForm = { name: '', contactName: '', email: '', phone: '', monthlyValue: '', slaScore: '', renewalDate: '', status: 'active' }
 
@@ -20,6 +22,11 @@ export function ClientsPage() {
   const [sites, setSites] = useState<SiteRow[]>([])
   const [guards, setGuards] = useState<GuardRow[]>([])
   const [search, setSearch] = useState('')
+  const [term, setTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0)
+  const [stats, setStats] = useState<{ total: number; active: number; monthlyValue: number }>({ total: 0, active: 0, monthlyValue: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
@@ -31,21 +38,25 @@ export function ClientsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [clientRows, siteRows, guardRows] = await Promise.all([
-        api<ClientRecord[]>('/api/clients'),
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), q: term })
+      const [clientPage, siteRows, guardRows] = await Promise.all([
+        api<ClientPage>(`/api/clients?${params}`),
         api<SiteRow[]>('/api/operations?section=sites'),
         api<GuardRow[]>('/api/operations?section=guards'),
       ])
-      setClients(clientRows)
+      setClients(clientPage.rows)
+      setTotal(clientPage.total)
+      setStats(clientPage.stats ?? { total: clientPage.total, active: clientPage.rows.filter((client) => client.status === 'active').length, monthlyValue: 0 })
       setSites(siteRows)
       setGuards(guardRows)
       setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load clients.')
     } finally { setLoading(false) }
-  }, [])
+  }, [page, pageSize, term])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { setLoading(true); void load() }, [load])
+  useEffect(() => { const timer = window.setTimeout(() => { setTerm(search.trim()); setPage(1) }, 300); return () => window.clearTimeout(timer) }, [search])
 
   const sitesOf = (client: ClientRecord) => sites.filter((site) => site.clientId === client.id)
   const guardsAt = (client: ClientRecord) => {
@@ -53,12 +64,8 @@ export function ClientsPage() {
     return guards.filter((guard) => guard.status === 'active' && guard.site && names.has(guard.site))
   }
 
-  const rows = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return term ? clients.filter((client) => `${client.name} ${client.contactName ?? ''} ${client.email ?? ''}`.toLowerCase().includes(term)) : clients
-  }, [clients, search])
-
-  const monthlyTotal = clients.filter((client) => client.status === 'active').reduce((sum, client) => sum + Number(client.monthlyValue), 0)
+  const rows = clients
+  const monthlyTotal = stats.monthlyValue
   const unassignedSites = sites.filter((site) => !site.clientId)
 
   async function save(event: FormEvent) {
@@ -91,8 +98,8 @@ export function ClientsPage() {
     setBusy(client.id)
     try {
       await api('/api/operations', { method: 'DELETE', json: { section: 'clients', id: client.id } })
-      setClients((items) => items.filter((item) => item.id !== client.id))
       setError('')
+      await load()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to delete the client.')
     } finally { setBusy('') }
@@ -114,7 +121,7 @@ export function ClientsPage() {
       <button onClick={() => { setEditing(null); setForm(emptyForm); setFormOpen(true) }} className={btnPrimary}><Plus className="size-3.5" />Add client</button>
     </PageHeader>
 
-    <StatStrip stats={[[String(clients.length), 'Clients'], [String(clients.filter((client) => client.status === 'active').length), 'Active'], [naira(monthlyTotal), 'Monthly contract value'], [String(unassignedSites.length), 'Sites without a client']]} />
+    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(monthlyTotal), 'Monthly contract value'], [String(unassignedSites.length), 'Sites without a client']]} />
 
     {unassignedSites.length > 0 && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">{unassignedSites.length} site{unassignedSites.length === 1 ? ' is' : 's are'} not linked to a client yet: {unassignedSites.map((site) => site.name).join(', ')}. Use <b>Assign sites</b> on a client to link them.</p>}
     <ErrorBanner message={error} retry={() => void load()} />
@@ -125,7 +132,7 @@ export function ClientsPage() {
     </div>
 
     <div className="overflow-hidden ws-card">
-      {loading ? <Spinner label="Loading clients…" /> : rows.length === 0 ? <Empty title={search ? 'No clients match your search' : 'No clients yet'} text={search ? undefined : 'Add a client, then link their sites.'} /> : <ul className="divide-y divide-[#EFEFF1]">
+      {loading ? <Spinner label="Loading clients…" /> : rows.length === 0 ? <Empty title={total ? 'No clients match your search' : 'No clients yet'} text={total ? undefined : 'Add a client, then link their sites.'} /> : <ul className="divide-y divide-[#EFEFF1]">
         {rows.map((client) => {
           const clientSites = sitesOf(client)
           const deployed = guardsAt(client)
@@ -155,6 +162,7 @@ export function ClientsPage() {
           </li>
         })}
       </ul>}
+      {!loading && <Pagination page={page} pageSize={pageSize} total={total} busy={loading} onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1) }} />}
     </div>
 
     {formOpen && <Sheet title={editing ? 'Edit client' : 'Add client'} kicker="CLIENT" onClose={() => setFormOpen(false)}

@@ -1,10 +1,11 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { db } from '@/lib/db'
 import { activityEvents, clients, guards, sites } from '@/lib/db/schema'
 import { actor, denyGuard } from '@/lib/server'
+import { likeTerm, pageResponse, readPage } from '@/lib/pagination'
 
 const clientSchema = z.object({
   name: z.string().trim().min(2).max(200),
@@ -37,23 +38,39 @@ async function readBody(request: Request): Promise<unknown> {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const { user, response } = await getCurrent()
   if (response) return response
-  const rows = await db.select().from(clients)
-    .where(eq(clients.organizationId, user.organizationId))
-    .orderBy(desc(clients.createdAt))
-    .limit(500)
+  const url = new URL(request.url)
+  const paginated = url.searchParams.has('page')
+  const page = readPage(url)
+  const term = (url.searchParams.get('q') ?? '').trim()
+  const like = likeTerm(term)
+  const where = and(
+    eq(clients.organizationId, user.organizationId),
+    term ? or(ilike(clients.name, like), ilike(clients.contactName, like), ilike(clients.email, like), ilike(clients.phone, like)) : undefined,
+  )
+  const [rows, totals, stats] = await Promise.all([
+    db.select().from(clients).where(where).orderBy(desc(clients.createdAt)).limit(paginated ? page.pageSize : 500).offset(paginated ? page.offset : 0),
+    paginated ? db.select({ total: sql<number>`count(*)` }).from(clients).where(where) : Promise.resolve(null),
+    paginated ? db.select({
+      total: sql<number>`count(*)`,
+      active: sql<number>`count(*) filter (where status = 'active')`,
+      monthlyValue: sql<number>`coalesce(sum(monthly_value) filter (where status = 'active'), 0)`,
+    }).from(clients).where(eq(clients.organizationId, user.organizationId)) : Promise.resolve(null),
+  ])
   // Each client can own several sites; guards are counted through the sites they are assigned to.
   const [siteRows, guardRows] = await Promise.all([
     db.select({ id: sites.id, name: sites.name, status: sites.status, clientId: sites.clientId }).from(sites).where(eq(sites.organizationId, user.organizationId)),
     db.select({ site: guards.site }).from(guards).where(and(eq(guards.organizationId, user.organizationId), eq(guards.status, 'active'))),
   ])
-  return NextResponse.json(rows.map((client) => {
+  const enriched = rows.map((client) => {
     const owned = siteRows.filter((site) => site.clientId === client.id)
     const names = new Set(owned.map((site) => site.name))
     return { ...client, sites: owned.map((site) => ({ id: site.id, name: site.name, status: site.status })), guardCount: guardRows.filter((guard) => guard.site && names.has(guard.site)).length }
-  }))
+  })
+  if (!paginated) return NextResponse.json(enriched)
+  return NextResponse.json(pageResponse(enriched, Number(totals?.[0]?.total ?? enriched.length), page, stats ? { total: Number(stats[0].total), active: Number(stats[0].active), monthlyValue: Number(stats[0].monthlyValue) } : undefined))
 }
 
 export async function POST(request: Request) {

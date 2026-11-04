@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Plus } from 'lucide-react'
 import { Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { api, naira } from '@/lib/client'
+import { Pagination } from '@/components/pagination'
 
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' })
 const addMonth = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); const t = new Date(Date.UTC(y, m, 1)); const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); t.setUTCDate(Math.min(d, last)); return t.toISOString().slice(0, 10) }
@@ -14,11 +15,26 @@ const niceDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateStrin
 export type Contract = { id: string; clientName: string; title: string; sites: string | null; monthlyFee: number; startDate: string; endDate: string; nextDueDate: string }
 export const dueState = (c: Contract) => { const n = daysUntil(c.nextDueDate); return n < 0 ? 'Overdue' : n <= 7 ? 'Due soon' : 'Upcoming' }
 
-export function useList<T>(url: string) {
+type ListPage<T> = { rows: T[]; page: number; pageSize: number; total: number; hasMore: boolean }
+
+export function useList<T>(url: string, paged = false) {
   const [rows, setRows] = useState<T[] | null>(null); const [error, setError] = useState('')
-  const load = useCallback(async () => { try { setRows(await api<T[]>(url)); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load.') } }, [url])
+  const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(25); const [total, setTotal] = useState(0)
+  const load = useCallback(async () => {
+    try {
+      if (paged) {
+        const separator = url.includes('?') ? '&' : '?'
+        const data = await api<ListPage<T>>(`${url}${separator}page=${page}&pageSize=${pageSize}`)
+        setRows(data.rows); setTotal(data.total)
+      } else {
+        const data = await api<T[]>(url)
+        setRows(data); setTotal(data.length)
+      }
+      setError('')
+    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load.') }
+  }, [url, paged, page, pageSize])
   useEffect(() => { void load() }, [load])
-  return { rows, error, load }
+  return { rows, error, load, page, pageSize, total, setPage, setPageSize }
 }
 
 export const FINANCE_TABS = [['Overview', '/finance', 'overview'], ['Invoices', '/finance/invoices', 'invoices'], ['Expenses', '/finance/expenses', 'expenses'], ['Contracts', '/finance/contracts', 'contracts'], ['Inventory', '/finance/inventory', 'inventory'], ['Budgets', '/finance/budgets', 'budgets'], ['Payroll', '/finance/payroll', 'payroll']] as const
@@ -63,13 +79,13 @@ function ContractSheet({ row, onClose, onSaved }: { row: Contract | null; onClos
 }
 
 export function ContractsTab() {
-  const { rows, error, load } = useList<Contract>('/api/contracts'); const [edit, setEdit] = useState<Contract | 'new' | null>(null); const [problem, setProblem] = useState('')
+  const { rows, error, load, page, pageSize, total, setPage, setPageSize } = useList<Contract>('/api/contracts', true); const [edit, setEdit] = useState<Contract | 'new' | null>(null); const [problem, setProblem] = useState('')
   async function paid(c: Contract) { try { await api('/api/contracts', { method: 'PATCH', json: { id: c.id, nextDueDate: addMonth(c.nextDueDate) } }); void load() } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to update.') } }
   async function del(c: Contract) { if (!window.confirm(`Delete the ${c.clientName} contract?`)) return; try { await api(`/api/contracts?id=${c.id}`, { method: 'DELETE' }); void load() } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to delete.') } }
   return <>
     <div className="mb-3 flex justify-end"><button className={btnPrimary} onClick={() => setEdit('new')}><Plus className="size-4" />Add contract</button></div>
     <ErrorBanner message={error || problem} retry={() => void load()} />
-    <div className="overflow-hidden ws-card">{!rows ? <Spinner /> : rows.length === 0 ? <Empty title="No contracts yet" text="Add each client contract with its monthly fee and next payment date." /> : <ul className="divide-y divide-[#EFEFF1]">{rows.map((c) => <li key={c.id} className="flex flex-wrap items-center gap-3 p-4 text-xs"><span className="min-w-[180px] flex-1"><b className="block text-sm font-semibold">{c.clientName}</b><span className="text-[#6B6B72]">{c.title}{c.sites ? ` · ${c.sites}` : ''}</span><span className="mt-0.5 block text-[10px] text-[#9A9AA1]">{niceDate(c.startDate)} to {niceDate(c.endDate)}</span></span><span className="font-mono text-sm">{naira(c.monthlyFee)}</span><span className="text-right"><span className="block text-[10px] uppercase tracking-wide text-[#6B6B72]">Next due</span><span className="font-mono">{niceDate(c.nextDueDate)}</span></span><Badge value={c.endDate < today() ? 'Ended' : dueState(c)} /><span className="flex gap-1.5"><button className={smallBtn} onClick={() => void paid(c)}>Record payment</button><button className={smallBtn} onClick={() => setEdit(c)}>Edit</button><button className={`${smallBtn} text-[#B42318]`} onClick={() => void del(c)}>Delete</button></span></li>)}</ul>}</div>
+    <div className="overflow-hidden ws-card">{!rows ? <Spinner /> : rows.length === 0 ? <Empty title="No contracts yet" text="Add each client contract with its monthly fee and next payment date." /> : <ul className="divide-y divide-[#EFEFF1]">{rows.map((c) => <li key={c.id} className="flex flex-wrap items-center gap-3 p-4 text-xs"><span className="min-w-[180px] flex-1"><b className="block text-sm font-semibold">{c.clientName}</b><span className="text-[#6B6B72]">{c.title}{c.sites ? ` · ${c.sites}` : ''}</span><span className="mt-0.5 block text-[10px] text-[#9A9AA1]">{niceDate(c.startDate)} to {niceDate(c.endDate)}</span></span><span className="font-mono text-sm">{naira(c.monthlyFee)}</span><span className="text-right"><span className="block text-[10px] uppercase tracking-wide text-[#6B6B72]">Next due</span><span className="font-mono">{niceDate(c.nextDueDate)}</span></span><Badge value={c.endDate < today() ? 'Ended' : dueState(c)} /><span className="flex gap-1.5"><button className={smallBtn} onClick={() => void paid(c)}>Record payment</button><button className={smallBtn} onClick={() => setEdit(c)}>Edit</button><button className={`${smallBtn} text-[#B42318]`} onClick={() => void del(c)}>Delete</button></span></li>)}</ul>}{rows ? <Pagination page={page} pageSize={pageSize} total={total} onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1) }} /> : null}</div>
     <p className="mt-3 text-[11px] text-[#6B6B72]">“Record payment” moves the next due date forward by one month.</p>
     {edit && <ContractSheet row={edit === 'new' ? null : edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); void load() }} />}
   </>

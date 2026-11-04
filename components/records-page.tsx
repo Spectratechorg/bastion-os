@@ -8,6 +8,7 @@ import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { api, when } from '@/lib/client'
 import { GuardMetrics } from '@/components/guard-metrics'
+import { Pagination } from '@/components/pagination'
 import { WriteTagButton } from '@/components/write-tag-button'
 import { ALERT_RULES } from '@/lib/alerts-client'
 
@@ -15,6 +16,7 @@ export type Section = 'guards' | 'sites' | 'attendance' | 'incidents' | 'alerts'
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
 type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void }
 type Column = { head: string; cell: (row: Row, ctx: Ctx) => ReactNode }
+type Paged = { rows: Row[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: Record<string, number> }
 
 const guardName = (ctx: Ctx, id: string) => ctx.guards.find((guard) => guard.id === id)?.name ?? 'Former guard'
 const siteName = (ctx: Ctx, id: string | null) => ctx.sites.find((site) => site.id === id)?.name ?? '—'
@@ -194,30 +196,42 @@ function SiteMap({ sites, guards }: { sites: Row[]; guards: Row[] }) {
 export function RecordsPage({ section }: { section: Section }) {
   const page = meta[section]
   const [records, setRecords] = useState<Row[]>([]); const [guards, setGuards] = useState<Row[]>([]); const [sites, setSites] = useState<Row[]>([])
-  const [query, setQuery] = useState(''); const [filter, setFilter] = useState('all'); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
+  const [query, setQuery] = useState(''); const [term, setTerm] = useState('')
+  const [filter, setFilter] = useState('all'); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
+  const [currentPage, setCurrentPage] = useState(1); const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0); const [serverStats, setServerStats] = useState<Record<string, number> | null>(null)
   const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'incident' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
 
   const load = useCallback(async () => {
     try {
+      const params = new URLSearchParams({ section, page: String(currentPage), pageSize: String(pageSize), filter, q: term })
       const need = (name: string) => api<Row[]>(`/api/operations?section=${name}`)
-      const [main, g, s] = await Promise.all([need(section), section === 'guards' ? Promise.resolve(null) : need('guards'), section === 'sites' ? Promise.resolve(null) : need('sites')])
-      setRecords(main); setGuards(g ?? main); setSites(s ?? main); setError('')
+      const [main, g, s] = await Promise.all([
+        api<Paged>(`/api/operations?${params}`),
+        section === 'guards' ? Promise.resolve(null) : need('guards'),
+        section === 'sites' ? Promise.resolve(null) : need('sites'),
+      ])
+      setRecords(main.rows); setTotal(main.total); setServerStats(main.stats ?? null)
+      setGuards(g ?? main.rows); setSites(s ?? main.rows); setError('')
     } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load records.') } finally { setLoading(false) }
-  }, [section])
-  useEffect(() => { setLoading(true); setFilter('all'); void load(); const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
+  }, [section, currentPage, pageSize, filter, term])
+  useEffect(() => { setFilter('all'); setCurrentPage(1) }, [section])
+  useEffect(() => { setLoading(true); void load() }, [load])
+  useEffect(() => { const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
   useEffect(() => { const q = new URLSearchParams(window.location.search).get('q'); if (q) setQuery(q) }, [])
+  useEffect(() => { const timer = window.setTimeout(() => { setTerm(query.trim()); setCurrentPage(1) }, 300); return () => window.clearTimeout(timer) }, [query])
 
   const ctx: Ctx = useMemo(() => ({
     guards, sites,
-    act: async (row, action, extra = {}) => { try { const updated = await api<Row>('/api/operations', { method: 'PATCH', json: { section, id: row.id, action, ...extra } }); setRecords((items) => items.map((item) => item.id === row.id ? updated : item)); setDialog((d) => d?.row?.id === row.id ? { ...d, row: updated } : d); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update.') } },
+    act: async (row, action, extra = {}) => { try { const updated = await api<Row>('/api/operations', { method: 'PATCH', json: { section, id: row.id, action, ...extra } }); setRecords((items) => items.map((item) => item.id === row.id ? updated : item)); setDialog((d) => d?.row?.id === row.id ? { ...d, row: updated } : d); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update.') } },
     edit: (row) => setDialog({ kind: section === 'guards' ? 'guard' : 'site', row }), comment: (row) => setDialog({ kind: 'detail', row }), assign: (row) => setDialog({ kind: 'assign', row }),
     metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }),
     remove: async (row) => {
       const what = section === 'guards' ? `Delete ${row.name} permanently? Their attendance, patrol and payroll history is deleted with them. To keep the history, suspend the guard instead.` : `Delete ${row.name} permanently? Guards assigned here become unassigned. To keep the record, deactivate the site instead.`
       if (!window.confirm(what)) return
-      try { await api(`/api/operations?section=${section}&id=${row.id}`, { method: 'DELETE' }); setRecords((items) => items.filter((item) => item.id !== row.id)); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to delete.') }
+      try { await api(`/api/operations?section=${section}&id=${row.id}`, { method: 'DELETE' }); setRecords((items) => items.filter((item) => item.id !== row.id)); setTotal((value) => Math.max(0, value - 1)); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to delete.') }
     },
-  }), [guards, sites, section])
+  }), [guards, sites, section, load])
 
   const filterOptions: Record<Section, [string, (r: Row) => boolean][]> = {
     guards: [['all', () => true], ['active', (r) => r.status === 'active'], ['suspended', (r) => r.status === 'suspended']],
@@ -226,12 +240,14 @@ export function RecordsPage({ section }: { section: Section }) {
     incidents: [['all', () => true], ['open', (r) => r.status !== 'resolved'], ['critical', (r) => r.severity === 'critical'], ['resolved', (r) => r.status === 'resolved']],
     alerts: [['all', () => true], ['open', (r) => !r.acknowledged], ['high or critical', (r) => r.severity === 'high' || r.severity === 'critical'], ['acknowledged', (r) => r.acknowledged]],
   }
-  const rows = useMemo(() => {
-    const test = filterOptions[section].find(([name]) => name === filter)?.[1] ?? (() => true)
-    const text = (r: Row) => [...Object.values(r).filter((x) => typeof x === 'string' && !String(x).startsWith('data:')), guardName(ctx, r.guardId), siteName(ctx, r.siteId)].join(' ').toLowerCase()
-    return records.filter((r) => test(r) && text(r).includes(query.toLowerCase()))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [records, query, filter, section, ctx])
+  const rows = records
+  const statPairs: [string, string][] = serverStats ? (
+    section === 'guards' ? [[String(serverStats.total), 'Registered'], [String(serverStats.active), 'Active'], [String(serverStats.suspended), 'Suspended'], [String(serverStats.nfc), 'NFC issued']]
+      : section === 'sites' ? [[String(serverStats.total), 'Sites'], [String(serverStats.active), 'Active'], [String(serverStats.deployed), 'Guards deployed'], [String(serverStats.highRisk), 'High risk']]
+        : section === 'attendance' ? [[String(serverStats.total), 'Check-ins'], [String(serverStats.inside), 'Inside geofence'], [String(serverStats.outside), 'Outside geofence'], [String(serverStats.flagged), 'Flagged']]
+          : section === 'incidents' ? [[String(serverStats.total), 'Incidents'], [String(serverStats.open), 'Open'], [String(serverStats.critical), 'Critical'], [String(serverStats.resolved), 'Resolved']]
+            : [[String(serverStats.total), 'Alerts'], [String(serverStats.open), 'Open'], [String(serverStats.highCritical), 'High or critical'], [String(serverStats.acknowledged), 'Acknowledged']]
+  ) : page.stats(records)
 
   const head = page.columns.filter((c) => c.head)
   const [first, ...rest] = page.columns.slice(0, -1)
@@ -243,20 +259,21 @@ export function RecordsPage({ section }: { section: Section }) {
       {section === 'sites' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'site' })}><Plus className="size-4" />Add site</button>}
       {section === 'incidents' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'incident' })}><Plus className="size-4" />Report incident</button>}
     </PageHeader>
-    <StatStrip stats={page.stats(records)} />
+    <StatStrip stats={statPairs} />
     {section === 'alerts' && <section className="mb-3 ws-card p-4"><h2 className="text-xs font-semibold">How alerts get their level</h2><ul className="mt-3 grid divide-y divide-[#EFEFF1] text-xs sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">{Object.values(ALERT_RULES).map((r) => <li key={r.label} className="px-3 py-2"><b className="block">{r.label} <span className="font-normal text-[#6B6B72]">· {r.severity}</span></b><span className="text-[#52525B]">{r.rule}</span></li>)}</ul><p className="mt-2 text-[11px] text-[#6B6B72]">Acknowledge an alert once someone has seen it and is dealing with it. Acknowledged alerts stay in the list as a record.</p></section>}
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <label className="flex h-11 min-w-0 flex-1 basis-[200px] items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3 sm:h-10 sm:max-w-sm"><Search className="size-4 text-[#9A9AA1]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={page.search} className="w-full bg-transparent text-xs outline-none" /></label>
-      <select aria-label="Filter" value={filter} onChange={(e) => setFilter(e.target.value)} className="h-11 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-xs capitalize sm:h-10">{filterOptions[section].map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
+      <select aria-label="Filter" value={filter} onChange={(e) => { setFilter(e.target.value); setCurrentPage(1) }} className="h-11 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-xs capitalize sm:h-10">{filterOptions[section].map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
       <a href={`/api/export?section=${section}`} className={btn}><Download className="size-3.5" />Export CSV</a>
       <button onClick={() => { setLoading(true); void load() }} className={btn}><RefreshCw className="size-3.5" />Refresh</button>
     </div>
     <ErrorBanner message={error} retry={() => void load()} />
     <div className="overflow-hidden ws-card">
-      {loading ? <Spinner label="Loading live records…" /> : rows.length === 0 ? <Empty title={records.length ? 'No records match your search' : `No ${page.title.toLowerCase()} yet`} text={records.length ? undefined : section === 'guards' ? 'Register your first guard to get started.' : section === 'sites' ? 'Add a site to start tracking coverage.' : 'Records appear here as they are created.'} /> : <>
+      {loading ? <Spinner label="Loading live records…" /> : rows.length === 0 ? <Empty title={total ? 'No records match your search' : `No ${page.title.toLowerCase()} yet`} text={total ? undefined : section === 'guards' ? 'Register your first guard to get started.' : section === 'sites' ? 'Add a site to start tracking coverage.' : 'Records appear here as they are created.'} /> : <>
         <div className="hidden overflow-x-auto md:block"><table className="w-full text-left text-xs"><thead className="border-b border-[#E4E4E7] bg-[#F5F5F6] text-[9px] font-semibold uppercase tracking-[0.08em] text-[#6B6B72]"><tr>{head.map((c) => <th key={c.head} className="whitespace-nowrap px-4 py-2.5">{c.head}</th>)}<th /></tr></thead>
           <tbody>{rows.map((r) => <tr key={r.id} className="border-t border-[#EBEFE7] transition-colors hover:bg-[#F5F5F6]">{page.columns.slice(0, -1).map((c) => <td key={c.head} className="px-4 py-2.5 align-middle">{c.cell(r, ctx)}</td>)}<td className="px-4 py-2.5">{actions.cell(r, ctx)}</td></tr>)}</tbody></table></div>
         <ul className="divide-y divide-[#EFEFF1] md:hidden">{rows.map((r) => <li key={r.id} className="p-4 text-xs"><div className="text-sm">{first.cell(r, ctx)}</div><dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">{rest.map((c) => <div key={c.head}><dt className="text-[10px] uppercase tracking-wide text-[#6B6B72]">{c.head}</dt><dd className="mt-0.5">{c.cell(r, ctx)}</dd></div>)}</dl><div className="mt-3">{actions.cell(r, ctx)}</div></li>)}</ul></>}
+      {!loading && <Pagination page={currentPage} pageSize={pageSize} total={total} busy={loading} onPage={setCurrentPage} onPageSize={(size) => { setPageSize(size); setCurrentPage(1) }} />}
     </div>
     {section === 'sites' && <SiteMap sites={rows} guards={guards} />}
     {dialog?.kind === 'site' && <SiteDialog row={dialog.row} close={() => setDialog(null)} done={() => void load()} />}

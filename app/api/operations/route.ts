@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, ilike, ne, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
@@ -7,6 +7,7 @@ import { db, pool } from '@/lib/db'
 import { raiseAlert } from '@/lib/alerts'
 import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
 import { actor, can, denyGuard, isModerator } from '@/lib/server'
+import { likeTerm, pageResponse, readPage } from '@/lib/pagination'
 import type { PermissionKey } from '@/lib/permissions'
 
 const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map', 'activity'])
@@ -111,27 +112,184 @@ export async function GET(request: Request) {
   const { current, response } = await getCurrentUser()
   if (response) return response
 
-  const parsedSection = sectionSchema.safeParse(new URL(request.url).searchParams.get('section'))
+  const url = new URL(request.url)
+  const parsedSection = sectionSchema.safeParse(url.searchParams.get('section'))
   if (!parsedSection.success) return fail('Unknown section')
   const section = parsedSection.data === 'live-map' ? 'patrols' : parsedSection.data
+  const organizationId = current.organizationId
+  const wantsPage = url.searchParams.has('page')
+  const page = readPage(url)
+  const term = (url.searchParams.get('q') ?? '').trim()
+  const like = likeTerm(term)
+  const filter = (url.searchParams.get('filter') ?? 'all').toLowerCase()
+
+  if (!wantsPage) {
+    // Legacy (unpaginated) shape used by the overview and by guard/site lookups.
+    switch (section) {
+      case 'guards':
+        return NextResponse.json(await db.select().from(guards).where(eq(guards.organizationId, organizationId)).orderBy(desc(guards.createdAt)).limit(250))
+      case 'sites':
+        return NextResponse.json(await withRisk(organizationId, await db.select().from(sites).where(eq(sites.organizationId, organizationId)).orderBy(desc(sites.createdAt)).limit(250)))
+      case 'attendance':
+        return NextResponse.json(await db.select().from(attendance).where(eq(attendance.organizationId, organizationId)).orderBy(desc(attendance.createdAt)).limit(250))
+      case 'patrols':
+        return NextResponse.json(await db.select().from(patrols).where(eq(patrols.organizationId, organizationId)).orderBy(desc(patrols.createdAt)).limit(250))
+      case 'incidents':
+        return NextResponse.json(await db.select().from(incidents).where(eq(incidents.organizationId, organizationId)).orderBy(desc(incidents.createdAt)).limit(250))
+      case 'alerts':
+        return NextResponse.json(await db.select().from(alerts).where(eq(alerts.organizationId, organizationId)).orderBy(desc(alerts.createdAt)).limit(250))
+      case 'activity':
+        return NextResponse.json(await db.select().from(activityEvents).where(eq(activityEvents.organizationId, organizationId)).orderBy(desc(activityEvents.createdAt)).limit(100))
+      case 'finances':
+        return NextResponse.json(await db.select().from(finances).where(eq(finances.organizationId, organizationId)).orderBy(desc(finances.createdAt)).limit(250))
+    }
+  }
+
+  const textMatch = (expression: ReturnType<typeof sql>) => (term ? ilike(expression, like) : undefined)
 
   switch (section) {
-    case 'guards':
-      return NextResponse.json(await db.select().from(guards).where(eq(guards.organizationId, current.organizationId)).orderBy(desc(guards.createdAt)).limit(250))
-    case 'sites':
-      return NextResponse.json(await withRisk(current.organizationId, await db.select().from(sites).where(eq(sites.organizationId, current.organizationId)).orderBy(desc(sites.createdAt)).limit(250)))
-    case 'attendance':
-      return NextResponse.json(await db.select().from(attendance).where(eq(attendance.organizationId, current.organizationId)).orderBy(desc(attendance.createdAt)).limit(250))
-    case 'patrols':
-      return NextResponse.json(await db.select().from(patrols).where(eq(patrols.organizationId, current.organizationId)).orderBy(desc(patrols.createdAt)).limit(250))
-    case 'incidents':
-      return NextResponse.json(await db.select().from(incidents).where(eq(incidents.organizationId, current.organizationId)).orderBy(desc(incidents.createdAt)).limit(250))
-    case 'alerts':
-      return NextResponse.json(await db.select().from(alerts).where(eq(alerts.organizationId, current.organizationId)).orderBy(desc(alerts.createdAt)).limit(250))
-    case 'activity':
-      return NextResponse.json(await db.select().from(activityEvents).where(eq(activityEvents.organizationId, current.organizationId)).orderBy(desc(activityEvents.createdAt)).limit(100))
-    case 'finances':
-      return NextResponse.json(await db.select().from(finances).where(eq(finances.organizationId, current.organizationId)).orderBy(desc(finances.createdAt)).limit(250))
+    case 'guards': {
+      const where = and(
+        eq(guards.organizationId, organizationId),
+        textMatch(sql`concat_ws(' ', ${guards.name}, ${guards.phone}, coalesce(${guards.site}, ''))`),
+        filter === 'active' ? eq(guards.status, 'active') : filter === 'suspended' ? eq(guards.status, 'suspended') : undefined,
+      )
+      const [rows, stats, filtered] = await Promise.all([
+        db.select().from(guards).where(where).orderBy(desc(guards.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({
+          total: sql<number>`count(*)`,
+          active: sql<number>`count(*) filter (where status = 'active')`,
+          suspended: sql<number>`count(*) filter (where status = 'suspended')`,
+          nfc: sql<number>`count(*) filter (where nfc_token is not null)`,
+        }).from(guards).where(eq(guards.organizationId, organizationId)),
+        db.select({ n: sql<number>`count(*)` }).from(guards).where(where),
+      ])
+      return NextResponse.json(pageResponse(rows, Number(filtered[0].n), page, {
+        total: Number(stats[0].total), active: Number(stats[0].active), suspended: Number(stats[0].suspended), nfc: Number(stats[0].nfc),
+      }))
+    }
+    case 'sites': {
+      const where = and(
+        eq(sites.organizationId, organizationId),
+        textMatch(sql`concat_ws(' ', ${sites.name}, ${sites.address}, coalesce(${sites.status}, ''))`),
+        filter === 'active' ? eq(sites.status, 'active') : filter === 'inactive' ? eq(sites.status, 'inactive') : undefined,
+      )
+      const [rows, totals, allSites, deployed, filtered] = await Promise.all([
+        db.select().from(sites).where(where).orderBy(desc(sites.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({
+          total: sql<number>`count(*)`,
+          active: sql<number>`count(*) filter (where status = 'active')`,
+        }).from(sites).where(eq(sites.organizationId, organizationId)),
+        db.select().from(sites).where(eq(sites.organizationId, organizationId)).limit(500),
+        db.select({ n: sql<number>`count(*)` }).from(guards).where(and(eq(guards.organizationId, organizationId), eq(guards.status, 'active'), sql`${guards.site} is not null`)),
+        db.select({ n: sql<number>`count(*)` }).from(sites).where(where),
+      ])
+      const highRisk = (await withRisk(organizationId, allSites)).filter((site) => site.dangerLevel === 'high').length
+      return NextResponse.json(pageResponse(await withRisk(organizationId, rows), Number(filtered[0].n), page, {
+        total: Number(totals[0].total), active: Number(totals[0].active), deployed: Number(deployed[0].n), highRisk,
+      }))
+    }
+    case 'attendance': {
+      const where = and(
+        eq(attendance.organizationId, organizationId),
+        term ? sql`(exists (select 1 from guards g where g.id = ${attendance.guardId} and g.name ilike ${like})
+          or exists (select 1 from sites s where s.id = ${attendance.siteId} and s.name ilike ${like})
+          or concat_ws(' ', ${attendance.method}, ${attendance.reviewStatus}) ilike ${like})` : undefined,
+        filter === 'flagged' ? eq(attendance.reviewStatus, 'flagged')
+          : filter === 'approved' ? eq(attendance.reviewStatus, 'approved')
+            : filter === 'outside geofence' ? eq(attendance.withinGeofence, false) : undefined,
+      )
+      const [rows, stats, filtered] = await Promise.all([
+        db.select().from(attendance).where(where).orderBy(desc(attendance.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({
+          total: sql<number>`count(*)`,
+          inside: sql<number>`count(*) filter (where within_geofence)`,
+          outside: sql<number>`count(*) filter (where not within_geofence)`,
+          flagged: sql<number>`count(*) filter (where review_status = 'flagged')`,
+        }).from(attendance).where(eq(attendance.organizationId, organizationId)),
+        db.select({ n: sql<number>`count(*)` }).from(attendance).where(where),
+      ])
+      return NextResponse.json(pageResponse(rows, Number(filtered[0].n), page, {
+        total: Number(stats[0].total), inside: Number(stats[0].inside), outside: Number(stats[0].outside), flagged: Number(stats[0].flagged),
+      }))
+    }
+    case 'incidents': {
+      const where = and(
+        eq(incidents.organizationId, organizationId),
+        textMatch(sql`concat_ws(' ', ${incidents.title}, ${incidents.site}, ${incidents.severity}, ${incidents.status})`),
+        filter === 'open' ? ne(incidents.status, 'resolved')
+          : filter === 'critical' ? eq(incidents.severity, 'critical')
+            : filter === 'resolved' ? eq(incidents.status, 'resolved') : undefined,
+      )
+      const [rows, stats, filtered] = await Promise.all([
+        db.select().from(incidents).where(where).orderBy(desc(incidents.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({
+          total: sql<number>`count(*)`,
+          open: sql<number>`count(*) filter (where status <> 'resolved')`,
+          critical: sql<number>`count(*) filter (where severity = 'critical')`,
+          resolved: sql<number>`count(*) filter (where status = 'resolved')`,
+        }).from(incidents).where(eq(incidents.organizationId, organizationId)),
+        db.select({ n: sql<number>`count(*)` }).from(incidents).where(where),
+      ])
+      return NextResponse.json(pageResponse(rows, Number(filtered[0].n), page, {
+        total: Number(stats[0].total), open: Number(stats[0].open), critical: Number(stats[0].critical), resolved: Number(stats[0].resolved),
+      }))
+    }
+    case 'alerts': {
+      const where = and(
+        eq(alerts.organizationId, organizationId),
+        textMatch(sql`concat_ws(' ', ${alerts.title}, ${alerts.body}, ${alerts.type}, ${alerts.severity})`),
+        filter === 'open' ? eq(alerts.acknowledged, false)
+          : filter === 'high or critical' ? sql`${alerts.severity} in ('high', 'critical')`
+            : filter === 'acknowledged' ? eq(alerts.acknowledged, true) : undefined,
+      )
+      const [rows, stats, filtered] = await Promise.all([
+        db.select().from(alerts).where(where).orderBy(desc(alerts.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({
+          total: sql<number>`count(*)`,
+          open: sql<number>`count(*) filter (where not acknowledged)`,
+          highCritical: sql<number>`count(*) filter (where severity in ('high', 'critical'))`,
+          acknowledged: sql<number>`count(*) filter (where acknowledged)`,
+        }).from(alerts).where(eq(alerts.organizationId, organizationId)),
+        db.select({ n: sql<number>`count(*)` }).from(alerts).where(where),
+      ])
+      return NextResponse.json(pageResponse(rows, Number(filtered[0].n), page, {
+        total: Number(stats[0].total), open: Number(stats[0].open), highCritical: Number(stats[0].highCritical), acknowledged: Number(stats[0].acknowledged),
+      }))
+    }
+    case 'patrols': {
+      const where = and(
+        eq(patrols.organizationId, organizationId),
+        textMatch(sql`concat_ws(' ', coalesce(${patrols.routeName}, ''), coalesce(${patrols.checkpoint}, ''), ${patrols.method})`),
+      )
+      const [rows, totals] = await Promise.all([
+        db.select().from(patrols).where(where).orderBy(desc(patrols.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({ total: sql<number>`count(*)` }).from(patrols).where(where),
+      ])
+      return NextResponse.json(pageResponse(rows, Number(totals[0].total), page))
+    }
+    case 'activity': {
+      const where = and(
+        eq(activityEvents.organizationId, organizationId),
+        textMatch(sql`concat_ws(' ', ${activityEvents.title}, ${activityEvents.body}, ${activityEvents.type})`),
+      )
+      const [rows, totals] = await Promise.all([
+        db.select().from(activityEvents).where(where).orderBy(desc(activityEvents.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({ total: sql<number>`count(*)` }).from(activityEvents).where(where),
+      ])
+      return NextResponse.json(pageResponse(rows, Number(totals[0].total), page))
+    }
+    case 'finances': {
+      const where = and(
+        eq(finances.organizationId, organizationId),
+        textMatch(sql`concat_ws(' ', ${finances.label}, ${finances.kind}, ${finances.status})`),
+      )
+      const [rows, totals] = await Promise.all([
+        db.select().from(finances).where(where).orderBy(desc(finances.createdAt)).limit(page.pageSize).offset(page.offset),
+        db.select({ total: sql<number>`count(*)` }).from(finances).where(where),
+      ])
+      return NextResponse.json(pageResponse(rows, Number(totals[0].total), page))
+    }
   }
 }
 
