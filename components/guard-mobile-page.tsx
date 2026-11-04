@@ -149,7 +149,7 @@ export function GuardMobilePage() {
   else if (checkedOut) next = { action: 'attendance', label: 'Check in again', help: `You checked out at ${clock(today.checkedOutAt)}. Tap to start a new check-in.` }
   else if (!patrolDone && windowOpen) next = currentSlot && signed[currentSlot] ? { action: 'patrol', label: `${currentSlot} checkpoint signed`, help: 'Come back at the next hour to sign the next checkpoint.', disabled: true } : { action: 'patrol', label: `Sign checkpoint ${currentSlot ?? nextSlot ?? ''}`.trim(), help: 'Walk to the checkpoint, tap, then hold your tag to the back of the phone.' }
   else if (!patrolDone) next = { action: 'patrol', label: 'Patrol window closed', help: shift && hour < shift.startHour ? `Patrol checkpoints open at ${hourLabel(shift.startHour)}.` : `The patrol shift ended at ${hourLabel(shift?.endHour ?? 0)}.`, disabled: true }
-  const step = (done: boolean, title: string, detail: string) => <li className="flex items-start gap-3"><span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${done ? 'bg-[#16794A] text-white' : 'border border-zinc-300 text-zinc-400'}`}>{done ? <Check className="size-3.5" /> : <Circle className="size-3.5" />}</span><span><b className="block text-sm font-semibold">{title}</b><span className="text-xs text-zinc-500">{detail}</span></span></li>
+  const step = (done: boolean, title: string, detail: string) => <li className="flex items-start gap-3"><span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full ${done ? 'bg-[#16794A] text-white' : 'border border-zinc-300 text-[#9A9AA1]'}`}>{done ? <Check className="size-3.5" /> : <Circle className="size-3.5" />}</span><span><b className="block text-sm font-semibold">{title}</b><span className="text-xs text-[#6B6B72]">{detail}</span></span></li>
 
   return (
     <main className="min-h-screen bg-[#F5F5F6] pb-10 text-[#18181B]">
@@ -159,59 +159,59 @@ export function GuardMobilePage() {
         {isGuard && <button onClick={() => void authClient.signOut().then(() => { window.location.href = '/sign-in' })} className="flex h-11 items-center gap-1.5 rounded-lg px-3 text-xs hover:bg-white/10"><LogOut className="size-4" />Sign out</button>}
       </header>
       <div className="mx-auto max-w-[480px] px-4 pt-5">
-        {signedIn === null ? <p className="py-10 text-center text-xs text-zinc-500">Loading…</p> : !ready ? (
-          <form onSubmit={saveCode} className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-5">
+        {signedIn === null ? <p className="py-10 text-center text-xs text-[#6B6B72]">Loading…</p> : !ready ? (
+          <form onSubmit={saveCode} className="grid gap-3 rounded-2xl border border-[#E4E4E7] bg-white p-5">
             <h1 className="text-lg font-semibold">Set up this phone</h1>
-            <p className="text-xs leading-5 text-zinc-600">Enter the company guard app code your supervisor gave you. You only do this once. Or <Link href="/sign-in" className="font-semibold underline">sign in</Link> with your own login.</p>
+            <p className="text-xs leading-5 text-[#52525B]">Enter the company guard app code your supervisor gave you. You only do this once. Or <Link href="/sign-in" className="font-semibold underline">sign in</Link> with your own login.</p>
             <input required value={codeDraft} onChange={(e) => setCodeDraft(e.target.value.toUpperCase())} placeholder="GRD-XXXX-XXXX" autoCapitalize="characters" className="h-12 rounded-xl border border-zinc-300 px-3 font-mono text-base" />
-            {codeError && <p role="alert" className="text-xs text-red-700">{codeError}</p>}
+            {codeError && <p role="alert" className="text-xs text-[#B42318]">{codeError}</p>}
             <button disabled={codeBusy} className={`${big} bg-[#2A2B2E] text-white`}>{codeBusy ? 'Checking…' : 'Use this code'}</button>
           </form>
         ) : <>
-          {!signedIn && code && <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-[11px] text-zinc-600"><span>Company code <b className="font-mono text-zinc-900">{code}</b>{company ? ` · ${company}` : ''}</span><button onClick={forgetCode} className="font-semibold underline">Change</button></div>}
-          {identity ? <section className="mb-4 flex items-center gap-3"><Avatar name={identity.name} src={identity.photoUrl} size={56} /><div><p className="text-xs text-zinc-500">Good day,</p><p className="text-xl font-medium leading-tight">{identity.name}</p><p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-500"><MapPin className="size-3" />{identity.site ?? 'No site assigned yet'}</p></div></section>
+          {!signedIn && code && <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-[#E4E4E7] bg-white px-3 py-2 text-[11px] text-[#52525B]"><span>Company code <b className="font-mono text-zinc-900">{code}</b>{company ? ` · ${company}` : ''}</span><button onClick={forgetCode} className="font-semibold underline">Change</button></div>}
+          {identity ? <section className="mb-4 flex items-center gap-3"><Avatar name={identity.name} src={identity.photoUrl} size={56} /><div><p className="text-xs text-[#6B6B72]">Good day,</p><p className="text-xl font-medium leading-tight">{identity.name}</p><p className="mt-0.5 flex items-center gap-1 text-xs text-[#6B6B72]"><MapPin className="size-3" />{identity.site ?? 'No site assigned yet'}</p></div></section>
             : signedIn && me ? <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{isGuard ? 'Your login is not linked to a guard record yet. Ask your supervisor to link it in Settings. You can still scan your own tag.' : 'You are viewing the guard app as staff. Guards see their own name and progress here.'}</p>
-            : <p className="mb-4 text-xs text-zinc-500">Scan your tag to begin. Your name and site appear after the first scan.</p>}
+            : <p className="mb-4 text-xs text-[#6B6B72]">Scan your tag to begin. Your name and site appear after the first scan.</p>}
 
-          <section className="rounded-2xl border border-zinc-200 bg-white p-4"><h2 className="text-xs font-semibold tracking-wide text-zinc-500">TODAY</h2>
+          <section className="rounded-2xl border border-[#E4E4E7] bg-white p-4"><h2 className="text-xs font-semibold tracking-wide text-[#6B6B72]">TODAY</h2>
             <ol className="mt-3 grid gap-4">
               {step(checkedIn, checkedIn ? `Checked in at ${clock(today?.checkedInAt)}` : checkedOut ? `Checked out at ${clock(today?.checkedOutAt)}` : 'Check in', checkedIn ? (today?.insideGeofence === false ? 'You were outside the site area. Your supervisor has been told.' : 'You are marked present for today.') : checkedOut ? 'Your shift is marked complete.' : 'Scan your tag when you arrive at your post.')}
               {step(patrolDone, `Patrol checkpoints ${signedCount} of ${slots.length || '–'}`, shift ? `Sign one checkpoint every hour from ${hourLabel(shift.startHour)} to ${hourLabel(shift.endHour)}.` : 'Your shift hours appear after your first scan.')}
             </ol>
-            {slots.length > 0 && <div className="mt-3 grid grid-cols-4 gap-2">{slots.map((slot) => <span key={slot} className={`flex min-h-[48px] flex-col items-center justify-center rounded-lg border text-xs ${signed[slot] ? 'border-[#2A2B2E] bg-[#2A2B2E] text-white' : 'border-zinc-200 text-zinc-500'}`}><b className="font-mono">{slot}</b><span className="text-[10px]">{signed[slot] ? clock(signed[slot]) : 'Open'}</span></span>)}</div>}
+            {slots.length > 0 && <div className="mt-3 grid grid-cols-4 gap-2">{slots.map((slot) => <span key={slot} className={`flex min-h-[48px] flex-col items-center justify-center rounded-lg border text-xs ${signed[slot] ? 'border-[#2A2B2E] bg-[#2A2B2E] text-white' : 'border-[#E4E4E7] text-[#6B6B72]'}`}><b className="font-mono">{slot}</b><span className="text-[10px]">{signed[slot] ? clock(signed[slot]) : 'Open'}</span></span>)}</div>}
           </section>
 
-          {next && <section className="mt-4"><button className={`${big} bg-[#2A2B2E] text-white`} disabled={busy || scanning !== null || next.disabled} onClick={() => void scan(next!.action)}>{scanning ? 'Hold your tag to the phone…' : next.label}</button><p className="mt-2 text-center text-xs text-zinc-500">{next.help}</p></section>}
+          {next && <section className="mt-4"><button className={`${big} bg-[#2A2B2E] text-white`} disabled={busy || scanning !== null || next.disabled} onClick={() => void scan(next!.action)}>{scanning ? 'Hold your tag to the phone…' : next.label}</button><p className="mt-2 text-center text-xs text-[#6B6B72]">{next.help}</p></section>}
           {!next && <p className="mt-4 rounded-2xl border border-[#16794A]/30 bg-[#E3F4EA] p-4 text-center text-sm font-semibold text-[#16794A]">All checkpoints signed. Well done.</p>}
           {checkedIn && <button className={`${big} mt-3 border border-zinc-300 bg-white`} disabled={busy || scanning !== null} onClick={() => void scan('attendance')}>Check out</button>}
 
           {scanning && <button onClick={stop} className={`${big} mt-3 border border-zinc-300 bg-white`}><X className="size-4" />Cancel</button>}
           {stage && <p role="status" className="mt-3 rounded-xl border border-zinc-300 bg-white p-3 text-center text-sm font-semibold">{stage}</p>}
-          {!stage && lastCode && !error && <p className="mt-2 text-center text-[10px] text-zinc-500">Last tag read: <span className="font-mono">{lastCode}</span></p>}
-          {busy && !stage && <p className="mt-3 text-center text-xs text-zinc-500">Checking…</p>}
+          {!stage && lastCode && !error && <p className="mt-2 text-center text-[10px] text-[#6B6B72]">Last tag read: <span className="font-mono">{lastCode}</span></p>}
+          {busy && !stage && <p className="mt-3 text-center text-xs text-[#6B6B72]">Checking…</p>}
           {message && !busy && <p role="status" className="mt-3 rounded-xl border border-[#16794A]/30 bg-[#E3F4EA] p-3 text-sm text-[#16794A]">{message}</p>}
-          {receipt && !busy && <div role="status" className="mt-2 rounded-xl border border-zinc-200 bg-white p-3 text-xs">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{receipt.action === 'attendance' ? 'Attendance recorded' : receipt.action === 'patrol' ? 'Patrol checkpoint recorded' : 'SOS sent'}</p>
+          {receipt && !busy && <div role="status" className="mt-2 rounded-xl border border-[#E4E4E7] bg-white p-3 text-xs">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#6B6B72]">{receipt.action === 'attendance' ? 'Attendance recorded' : receipt.action === 'patrol' ? 'Patrol checkpoint recorded' : 'SOS sent'}</p>
             <dl className="mt-1.5 grid grid-cols-[70px_1fr] gap-x-3 gap-y-1">
-              <dt className="text-zinc-500">Guard</dt><dd className="font-semibold">{receipt.guardName}</dd>
-              <dt className="text-zinc-500">Site</dt><dd>{receipt.siteName ?? 'No site assigned'}</dd>
-              <dt className="text-zinc-500">Time</dt><dd className="font-mono">{receipt.at}</dd>
-              {receipt.checkpoint && <><dt className="text-zinc-500">Checkpoint</dt><dd className="font-mono">{receipt.checkpoint}</dd></>}
-              <dt className="text-zinc-500">Location</dt><dd className={receipt.withinBounds === false ? 'font-semibold text-[#B42318]' : 'text-[#16794A]'}>{receipt.withinBounds === false ? 'Outside the geofence — supervisor alerted' : 'Inside the site geofence'}</dd>
+              <dt className="text-[#6B6B72]">Guard</dt><dd className="font-semibold">{receipt.guardName}</dd>
+              <dt className="text-[#6B6B72]">Site</dt><dd>{receipt.siteName ?? 'No site assigned'}</dd>
+              <dt className="text-[#6B6B72]">Time</dt><dd className="font-mono">{receipt.at}</dd>
+              {receipt.checkpoint && <><dt className="text-[#6B6B72]">Checkpoint</dt><dd className="font-mono">{receipt.checkpoint}</dd></>}
+              <dt className="text-[#6B6B72]">Location</dt><dd className={receipt.withinBounds === false ? 'font-semibold text-[#B42318]' : 'text-[#16794A]'}>{receipt.withinBounds === false ? 'Outside the geofence — supervisor alerted' : 'Inside the site geofence'}</dd>
             </dl>
           </div>}
-          {error && <div ref={alertRef} role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error && <div ref={alertRef} role="alert" className="mt-3 rounded-xl border border-red-200 bg-[#FDECEA] p-3 text-sm text-[#B42318]">
             <p>{error}</p>
             {lastCode && <p className="mt-1.5 border-t border-red-200 pt-1.5 font-mono text-[10px] text-red-800/80">Tag read: {lastCode}</p>}
           </div>}
 
-          <button onClick={() => setManual((m) => !m)} className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 text-xs font-semibold text-zinc-600"><KeyRound className="size-4" />{nfc ? 'Tag not reading? Type the tag code' : 'No NFC on this phone? Type the tag code'}</button>
-          {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-zinc-200 bg-white p-4"><label className="text-xs font-semibold">What is the code for?<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-xs font-semibold">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. 9f2b7c41-3a5e-4d18-9c6b-2f7e8a1d4b90" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[48px] bg-[#2A2B2E] text-white`}>Send</button></form>}
+          <button onClick={() => setManual((m) => !m)} className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 text-xs font-semibold text-[#52525B]"><KeyRound className="size-4" />{nfc ? 'Tag not reading? Type the tag code' : 'No NFC on this phone? Type the tag code'}</button>
+          {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-2 grid gap-2 rounded-2xl border border-[#E4E4E7] bg-white p-4"><label className="text-xs font-semibold">What is the code for?<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-xs font-semibold">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. 9f2b7c41-3a5e-4d18-9c6b-2f7e8a1d4b90" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[48px] bg-[#2A2B2E] text-white`}>Send</button></form>}
 
           <NfcDiagnostics />
 
-          <div className="mt-8 border-t border-zinc-200 pt-5"><button onClick={() => { if (window.confirm('Send an emergency SOS to your supervisors now?')) void scan('sos') }} disabled={busy || scanning !== null} className={`${big} bg-[#B42318] text-white`}><ShieldAlert className="size-5" />Emergency SOS</button>
-            <p className="mt-2 text-center text-[11px] text-zinc-500">Only press this if you are in danger or need urgent help. Supervisors are alerted straight away with your location.{!me?.linked && !identity ? ' The first time, you will be asked for your tag code so we know who needs help.' : ''}</p></div>
+          <div className="mt-8 border-t border-[#E4E4E7] pt-5"><button onClick={() => { if (window.confirm('Send an emergency SOS to your supervisors now?')) void scan('sos') }} disabled={busy || scanning !== null} className={`${big} bg-[#B42318] text-white`}><ShieldAlert className="size-5" />Emergency SOS</button>
+            <p className="mt-2 text-center text-[11px] text-[#6B6B72]">Only press this if you are in danger or need urgent help. Supervisors are alerted straight away with your location.{!me?.linked && !identity ? ' The first time, you will be asked for your tag code so we know who needs help.' : ''}</p></div>
         </>}
       </div>
     </main>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { pool } from '@/lib/db'
 import { actor, can, denyGuard, fail } from '@/lib/server'
+import { likeTerm, pageResponse, readPage } from '@/lib/pagination'
 
 type Col = { key: string; column: string }
 /** Small organisation-scoped CRUD handler for finance records (contracts, inventory, staff). Read needs "view finance", writes need "approve payroll". */
@@ -14,10 +15,24 @@ export function financeCrud(table: string, cols: Col[], create: z.ZodType<Record
     return { current }
   }
   return {
-    async GET() {
+    async GET(request: Request) {
       const g = await gate(false); if (!g.current) return g.error
-      const r = await pool.query(`select * from ${table} where organization_id = $1 order by ${order}`, [g.current.organizationId])
-      return NextResponse.json(r.rows.map(row))
+      const url = new URL(request.url)
+      const paginated = url.searchParams.has('page')
+      const page = readPage(url)
+      const term = (url.searchParams.get('q') ?? '').trim()
+      const searchColumns = cols.map((c) => c.column).join(', ')
+      const values: unknown[] = [g.current.organizationId]
+      let where = 'organization_id = $1'
+      if (term) { values.push(likeTerm(term)); where += ` and concat_ws(' ', ${searchColumns}) ilike $${values.length}` }
+      if (!paginated) {
+        const r = await pool.query(`select * from ${table} where ${where} order by ${order}`, values)
+        return NextResponse.json(r.rows.map(row))
+      }
+      const countQuery = pool.query<{ total: string }>(`select count(*)::text as total from ${table} where ${where}`, values)
+      const rowsQuery = pool.query(`select * from ${table} where ${where} order by ${order} limit $${values.length + 1} offset $${values.length + 2}`, [...values, page.pageSize, page.offset])
+      const [count, r] = await Promise.all([countQuery, rowsQuery])
+      return NextResponse.json(pageResponse(r.rows.map(row), Number(count.rows[0]?.total ?? 0), page))
     },
     async POST(request: Request) {
       const g = await gate(true); if (!g.current) return g.error

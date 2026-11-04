@@ -5,6 +5,7 @@ import { Download, Plus, RefreshCw, Search, Trash2, UserPlus } from 'lucide-reac
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { api, naira } from '@/lib/client'
+import { Pagination } from '@/components/pagination'
 
 type ClientRecord = {
   id: string; name: string; contactName: string | null; email: string | null; phone: string | null
@@ -12,6 +13,7 @@ type ClientRecord = {
 }
 type SiteRow = { id: string; name: string; status: string; clientId: string | null }
 type GuardRow = { id: string; name: string; site: string | null; status: string }
+type ClientPage = { rows: ClientRecord[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: { total: number; active: number; monthlyValue: number } }
 
 const emptyForm = { name: '', contactName: '', email: '', phone: '', monthlyValue: '', slaScore: '', renewalDate: '', status: 'active' }
 
@@ -20,6 +22,11 @@ export function ClientsPage() {
   const [sites, setSites] = useState<SiteRow[]>([])
   const [guards, setGuards] = useState<GuardRow[]>([])
   const [search, setSearch] = useState('')
+  const [term, setTerm] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const [total, setTotal] = useState(0)
+  const [stats, setStats] = useState<{ total: number; active: number; monthlyValue: number }>({ total: 0, active: 0, monthlyValue: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
@@ -31,21 +38,25 @@ export function ClientsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [clientRows, siteRows, guardRows] = await Promise.all([
-        api<ClientRecord[]>('/api/clients'),
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), q: term })
+      const [clientPage, siteRows, guardRows] = await Promise.all([
+        api<ClientPage>(`/api/clients?${params}`),
         api<SiteRow[]>('/api/operations?section=sites'),
         api<GuardRow[]>('/api/operations?section=guards'),
       ])
-      setClients(clientRows)
+      setClients(clientPage.rows)
+      setTotal(clientPage.total)
+      setStats(clientPage.stats ?? { total: clientPage.total, active: clientPage.rows.filter((client) => client.status === 'active').length, monthlyValue: 0 })
       setSites(siteRows)
       setGuards(guardRows)
       setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load clients.')
     } finally { setLoading(false) }
-  }, [])
+  }, [page, pageSize, term])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => { setLoading(true); void load() }, [load])
+  useEffect(() => { const timer = window.setTimeout(() => { setTerm(search.trim()); setPage(1) }, 300); return () => window.clearTimeout(timer) }, [search])
 
   const sitesOf = (client: ClientRecord) => sites.filter((site) => site.clientId === client.id)
   const guardsAt = (client: ClientRecord) => {
@@ -53,12 +64,8 @@ export function ClientsPage() {
     return guards.filter((guard) => guard.status === 'active' && guard.site && names.has(guard.site))
   }
 
-  const rows = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    return term ? clients.filter((client) => `${client.name} ${client.contactName ?? ''} ${client.email ?? ''}`.toLowerCase().includes(term)) : clients
-  }, [clients, search])
-
-  const monthlyTotal = clients.filter((client) => client.status === 'active').reduce((sum, client) => sum + Number(client.monthlyValue), 0)
+  const rows = clients
+  const monthlyTotal = stats.monthlyValue
   const unassignedSites = sites.filter((site) => !site.clientId)
 
   async function save(event: FormEvent) {
@@ -91,8 +98,8 @@ export function ClientsPage() {
     setBusy(client.id)
     try {
       await api('/api/operations', { method: 'DELETE', json: { section: 'clients', id: client.id } })
-      setClients((items) => items.filter((item) => item.id !== client.id))
       setError('')
+      await load()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to delete the client.')
     } finally { setBusy('') }
@@ -114,47 +121,48 @@ export function ClientsPage() {
       <button onClick={() => { setEditing(null); setForm(emptyForm); setFormOpen(true) }} className={btnPrimary}><Plus className="size-3.5" />Add client</button>
     </PageHeader>
 
-    <StatStrip stats={[[String(clients.length), 'Clients'], [String(clients.filter((client) => client.status === 'active').length), 'Active'], [naira(monthlyTotal), 'Monthly contract value'], [String(unassignedSites.length), 'Sites without a client']]} />
+    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(monthlyTotal), 'Monthly contract value'], [String(unassignedSites.length), 'Sites without a client']]} />
 
     {unassignedSites.length > 0 && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">{unassignedSites.length} site{unassignedSites.length === 1 ? ' is' : 's are'} not linked to a client yet: {unassignedSites.map((site) => site.name).join(', ')}. Use <b>Assign sites</b> on a client to link them.</p>}
     <ErrorBanner message={error} retry={() => void load()} />
 
     <div className="mb-3 flex items-center gap-2">
-      <label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3"><Search className="size-4 text-zinc-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients…" className="w-full text-xs outline-none" /></label>
+      <label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3"><Search className="size-4 text-[#9A9AA1]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients…" className="w-full text-xs outline-none" /></label>
       <button onClick={() => void load()} aria-label="Refresh clients" className={btn}><RefreshCw className="size-3.5" />Refresh</button>
     </div>
 
-    <div className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
-      {loading ? <Spinner label="Loading clients…" /> : rows.length === 0 ? <Empty title={search ? 'No clients match your search' : 'No clients yet'} text={search ? undefined : 'Add a client, then link their sites.'} /> : <ul className="divide-y divide-zinc-100">
+    <div className="overflow-hidden ws-card">
+      {loading && clients.length === 0 ? <Spinner label="Loading clients…" /> : rows.length === 0 ? <Empty title={total ? 'No clients match your search' : 'No clients yet'} text={total ? undefined : 'Add a client, then link their sites.'} /> : <ul className="divide-y divide-[#EFEFF1]">
         {rows.map((client) => {
           const clientSites = sitesOf(client)
           const deployed = guardsAt(client)
           return <li key={client.id} className="p-4">
             <div className="flex flex-wrap items-start gap-3">
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2"><b className="text-sm font-semibold">{client.name}</b><Badge value={client.status} />{client.slaScore !== null && <span className="text-[10px] text-zinc-500">SLA {client.slaScore}%</span>}</div>
-                <p className="mt-0.5 text-[11px] text-zinc-500">{client.contactName ?? 'No contact'}{client.phone ? ` · ${client.phone}` : ''}{client.email ? ` · ${client.email}` : ''}</p>
-                <p className="mt-1 text-[11px] text-zinc-600"><b>{naira(Number(client.monthlyValue))}</b>/month{client.renewalDate ? ` · renews ${new Date(client.renewalDate).toLocaleDateString()}` : ''}</p>
+                <div className="flex flex-wrap items-center gap-2"><b className="text-sm font-semibold">{client.name}</b><Badge value={client.status} />{client.slaScore !== null && <span className="text-[10px] text-[#6B6B72]">SLA {client.slaScore}%</span>}</div>
+                <p className="mt-0.5 text-[11px] text-[#6B6B72]">{client.contactName ?? 'No contact'}{client.phone ? ` · ${client.phone}` : ''}{client.email ? ` · ${client.email}` : ''}</p>
+                <p className="mt-1 text-[11px] text-[#52525B]"><b>{naira(Number(client.monthlyValue))}</b>/month{client.renewalDate ? ` · renews ${new Date(client.renewalDate).toLocaleDateString()}` : ''}</p>
               </div>
               <div className="flex flex-wrap justify-end gap-1.5">
                 <button className={smallBtn} onClick={() => setAssigning(client)}><UserPlus className="size-3" />Assign sites</button>
                 <button className={smallBtn} onClick={() => edit(client)}>Edit</button>
-                <button className={`${smallBtn} text-red-700`} disabled={busy === client.id} onClick={() => void remove(client)}><Trash2 className="size-3" />Delete</button>
+                <button className={`${smallBtn} text-[#B42318]`} disabled={busy === client.id} onClick={() => void remove(client)}><Trash2 className="size-3" />Delete</button>
               </div>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <div className="rounded-lg bg-zinc-50 p-2.5 text-[11px]">
-                <b className="block text-[10px] uppercase tracking-wide text-zinc-500">Sites protected ({clientSites.length})</b>
-                {clientSites.length === 0 ? <span className="text-zinc-500">No sites linked yet.</span> : <span className="text-zinc-700">{clientSites.map((site) => site.name).join(', ')}</span>}
+              <div className="rounded-lg bg-[#F5F5F6] p-2.5 text-[11px]">
+                <b className="block text-[10px] uppercase tracking-wide text-[#6B6B72]">Sites protected ({clientSites.length})</b>
+                {clientSites.length === 0 ? <span className="text-[#6B6B72]">No sites linked yet.</span> : <span className="text-[#3F3F46]">{clientSites.map((site) => site.name).join(', ')}</span>}
               </div>
-              <div className="rounded-lg bg-zinc-50 p-2.5 text-[11px]">
-                <b className="block text-[10px] uppercase tracking-wide text-zinc-500">Guards deployed ({deployed.length})</b>
-                {deployed.length === 0 ? <span className="text-zinc-500">Nobody deployed to these sites yet.</span> : <span className="text-zinc-700">{deployed.map((guard) => guard.name).join(', ')}</span>}
+              <div className="rounded-lg bg-[#F5F5F6] p-2.5 text-[11px]">
+                <b className="block text-[10px] uppercase tracking-wide text-[#6B6B72]">Guards deployed ({deployed.length})</b>
+                {deployed.length === 0 ? <span className="text-[#6B6B72]">Nobody deployed to these sites yet.</span> : <span className="text-[#3F3F46]">{deployed.map((guard) => guard.name).join(', ')}</span>}
               </div>
             </div>
           </li>
         })}
       </ul>}
+      {total > 0 && <Pagination page={page} pageSize={pageSize} total={total} busy={loading} onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1) }} />}
     </div>
 
     {formOpen && <Sheet title={editing ? 'Edit client' : 'Add client'} kicker="CLIENT" onClose={() => setFormOpen(false)}
@@ -206,9 +214,9 @@ function AssignSites({ client, sites, close, done }: { client: ClientRecord; sit
   return <Sheet title={`Sites for ${client.name}`} kicker="CLIENT → SITES" onClose={close}
     footer={<><button className={btn} onClick={close}>Cancel</button><button className={btnPrimary} disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save links'}</button></>}>
     <ErrorBanner message={error} />
-    <p className="mb-4 text-xs text-zinc-600">Tick every site you protect for this client. A site belongs to one client; a client can have as many sites as you need.</p>
-    <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200">
-      {sites.length === 0 ? <li className="p-4 text-xs text-zinc-500">Add a site first.</li> : sites.map((site) => <li key={site.id}>
+    <p className="mb-4 text-xs text-[#52525B]">Tick every site you protect for this client. A site belongs to one client; a client can have as many sites as you need.</p>
+    <ul className="divide-y divide-[#EFEFF1] rounded-[8px] border border-[#E4E4E7]">
+      {sites.length === 0 ? <li className="p-4 text-xs text-[#6B6B72]">Add a site first.</li> : sites.map((site) => <li key={site.id}>
         <label className="flex min-h-[44px] items-center gap-3 px-3 py-2 text-xs">
           <input type="checkbox" className="size-4" checked={selected.includes(site.id)} onChange={() => toggle(site.id)} />
           <span className="min-w-0 flex-1"><b className="block font-semibold">{site.name}</b>{site.clientId && site.clientId !== client.id && <span className="text-[10px] text-amber-700">Already linked to another client — ticking moves it here</span>}</span>

@@ -1,9 +1,10 @@
-﻿import { betterAuth } from 'better-auth'
+﻿import { APIError, betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import { db } from '@/lib/db'
-import { asc, eq } from 'drizzle-orm'
+import { asc, count, eq } from 'drizzle-orm'
 import { accounts, authSessions, invitations, members, organizations, users, verifications } from '@/lib/db/schema'
+import { provisioningSignup } from '@/lib/signup-policy'
 
 const hasDatabase = Boolean(process.env.DATABASE_URL)
 const trimSlash = (origin: string) => origin.replace(/\/+$/, '')
@@ -51,6 +52,20 @@ export const auth = betterAuth({
   rateLimit: { enabled: true, window: 60, max: 60, customRules: { '/sign-in/email': { window: 60, max: 8 }, '/sign-up/email': { window: 60, max: 5 } } },
   emailAndPassword: { enabled: true, autoSignIn: true },
   databaseHooks: {
+    user: {
+      create: {
+        // Only the first account may self-register. Everyone else is added by an owner/admin.
+        before: async () => {
+          if (!hasDatabase || provisioningSignup.getStore()) return
+          const [row] = await db.select({ n: count() }).from(users)
+          if (Number(row?.n ?? 0) > 0) {
+            throw new APIError('FORBIDDEN', {
+              message: 'Accounts are created by your administrator. Ask the company owner to add you from Settings → Team.',
+            })
+          }
+        },
+      },
+    },
     session: {
       create: {
         // Every new sign-in starts inside the user's first organization, so people added from Settings can sign straight in.

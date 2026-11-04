@@ -88,41 +88,41 @@ export function NapoleonLivePage() {
       <PageHeader title="Napoleon AI" subtitle="Operational intelligence from the configured Napoleon service." action={<span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusTone}`}>{statusLabel}</span>} />
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
         <section className="flex min-h-[610px] flex-col rounded-[20px] border border-[#E4E4E7] bg-white">
-          <header className="flex items-center gap-2 border-b border-zinc-100 px-4 py-3">
+          <header className="flex items-center gap-2 border-b border-[#EBEFE7] px-4 py-3">
             <Logo size={32} />
-            <span className="flex-1"><b className="block text-xs">Napoleon</b><small className="text-[10px] text-zinc-500">Deterministic operational analysis</small></span>
+            <span className="flex-1"><b className="block text-xs">Napoleon</b><small className="text-[10px] text-[#6B6B72]">Deterministic operational analysis</small></span>
           </header>
           <div className="flex flex-1 flex-col items-center justify-center px-5 py-8 text-center">
             <Logo size={56} />
             <h2 className="mt-4 text-[22px] font-normal">How can I help your operation?</h2>
-            <p className="mt-2 text-xs text-zinc-500">Ask about attendance, incidents, patrols, sites or guard performance.</p>
+            <p className="mt-2 text-xs text-[#6B6B72]">Ask about attendance, incidents, patrols, sites or guard performance.</p>
             <div className="mt-4 flex w-full max-w-2xl flex-col gap-3">
               {messages.map((message, index) => (
-                <p key={`${message.role}-${index}`} className={`rounded-xl px-4 py-3 text-left text-xs leading-5 ${message.role === 'user' ? 'ml-auto max-w-[85%] bg-zinc-100' : 'mr-auto max-w-[95%] whitespace-pre-wrap bg-[#F5F5F6]'}`}>
+                <p key={`${message.role}-${index}`} className={`rounded-xl px-4 py-3 text-left text-xs leading-5 ${message.role === 'user' ? 'ml-auto max-w-[85%] bg-[#EFEFF1]' : 'mr-auto max-w-[95%] whitespace-pre-wrap bg-[#F5F5F6]'}`}>
                   {message.content}
                 </p>
               ))}
             </div>
-            {loading && <p className="mt-3 text-xs text-zinc-500">Napoleon is analyzing…</p>}
+            {loading && <p className="mt-3 text-xs text-[#6B6B72]">Napoleon is analyzing…</p>}
             {error && <p role="alert" className="mt-3 max-w-lg rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-xs text-amber-900">{error}</p>}
             <div className="mt-6 flex max-w-xl flex-wrap justify-center gap-2">
               {suggestions.map((suggestion) => (
-                <button type="button" key={suggestion} onClick={(event) => { event.stopPropagation(); void send(suggestion) }} disabled={loading} className="rounded-xl border border-zinc-200 px-3 py-2.5 text-xs font-semibold disabled:opacity-50">
+                <button type="button" key={suggestion} onClick={(event) => { event.stopPropagation(); void send(suggestion) }} disabled={loading} className="rounded-xl border border-[#E4E4E7] px-3 py-2.5 text-xs font-semibold disabled:opacity-50">
                   {suggestion}
                 </button>
               ))}
             </div>
           </div>
-          <form onSubmit={submit} className="mx-4 mb-1 flex h-[50px] items-center rounded-xl border border-zinc-200 px-2">
+          <form onSubmit={submit} className="mx-4 mb-1 flex h-[50px] items-center rounded-xl border border-[#E4E4E7] px-2">
             <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask Napoleon anything about your operation…" className="min-w-0 flex-1 px-2 text-xs outline-none" />
             <button disabled={loading || !input.trim()} aria-label="Send message" className="flex size-10 items-center justify-center rounded-lg bg-[#2A2B2E] text-white disabled:opacity-50"><Send className="size-4" /></button>
           </form>
-          <p className="pb-3 text-center text-[9px] text-zinc-400">Napoleon's output is deterministic operational analysis. Review findings before acting.</p>
+          <p className="pb-3 text-center text-[9px] text-[#9A9AA1]">Napoleon's output is deterministic operational analysis. Review findings before acting.</p>
         </section>
         <aside className="rounded-2xl border border-[#E4E4E7] bg-white p-4">
-          <h2 className="text-sm font-semibold">Before you ask</h2>
-          <p className="mt-2 text-xs leading-5 text-zinc-600">Napoleon analyzes records ingested into its own database. Connecting the chat API does not automatically synchronize BastionOS records.</p>
-          <p className="mt-3 text-xs leading-5 text-zinc-600">The service API key stays on the server and is never sent to the browser.</p>
+          <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Before you ask</h2>
+          <p className="mt-2 text-xs leading-5 text-[#52525B]">Napoleon analyzes records ingested into its own database. Connecting the chat API does not automatically synchronize BastionOS records.</p>
+          <p className="mt-3 text-xs leading-5 text-[#52525B]">The service API key stays on the server and is never sent to the browser.</p>
         </aside>
       </div>
     </>

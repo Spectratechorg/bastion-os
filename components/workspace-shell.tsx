@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -26,6 +26,11 @@ const allNavigation = [
   { label: 'Settings', href: '/settings/roles', icon: Settings },
 ]
 const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', 'Finance']
+const navGroups: { label: string; items: string[] }[] = [
+  { label: 'Operations', items: ['Overview', 'Guards', 'Sites', 'Attendance', 'Patrols', 'Incidents', 'Alerts'] },
+  { label: 'Business', items: ['Clients', 'Finance', 'Reports'] },
+  { label: 'Workspace', items: ['Napoleon AI', 'Settings'] },
+]
 
 function initials(name?: string | null) {
   return (name ?? 'B').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
@@ -40,7 +45,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   const [unread, setUnread] = useState(0)
   const [role, setRole] = useState<string | null>(null)
   const [perms, setPerms] = useState<Record<string, boolean>>({})
-  const [searchMessage, setSearchMessage] = useState('')
+const [searchMessage, setSearchMessage] = useState('')
+const [syncIssue, setSyncIssue] = useState(false)
   const search = useRef<HTMLInputElement>(null)
   const user = session.data?.user
 
@@ -58,12 +64,22 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     if (session.isPending || !session.data?.user) return
     fetch('/api/me', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).then((me: { role: string; permissions: Record<string, boolean> } | null) => { if (me) { setRole(me.role); setPerms(me.permissions); if (me.role === 'guard') router.replace('/guard-app') } }).catch(() => undefined)
   }, [session.isPending, session.data, router])
+  const refreshAlerts = useCallback(async () => {
+    try {
+      const response = await fetch('/api/operations?section=alerts', { cache: 'no-store' })
+      if (!response.ok) throw new Error('alert refresh failed')
+      const rows = await response.json() as { acknowledged: boolean }[]
+      setUnread(rows.filter((row) => !row.acknowledged).length)
+      setSyncIssue(false)
+    } catch {
+      // The bell silently drifted before; surface it without interrupting the page.
+      setSyncIssue(true)
+    }
+  }, [])
   useEffect(() => {
     if (role === 'guard') return
-    let live = true
-    const load = () => fetch('/api/operations?section=alerts', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).then((rows: { acknowledged: boolean }[]) => { if (live) setUnread(rows.filter((row) => !row.acknowledged).length) }).catch(() => undefined)
-    void load(); const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => { live = false; window.clearInterval(timer) }
-  }, [pathname])
+    void refreshAlerts(); const timer = window.setInterval(() => { if (!document.hidden) void refreshAlerts() }, 60000); return () => window.clearInterval(timer)
+  }, [pathname, refreshAlerts, role])
 
   const navigation = allNavigation.filter((item) => !(item.label === 'Finance' && role !== null && perms.viewFinance === false))
   const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
@@ -83,51 +99,64 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   }
   async function signOut() { await authClient.signOut(); router.push('/sign-in'); router.refresh() }
 
-  if (role === 'guard') return <div className="flex min-h-screen items-center justify-center bg-[#F5F5F6] text-xs text-zinc-500">Opening the guard app…</div>
+  if (role === 'guard') return <div className="flex min-h-screen items-center justify-center bg-[#F5F5F6] text-[12px] text-[#6B6B72]">Opening the guard app…</div>
 
   return (
     <div className="workspace-theme min-h-screen bg-[#F5F5F6] text-[#18181B]">
-      <aside className="workspace-sidebar fixed inset-y-0 left-0 z-20 hidden w-[239px] flex-col bg-[#2A2B2E] text-white lg:flex">
-        <Link href="/overview" className="flex h-[64px] items-center px-5"><Wordmark /></Link>
-        <div className="mx-3 mb-4 flex h-[52px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5">
-          <span className="flex size-7 items-center justify-center rounded-lg bg-[#E4E4E7] text-[9px] font-bold text-zinc-800">{initials(organization.data?.name)}</span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organization.data?.name ?? 'Your company'}</span><span className="block text-[10px] text-[#A1A1AA]">{process.env.NEXT_PUBLIC_BRAND_TAGLINE ?? 'Fortewings Security'}</span></span>
+      <aside className="workspace-sidebar fixed inset-y-0 left-0 z-20 hidden w-[244px] flex-col bg-[#2A2B2E] text-white lg:flex">
+        <Link href="/overview" className="flex h-[62px] items-center px-5"><Wordmark /></Link>
+        <div className="mx-3 mb-5 flex h-[50px] items-center gap-2.5 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-2.5">
+          <span className="flex size-7 items-center justify-center rounded-[7px] bg-[#E4E4E7] text-[9px] font-bold text-[#3F3F46]">{initials(organization.data?.name)}</span>
+          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organization.data?.name ?? 'Your company'}</span><span className="block text-[9.5px] uppercase tracking-[0.08em] text-[#A1A1AA]">{process.env.NEXT_PUBLIC_BRAND_TAGLINE ?? 'Fortewings Security'}</span></span>
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto px-2.5">
-          {navigation.map(({ label, href, icon: Icon, tag }) => (
-            <Link key={label} href={href} className={`relative flex h-9 items-center gap-3 rounded-[10px] px-3 text-[12px] transition-colors ${isActive(label) ? 'bg-white/[0.1] font-semibold text-white before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-[3px] before:rounded-full before:bg-white' : 'text-[#B4B4BB] hover:bg-white/[0.06] hover:text-white'}`}>
-              <Icon className="size-4" /><span className="flex-1">{label}</span>
-              {label === 'Alerts' && unread > 0 && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[9px] font-bold text-white">{unread}</span>}
-              {tag && <span className="rounded border border-white/25 px-1 text-[9px]">{tag}</span>}
-            </Link>
-          ))}
+        <nav className="flex-1 overflow-y-auto px-2.5 pb-4">
+          {navGroups.map((group) => {
+            const items = navigation.filter((item) => group.items.includes(item.label))
+            if (items.length === 0) return null
+            return (
+              <div key={group.label} className="mb-4">
+                <p className="mb-1.5 px-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#9A9AA1]">{group.label}</p>
+                <div className="space-y-0.5">
+                  {items.map(({ label, href, icon: Icon, tag }) => (
+                    <Link key={label} href={href} className={`group flex h-[34px] items-center gap-2.5 rounded-[7px] px-2.5 text-[11.5px] transition-colors ${isActive(label) ? 'bg-white/[0.08] font-semibold text-white' : 'text-[#B4B4BB] hover:bg-white/[0.05] hover:text-white'}`}>
+                      <span aria-hidden className={`size-1.5 rounded-[2px] ${isActive(label) ? 'bg-white' : 'bg-transparent'}`} />
+                      <Icon className={`size-[15px] ${isActive(label) ? 'text-white' : 'text-[#A1A1AA] group-hover:text-white'}`} strokeWidth={1.75} /><span className="flex-1">{label}</span>
+                      {label === 'Alerts' && unread > 0 && <span className="rounded-[4px] bg-[#B3402A] px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-white">{unread}</span>}
+                      {tag && <span className="rounded-[3px] border border-white/20 px-1 text-[8.5px] uppercase tracking-wide text-[#B4B4BB]">{tag}</span>}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </nav>
-        <div className="border-t border-white/10 px-3 pb-3 pt-2">
-          <Link href="/guard-app" className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-xs text-[#B4B4BB] hover:bg-white/[0.06] hover:text-white"><Phone className="size-4" />Guard mobile app</Link>
-          <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-3">
+        <div className="border-t border-white/[0.08] px-3 pb-3 pt-2.5">
+          <Link href="/guard-app" className="flex h-9 w-full items-center gap-2.5 rounded-[7px] px-2 text-[11.5px] text-[#B4B4BB] transition-colors hover:bg-white/[0.05] hover:text-white"><Phone className="size-[15px]" strokeWidth={1.75} />Guard mobile app</Link>
+          <div className="mt-2.5 flex items-center gap-2 border-t border-white/[0.08] pt-3">
             <Link href="/profile" aria-label="Your profile" title="Your profile"><Avatar name={user?.name ?? 'User'} src={user?.image} size={32} /></Link>
-            <Link href="/profile" className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{user?.name ?? 'Signed in'}</span><span className="block truncate text-[10px] text-[#A1A1AA]">{user?.email}</span></Link>
-            <button onClick={() => void signOut()} aria-label="Sign out" title="Sign out" className="rounded-lg p-2 text-zinc-400 hover:bg-white/10 hover:text-white"><LogOut className="size-4" /></button>
+            <Link href="/profile" className="min-w-0 flex-1"><span className="block truncate text-[11.5px] font-semibold">{user?.name ?? 'Signed in'}</span><span className="block truncate text-[9.5px] text-[#A1A1AA]">{user?.email}</span></Link>
+            <button onClick={() => void signOut()} aria-label="Sign out" title="Sign out" className="rounded-[7px] p-2 text-[#A1A1AA] transition-colors hover:bg-white/[0.07] hover:text-white"><LogOut className="size-4" /></button>
           </div>
         </div>
       </aside>
 
-      <div className="lg:pl-[239px]">
-        <header className="workspace-topbar sticky top-0 z-10 flex h-[60px] items-center gap-3 border-b border-[#E4E4E7] bg-white px-4 lg:h-[65px] lg:px-7">
+      <div className="lg:pl-[244px]">
+        <header className="workspace-topbar sticky top-0 z-10 flex h-[58px] items-center gap-3 border-b border-[#E4E4E7] bg-white/95 px-4 backdrop-blur-sm lg:h-[62px] lg:px-7">
           <Link href="/overview" className="lg:hidden"><Logo size={32} /></Link>
-          <form onSubmit={runSearch} className="flex min-w-0 flex-1 items-center gap-3 text-[#9A9AA1]">
-            <Search className="size-4 shrink-0" />
-            <input ref={search} aria-label="Search workspace" placeholder="Search guards, or jump to a page..." className="w-full max-w-[350px] bg-transparent text-[13px] text-[#18181B] outline-none placeholder:text-[#9A9AA1]" />
-            <kbd className="hidden whitespace-nowrap rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">Ctrl K</kbd>
-            {searchMessage && <span role="status" className="hidden max-w-[260px] truncate text-[10px] text-zinc-500 md:block">{searchMessage}</span>}
+          <form onSubmit={runSearch} className="flex min-w-0 flex-1 items-center gap-2 text-[#9A9AA1]">
+            <Search className="size-[15px] shrink-0" strokeWidth={1.75} />
+            <input ref={search} aria-label="Search workspace" placeholder="Search guards, or jump to a page..." className="w-full max-w-[360px] bg-transparent text-[12px] text-[#18181B] outline-none placeholder:text-[#9A9AA1]" />
+            <kbd className="hidden whitespace-nowrap rounded-[4px] border border-[#E4E4E7] bg-[#F5F5F6] px-1.5 py-0.5 font-mono text-[9px] text-[#6B6B72] sm:block">Ctrl K</kbd>
+            {searchMessage && <span role="status" className="hidden max-w-[260px] truncate text-[10px] text-[#6B6B72] md:block">{searchMessage}</span>}
           </form>
-          <Link href="/alerts" aria-label={`${unread} unacknowledged alerts`} className="relative flex size-10 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"><Bell className="size-4" />{unread > 0 && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-red-500" />}</Link>
-          <Link href="/napoleon" className="flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white"><Sparkles className="size-3.5" /><span className="hidden sm:inline">Ask Napoleon</span></Link>
+          {syncIssue && <button onClick={() => void refreshAlerts()} title="The alert count could not refresh. Click to retry." className="hidden h-7 items-center gap-1.5 rounded-[6px] border border-[#F3E3BF] bg-[#FEF3E2] px-2 text-[9.5px] font-semibold uppercase tracking-[0.04em] text-[#B7791F] sm:inline-flex"><span aria-hidden className="size-1.5 rounded-[2px] bg-[#B07A18]" />Sync issue</button>}
+          <Link href="/alerts" aria-label={`${unread} unacknowledged alerts`} className="relative flex size-9 items-center justify-center rounded-[7px] text-[#6B6B72] transition-colors hover:bg-[#F0F2EC]"><Bell className="size-[16px]" strokeWidth={1.75} />{unread > 0 && <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-[#B3402A]" />}</Link>
+          <Link href="/napoleon" className="flex h-9 items-center gap-2 whitespace-nowrap rounded-[7px] bg-[#2A2B2E] px-3 text-[11px] font-semibold text-white transition-colors hover:bg-[#3F4045]"><Sparkles className="size-3.5" strokeWidth={1.75} /><span className="hidden sm:inline">Ask Napoleon</span></Link>
         </header>
-        <main className="mx-auto max-w-[1600px] px-4 py-5 pb-28 sm:px-5 lg:px-7 lg:py-7 lg:pb-10">{children}</main>
+        <main className="mx-auto max-w-[1560px] px-4 py-5 pb-28 sm:px-5 lg:px-7 lg:py-6 lg:pb-10">{children}</main>
       </div>
 
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-white/10 bg-[#2A2B2E] pb-[env(safe-area-inset-bottom)] text-white lg:hidden">
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-white/[0.08] bg-[#2A2B2E] pb-[env(safe-area-inset-bottom)] text-white lg:hidden">
         {navigation.filter((item) => bottomNav.includes(item.label)).map(({ label, href, icon: Icon }) => (
           <Link key={label} href={href} className={`flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] ${isActive(label) ? 'font-semibold text-white' : 'text-[#B4B4BB]'}`}><Icon className="size-[18px]" />{label}</Link>
         ))}
@@ -135,13 +164,13 @@ export function WorkspaceShell({ active, children }: { active: string; children:
       </nav>
       {more && (
         <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onMouseDown={(event) => { if (event.target === event.currentTarget) setMore(false) }}>
-          <div className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-[#2A2B2E] p-4 pb-8 text-white">
+          <div className="absolute inset-x-0 bottom-0 rounded-t-[16px] bg-[#2A2B2E] p-4 pb-8 text-white">
             <div className="mb-3 flex items-center justify-between"><Wordmark size={28} /><button onClick={() => setMore(false)} aria-label="Close menu" className="flex size-11 items-center justify-center rounded-lg hover:bg-white/10"><X className="size-5" /></button></div>
             <div className="grid grid-cols-3 gap-2">
-              {navigation.map(({ label, href, icon: Icon }) => <Link key={label} href={href} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Icon className="size-5" />{label}</Link>)}
-              <Link href="/guard-app" className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Phone className="size-5" />Guard app</Link>
-              <Link href="/profile" className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><Avatar name={user?.name ?? 'User'} src={user?.image} size={24} />My profile</Link>
-              <button onClick={() => void signOut()} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-[11px]"><LogOut className="size-5" />Sign out</button>
+              {navigation.map(({ label, href, icon: Icon }) => <Link key={label} href={href} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[10px] bg-white/[0.05] text-[11px] text-[#DDE6DF]"><Icon className="size-5" />{label}</Link>)}
+              <Link href="/guard-app" className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[10px] bg-white/[0.05] text-[11px] text-[#DDE6DF]"><Phone className="size-5" />Guard app</Link>
+              <Link href="/profile" className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[10px] bg-white/[0.05] text-[11px] text-[#DDE6DF]"><Avatar name={user?.name ?? 'User'} src={user?.image} size={24} />My profile</Link>
+              <button onClick={() => void signOut()} className="flex min-h-[68px] flex-col items-center justify-center gap-1.5 rounded-[10px] bg-white/[0.05] text-[11px] text-[#DDE6DF]"><LogOut className="size-5" />Sign out</button>
             </div>
           </div>
         </div>
@@ -151,14 +180,14 @@ export function WorkspaceShell({ active, children }: { active: string; children:
 }
 
 export function PageHeader({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: React.ReactNode; children?: React.ReactNode }) {
-  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h1 className="text-[24px] font-normal leading-tight tracking-[-0.02em] sm:text-[28px]">{title}</h1>{subtitle && <p className="mt-1 text-[13px] text-[#6B6B72]">{subtitle}</p>}</div><div className="flex flex-wrap items-center gap-2">{children}{action}</div></header>
+  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h1 className="text-[25px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#18181B] sm:text-[29px]">{title}</h1>{subtitle && <p className="mt-1 max-w-[68ch] text-[12.5px] leading-relaxed text-[#6B6B72]">{subtitle}</p>}</div><div className="flex flex-wrap items-center gap-2">{children}{action}</div></header>
 }
 
 export function PageAction({ children, primary = false, href, onClick }: { children: React.ReactNode; primary?: boolean; href?: string; onClick?: () => void }) {
-  const classes = `inline-flex h-11 items-center justify-center gap-2 rounded-[10px] px-3.5 text-xs font-semibold sm:h-10 ${primary ? 'workspace-primary-action bg-[#2A2B2E] text-white hover:bg-[#3F4045]' : 'border border-[#E4E4E7] bg-white text-zinc-700 hover:bg-zinc-50'}`
+  const classes = `inline-flex h-10 items-center justify-center gap-2 rounded-[8px] px-3.5 text-[11.5px] font-semibold transition-colors sm:h-9 ${primary ? 'workspace-primary-action bg-[#2A2B2E] text-white hover:bg-[#3F4045]' : 'border border-[#E4E4E7] bg-white text-[#3F3F46] hover:border-[#D4D4D8] hover:bg-[#F5F5F6]'}`
   return href ? <Link href={href} className={classes}>{children}</Link> : <button onClick={onClick} className={classes}>{children}</button>
 }
 
 export function StatStrip({ stats }: { stats: [string, string][] }) {
-  return <section className="mb-5 grid grid-cols-2 divide-x divide-y divide-[#E4E4E7] overflow-hidden rounded-[18px] border border-[#E4E4E7] bg-white sm:grid-cols-4 sm:divide-y-0">{stats.map(([value, label]) => <div key={label} className="px-4 py-3.5"><p className="font-mono text-[19px] font-semibold">{value}</p><p className="mt-0.5 text-[11px] text-[#6B6B72]">{label}</p></div>)}</section>
+  return <section className="mb-5 grid grid-cols-2 divide-y divide-[#E4E4E7] overflow-hidden rounded-[14px] border border-[#E4E4E7] bg-white sm:grid-cols-4 sm:divide-x sm:divide-y-0">{stats.map(([value, label]) => <div key={label} className="px-4 py-3.5"><p className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#6B6B72]">{label}</p><p className="ws-num mt-1 text-[22px] font-semibold leading-none text-[#18181B]">{value}</p></div>)}</section>
 }

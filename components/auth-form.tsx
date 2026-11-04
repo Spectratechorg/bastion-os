@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Logo } from '@/components/brand'
 import { authClient } from '@/lib/auth-client'
 
-export function AuthForm({ mode, databaseConfigured }: { mode: 'sign-in' | 'sign-up'; databaseConfigured: boolean }) {
+export function AuthForm({ mode, databaseConfigured, signUpAllowed = true }: { mode: 'sign-in' | 'sign-up'; databaseConfigured: boolean; signUpAllowed?: boolean }) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -70,13 +70,15 @@ export function AuthForm({ mode, databaseConfigured }: { mode: 'sign-in' | 'sign
         <h2 className="mt-3 text-3xl font-semibold tracking-tight">{isSignUp ? 'Create your command account' : 'Welcome back'}</h2>
         <p className="mt-2 text-sm text-[#71717A]">Operations records are shared with members of your organization.</p>
         <form onSubmit={submit} className="mt-8 flex flex-col gap-4">
-          {isSignUp && <label className="flex flex-col gap-2 text-sm font-medium">Full name<input required value={name} onChange={(event) => setName(event.target.value)} className="rounded-lg border border-[#E4E4E7] bg-white px-3 py-3 outline-none focus:border-[#2A2B2E]" placeholder="Adaeze Okafor" /></label>}
-          <label className="flex flex-col gap-2 text-sm font-medium">Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-lg border border-[#E4E4E7] bg-white px-3 py-3 outline-none focus:border-[#2A2B2E]" placeholder="you@company.com" /></label>
-          <label className="flex flex-col gap-2 text-sm font-medium">Password<input required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-lg border border-[#E4E4E7] bg-white px-3 py-3 outline-none focus:border-[#2A2B2E]" placeholder="At least 8 characters" /></label>
+          {isSignUp && <label className="flex flex-col gap-2 text-sm font-medium">Full name<input required value={name} onChange={(event) => setName(event.target.value)} className="rounded-[8px] border border-[#E4E4E7] bg-white px-3 py-3 outline-none focus:border-[#2A2B2E]" placeholder="Adaeze Okafor" /></label>}
+          <label className="flex flex-col gap-2 text-sm font-medium">Email<input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-[8px] border border-[#E4E4E7] bg-white px-3 py-3 outline-none focus:border-[#2A2B2E]" placeholder="you@company.com" /></label>
+          <label className="flex flex-col gap-2 text-sm font-medium">Password<input required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-[8px] border border-[#E4E4E7] bg-white px-3 py-3 outline-none focus:border-[#2A2B2E]" placeholder="At least 8 characters" /></label>
           {error && <p role="alert" className="rounded-lg bg-[#FEF2F2] px-3 py-2 text-sm text-[#B42318]">{error}</p>}
           <button disabled={pending} className="mt-2 rounded-lg bg-[#2A2B2E] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">{pending ? 'Verifying…' : isSignUp ? 'Create account' : 'Sign in to BastionOS'}</button>
         </form>
-        <p className="mt-6 text-center text-sm text-[#71717A]">{isSignUp ? 'Already have an account?' : 'New to BastionOS?'} <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href={isSignUp ? '/sign-in' : '/sign-up'}>{isSignUp ? 'Sign in' : 'Create an account'}</a></p>
+        <p className="mt-6 text-center text-sm text-[#71717A]">
+          {isSignUp ? <>Already have an account? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-in">Sign in</a></> : signUpAllowed ? <>New to BastionOS? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-up">Create an account</a></> : <>Accounts are created by your administrator.</>}
+        </p>
       </div>
     </section>
   </main>
