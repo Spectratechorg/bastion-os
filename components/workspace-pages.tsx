@@ -11,11 +11,13 @@ import { FinancePage } from '@/components/finance-page'
 import { GuardRegisterPage } from '@/components/guard-register-page'
 import { ProfilePage } from '@/components/profile-page'
 import { ReportsPage, SettingsPage } from '@/components/more-pages'
+import { AdminDashboardPage } from '@/components/admin-dashboard'
 
 export function WorkspacePage({ route, financeTab = 'overview' }: { route: string; financeTab?: string }) {
   let content: React.ReactNode; let active = route
   switch (route) {
     case 'overview': content = <OverviewPage />; break
+    case 'admin': content = <AdminDashboardPage />; break
     case 'guards': content = <RecordsPage section="guards" />; break
     case 'guards-new': content = <GuardRegisterPage />; active = 'guards'; break
     case 'sites': content = <RecordsPage section="sites" />; break

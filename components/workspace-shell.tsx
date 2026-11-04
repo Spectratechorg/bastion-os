@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
+  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route, ShieldAlert,
   Search, Settings, Sparkles, Users, Wallet, X,
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
@@ -13,6 +13,7 @@ import { Avatar } from '@/components/ui-bits'
 
 const allNavigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
+  { label: 'Command Center', href: '/admin', icon: ShieldAlert, tag: 'Admin' },
   { label: 'Guards', href: '/guards', icon: Users },
   { label: 'Sites', href: '/sites', icon: MapPin },
   { label: 'Attendance', href: '/attendance', icon: Clock3 },
@@ -81,8 +82,12 @@ const [syncIssue, setSyncIssue] = useState(false)
     void refreshAlerts(); const timer = window.setInterval(() => { if (!document.hidden) void refreshAlerts() }, 60000); return () => window.clearInterval(timer)
   }, [pathname, refreshAlerts, role])
 
-  const navigation = allNavigation.filter((item) => !(item.label === 'Finance' && role !== null && perms.viewFinance === false))
-  const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
+  const navigation = allNavigation.filter((item) => {
+    if (item.label === 'Finance' && role !== null && perms.viewFinance === false) return false
+    if (item.label === 'Command Center' && role !== null && role !== 'owner' && role !== 'admin') return false
+    return true
+  })
+  const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Command Center' && pathname === '/admin') || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
   async function runSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const query = (search.current?.value ?? '').trim(); if (!query) return

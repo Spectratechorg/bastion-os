@@ -4,6 +4,7 @@ import { requireWorkspace } from '@/lib/session'
 
 const sections = new Set([
   'overview',
+  'admin',
   'guards',
   'sites',
   'attendance',
