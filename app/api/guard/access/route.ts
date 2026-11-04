@@ -4,11 +4,12 @@ import { db } from '@/lib/db'
 import { organizations } from '@/lib/db/schema'
 import { newGuardAppCode, normalizeGuardAppCode } from '@/lib/guard-access'
 import { actor, fail, isModerator } from '@/lib/server'
+import { timed } from '@/lib/timing'
 
 export const dynamic = 'force-dynamic'
 
 /** The shared guard-app code for this organization; created on first view by a moderator. */
-export async function GET() {
+async function handleGet() {
   if (!process.env.DATABASE_URL) return fail('Database is not configured.', 503)
   const current = await actor()
   if (!current) return fail('Sign in and select an organization.', 401)
@@ -24,7 +25,7 @@ export async function GET() {
 }
 
 /** Replaces the code, which immediately locks out every phone still using the old one. */
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   if (!process.env.DATABASE_URL) return fail('Database is not configured.', 503)
   const current = await actor()
   if (!current) return fail('Sign in and select an organization.', 401)
@@ -40,3 +41,6 @@ export async function POST(request: Request) {
   if (!updated) return fail('Organization not found.', 404)
   return NextResponse.json({ code: updated.code })
 }
+
+export const GET = timed('/api/guard/access', handleGet)
+export const POST = timed('/api/guard/access', handlePost)

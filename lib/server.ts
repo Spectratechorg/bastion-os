@@ -4,6 +4,7 @@ import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { members, rolePermissions } from '@/lib/db/schema'
 import { DEFAULT_PERMISSIONS, type PermissionKey } from '@/lib/permissions'
+import { actorScope } from '@/lib/request-context'
 
 export type Actor = { userId: string; organizationId: string; role: string }
 
@@ -19,6 +20,9 @@ export async function memberRole(organizationId: string, userId: string): Promis
 
 /** Signed-in user plus their active organization and role, or null. */
 export async function actor(): Promise<Actor | null> {
+  // tenantScoped() already resolved this for the request; reuse it instead of querying twice.
+  const cached = actorScope.getStore()
+  if (cached) return cached
   const current = await getActiveOrganization()
   if (!current?.organizationId) return null
   const role = await memberRole(current.organizationId, current.userId)

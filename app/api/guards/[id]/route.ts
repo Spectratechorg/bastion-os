@@ -1,23 +1,24 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { pool } from '@/lib/db'
+import { currentClient } from '@/lib/db'
 import { actor, denyGuard, fail, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
 import { monthBounds } from '@/lib/payroll'
+import { tenantScoped } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
 /** One guard's own numbers for a month: attendance %, patrol %, geofence breaches and a day-by-day strip. */
-export async function GET(request: Request, ctx: { params: Promise<{ id: string }> }) {
+async function handleGEt(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const current = await actor(); if (!current) return fail('Sign in first.', 401); { const denied = denyGuard(current); if (denied) return denied }
   const { id } = await ctx.params; if (!z.string().uuid().safeParse(id).success) return fail('Invalid guard')
   const now = lagosParts()
-  const orgRow = await pool.query('select patrol_start_hour, patrol_end_hour from organization where id = $1', [current.organizationId])
+  const orgRow = await currentClient().query('select patrol_start_hour, patrol_end_hour from organization where id = $1', [current.organizationId])
   const shift = normalizeShift(orgRow.rows[0]?.patrol_start_hour, orgRow.rows[0]?.patrol_end_hour)
   const slots = patrolSlots(shift)
   const slotCount = slots.length
   const period = new URL(request.url).searchParams.get('period') ?? now.month
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return fail('Period must look like 2026-10')
-  const g = await pool.query('select id, name, site, status, created_at, last_check_in from guards where id = $1 and organization_id = $2', [id, current.organizationId])
+  const g = await currentClient().query('select id, name, site, status, created_at, last_check_in from guards where id = $1', [id])
   const guard = g.rows[0]; if (!guard) return fail('Guard not found', 404)
   const { daysInMonth } = monthBounds(period)
   const first = `${period}-01`; const last = `${period}-${String(daysInMonth).padStart(2, '0')}`
@@ -25,8 +26,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const start = created > first ? created : first
   const upTo = now.date < last ? now.date : last
   const [att, pat] = await Promise.all([
-    pool.query(`select to_char(checked_in_at at time zone 'Africa/Lagos','YYYY-MM-DD') d, bool_and(within_geofence) inside from attendance where guard_id = $1 and organization_id = $2 and checked_in_at >= $3::date - 1 and checked_in_at < ($4::date + 2) group by 1`, [id, current.organizationId, first, last]),
-    pool.query(`select p.patrol_date d, count(c.id)::int signed from patrols p left join patrol_checkpoints c on c.patrol_id = p.id where p.guard_id = $1 and p.organization_id = $2 and p.patrol_date between $3 and $4 group by p.id, p.patrol_date`, [id, current.organizationId, first, last]),
+    currentClient().query(`select to_char(checked_in_at at time zone 'Africa/Lagos','YYYY-MM-DD') d, bool_and(within_geofence) inside from attendance where guard_id = $1 and checked_in_at >= $2::date - 1 and checked_in_at < ($3::date + 2) group by 1`, [id, first, last]),
+    currentClient().query(`select p.patrol_date d, count(c.id)::int signed from patrols p left join patrol_checkpoints c on c.patrol_id = p.id where p.guard_id = $1 and p.patrol_date between $2 and $3 group by p.id, p.patrol_date`, [id, first, last]),
   ])
   const present = new Map(att.rows.filter((r) => r.d >= first && r.d <= last).map((r) => [r.d as string, r.inside as boolean]))
   const signed = new Map<string, number>(); for (const r of pat.rows) signed.set(r.d, Math.max(signed.get(r.d) ?? 0, r.signed))
@@ -44,3 +45,4 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     outsideGeofence: days.filter((x) => x.outside).length, days: days.slice(-31),
   })
 }
+export const GET = tenantScoped(handleGEt)

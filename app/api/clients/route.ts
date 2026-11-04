@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { activityEvents, clients, guards, sites } from '@/lib/db/schema'
 import { actor, denyGuard } from '@/lib/server'
+import { tenantScoped } from '@/lib/tenant'
 
 const clientSchema = z.object({
   name: z.string().trim().min(2).max(200),
@@ -37,17 +38,17 @@ async function readBody(request: Request): Promise<unknown> {
   }
 }
 
-export async function GET() {
+async function handleGEt() {
   const { user, response } = await getCurrent()
   if (response) return response
   const rows = await db.select().from(clients)
-    .where(eq(clients.organizationId, user.organizationId))
+    
     .orderBy(desc(clients.createdAt))
     .limit(500)
   // Each client can own several sites; guards are counted through the sites they are assigned to.
   const [siteRows, guardRows] = await Promise.all([
-    db.select({ id: sites.id, name: sites.name, status: sites.status, clientId: sites.clientId }).from(sites).where(eq(sites.organizationId, user.organizationId)),
-    db.select({ site: guards.site }).from(guards).where(and(eq(guards.organizationId, user.organizationId), eq(guards.status, 'active'))),
+    db.select({ id: sites.id, name: sites.name, status: sites.status, clientId: sites.clientId }).from(sites),
+    db.select({ site: guards.site }).from(guards).where(and(eq(guards.status, 'active'))),
   ])
   return NextResponse.json(rows.map((client) => {
     const owned = siteRows.filter((site) => site.clientId === client.id)
@@ -56,7 +57,7 @@ export async function GET() {
   }))
 }
 
-export async function POST(request: Request) {
+async function handlePOst(request: Request) {
   const { user, response } = await getCurrent()
   if (response) return response
   const parsed = clientSchema.safeParse(await readBody(request))
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
   return NextResponse.json(row, { status: 201 })
 }
 
-export async function PATCH(request: Request) {
+async function handlePAtch(request: Request) {
   const { user, response } = await getCurrent()
   if (response) return response
   const body = await readBody(request)
@@ -113,7 +114,6 @@ export async function PATCH(request: Request) {
 
   const [row] = await db.update(clients).set(changes).where(and(
     eq(clients.id, id.data),
-    eq(clients.organizationId, user.organizationId),
   )).returning()
   if (!row) return error('Client not found in this organization.', 404)
   await db.insert(activityEvents).values({
@@ -127,3 +127,6 @@ export async function PATCH(request: Request) {
   })
   return NextResponse.json(row)
 }
+export const GET = tenantScoped(handleGEt)
+export const POST = tenantScoped(handlePOst)
+export const PATCH = tenantScoped(handlePAtch)

@@ -4,11 +4,13 @@ import { db } from '@/lib/db'
 import { guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
 import { actor, denyGuard, fail, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
 import { raiseAlert } from '@/lib/alerts'
+import { timed } from '@/lib/timing'
+import { tenantScoped } from '@/lib/tenant'
 
 export const dynamic = 'force-dynamic'
 
 /** Daily patrols (one per guard per day) with the hourly checkpoints from the organization shift. */
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in and select an organization to view patrols.', 401)
   { const denied = denyGuard(current); if (denied) return denied }
   const now = lagosParts()
@@ -20,10 +22,10 @@ export async function GET(request: Request) {
   const shift = normalizeShift(organization?.startHour, organization?.endHour)
   const slots = patrolSlots(shift)
   const [guardRows, siteRows, patrolRows, checkpointRows] = await Promise.all([
-    db.select().from(guards).where(eq(guards.organizationId, current.organizationId)),
-    db.select().from(sites).where(eq(sites.organizationId, current.organizationId)),
-    db.select().from(patrols).where(and(eq(patrols.organizationId, current.organizationId), gte(patrols.loggedAt, since))).orderBy(desc(patrols.loggedAt)).limit(2000),
-    db.select().from(patrolCheckpoints).where(and(eq(patrolCheckpoints.organizationId, current.organizationId), gte(patrolCheckpoints.signedAt, since))).limit(10000),
+    db.select().from(guards),
+    db.select().from(sites),
+    db.select().from(patrols).where(and(gte(patrols.loggedAt, since))).orderBy(desc(patrols.loggedAt)).limit(2000),
+    db.select().from(patrolCheckpoints).where(and(gte(patrolCheckpoints.signedAt, since))).limit(10000),
   ])
   const guardById = new Map(guardRows.map((guard) => [guard.id, guard])); const siteById = new Map(siteRows.map((site) => [site.id, site]))
   const signed = new Map<string, Record<string, string>>()
@@ -58,3 +60,5 @@ export async function GET(request: Request) {
     },
   })
 }
+
+export const GET = timed('/api/patrols', tenantScoped(handleGet))

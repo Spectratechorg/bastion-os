@@ -31,4 +31,9 @@ Re-running it on an organization that already has guards does nothing, so it is 
 
 Database migrations are never run automatically. Confirm the target database before using `pnpm db:migrate`.
 
+Tenant isolation is enforced by Postgres row-level security. `DATABASE_URL` must use a role that is
+not a superuser and does not have `BYPASSRLS`; the app refuses tenant-scoped requests otherwise. Run
+`npm run db:rls-check` to verify the policies and see [docs/rls.md](docs/rls.md) for the covered
+tables and the local-development escape hatch.
+
 For Neon provisioning, HTTPS phone access, and NFC setup, see [docs/backend-setup.md](docs/backend-setup.md).
