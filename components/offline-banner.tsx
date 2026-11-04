@@ -24,7 +24,7 @@ export function OfflineBanner() {
   if (online !== false) return null
 
   return (
-    <div role="status" aria-live="polite" className="sticky top-0 z-40 flex items-center justify-center gap-2 border-b border-[#F3E3BF] bg-[#FEF3E2] px-4 py-2 text-center text-[11px] font-semibold text-[#8A6413]">
+    <div role="status" aria-live="polite" className="sticky top-0 z-40 flex items-center justify-center gap-2 border-b border-[#F3E3BF] bg-[#FEF3E2] px-4 py-2 text-center text-[11px] font-semibold text-[#B7791F]">
       <span aria-hidden className="size-1.5 rounded-full bg-[#B7791F]" />
       You are offline. This page stays open, but changes cannot be saved until the connection returns.
     </div>

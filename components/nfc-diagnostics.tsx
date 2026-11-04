@@ -90,9 +90,9 @@ export function NfcDiagnostics() {
   const stop = () => { abort.current?.abort(); setListening(false); push('scan() cancelled') }
 
   return <section className="mt-4 rounded-2xl border border-zinc-300 bg-white p-4">
-    <button type="button" onClick={() => { setOpen((value) => !value); if (!open) environment() }} className="flex min-h-[44px] w-full items-center justify-between gap-2 text-xs font-semibold text-zinc-700">
+    <button type="button" onClick={() => { setOpen((value) => !value); if (!open) environment() }} className="flex min-h-[44px] w-full items-center justify-between gap-2 text-xs font-semibold text-[#3F3F46]">
       <span>NFC diagnostics</span>
-      <span className="text-zinc-400">{open ? 'Hide' : 'Show'}</span>
+      <span className="text-[#9A9AA1]">{open ? 'Hide' : 'Show'}</span>
     </button>
     {open && <>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -102,9 +102,9 @@ export function NfcDiagnostics() {
           : <button type="button" onClick={() => void listen()} className="rounded-lg bg-[#2A2B2E] px-3 py-2 text-xs font-semibold text-white">Listen for any tag</button>}
         <button type="button" onClick={() => setLines([])} className="rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold">Clear</button>
       </div>
-      <p className="mt-2 text-[11px] leading-5 text-zinc-500">“Listen for any tag” logs every record the browser receives. If nothing appears while the phone beeps, Chrome is not being handed the tag. If a READING appears, the payload is being received and the problem is in how we read it.</p>
-      <ol className="mt-2 max-h-64 overflow-y-auto rounded-lg bg-zinc-50 p-2 font-mono text-[10px] leading-4 text-zinc-700">
-        {lines.length === 0 ? <li className="text-zinc-400">No output yet.</li> : lines.map((line, index) => <li key={`${line.at}-${index}`} className="whitespace-pre-wrap break-all">{line.at}  {line.text}</li>)}
+      <p className="mt-2 text-[11px] leading-5 text-[#6B6B72]">“Listen for any tag” logs every record the browser receives. If nothing appears while the phone beeps, Chrome is not being handed the tag. If a READING appears, the payload is being received and the problem is in how we read it.</p>
+      <ol className="mt-2 max-h-64 overflow-y-auto rounded-lg bg-[#F5F5F6] p-2 font-mono text-[10px] leading-4 text-[#3F3F46]">
+        {lines.length === 0 ? <li className="text-[#9A9AA1]">No output yet.</li> : lines.map((line, index) => <li key={`${line.at}-${index}`} className="whitespace-pre-wrap break-all">{line.at}  {line.text}</li>)}
       </ol>
     </>}
   </section>

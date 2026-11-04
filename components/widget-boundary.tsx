@@ -18,9 +18,9 @@ export class WidgetBoundary extends Component<{ title: string; children: ReactNo
   render() {
     if (!this.state.failed) return this.props.children
     return (
-      <section role="alert" className="flex flex-col items-start gap-2 rounded-[18px] border border-zinc-200 bg-white p-4">
+      <section role="alert" className="flex flex-col items-start gap-2 rounded-[14px] border border-[#E4E4E7] bg-white p-4">
         <h2 className="text-sm font-semibold">{this.props.title} could not load</h2>
-        <p className="text-xs text-zinc-500">This section failed, but the rest of the page is still usable.</p>
+        <p className="text-xs text-[#6B6B72]">This section failed, but the rest of the page is still usable.</p>
         <button className={smallBtn} onClick={() => this.setState({ failed: false })}>Try again</button>
       </section>
     )

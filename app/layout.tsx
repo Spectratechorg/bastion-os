@@ -1,7 +1,11 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { Public_Sans, Spline_Sans_Mono } from 'next/font/google'
 import { OfflineBanner } from '@/components/offline-banner'
 import './globals.css'
+
+const sans = Public_Sans({ subsets: ['latin'], variable: '--font-public-sans', display: 'swap' })
+const mono = Spline_Sans_Mono({ subsets: ['latin'], variable: '--font-spline-mono', display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'BastionOS · Fortewings Security',
@@ -35,8 +39,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased">
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+      <body className="antialiased font-sans">
         <OfflineBanner />
         {children}
         {process.env.VERCEL ? <Analytics /> : null}

@@ -39,7 +39,7 @@ export function ProfilePage() {
 
   return <>
     <PageHeader title="Profile" subtitle="Your photo and name, shown to your team across BastionOS." />
-    <section className="max-w-xl rounded-[18px] border border-zinc-200 bg-white p-5 sm:p-6">
+    <section className="max-w-xl ws-card p-5 sm:p-6">
       <ErrorBanner message={error} />
       {note && <p role="status" className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">{note}</p>}
       <div className="flex items-center gap-4">
@@ -47,13 +47,13 @@ export function ProfilePage() {
           <Avatar name={user?.name ?? 'User'} src={user?.image} size={88} />
           <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100"><Camera className="size-5" /></span>
         </button>
-        <div className="text-xs"><b className="block text-sm font-semibold">Profile photo</b><span className="text-zinc-500">A clear, front-facing photo works best.</span>
+        <div className="text-xs"><b className="block text-sm font-semibold">Profile photo</b><span className="text-[#6B6B72]">A clear, front-facing photo works best.</span>
           <span className="mt-2 flex flex-wrap gap-2"><button className={btn} disabled={busy} onClick={() => file.current?.click()}>{user?.image ? 'Change photo' : 'Upload photo'}</button>{user?.image && <button className={btn} disabled={busy} onClick={() => void remove()}>Remove</button>}</span></div>
         <input ref={file} type="file" accept="image/*" capture="user" onChange={pick} className="hidden" />
       </div>
-      <form onSubmit={saveName} className="mt-6 grid gap-4 border-t border-zinc-100 pt-5">
+      <form onSubmit={saveName} className="mt-6 grid gap-4 border-t border-[#EBEFE7] pt-5">
         <Field label="Name"><input className={inputClass} value={name ?? user?.name ?? ''} onChange={(e) => setName(e.target.value)} /></Field>
-        <Field label="Email"><input className={`${inputClass} bg-zinc-50`} value={user?.email ?? ''} disabled /></Field>
+        <Field label="Email"><input className={`${inputClass} bg-[#F5F5F6]`} value={user?.email ?? ''} disabled /></Field>
         <div><button className={btnPrimary} disabled={busy || !name?.trim()}>Save name</button></div>
       </form>
     </section>

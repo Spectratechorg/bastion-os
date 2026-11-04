@@ -115,9 +115,9 @@ export function WriteTagButton({ token, owner }: { token: string; owner?: string
         </button>}
       {canVerify && <button type="button" onClick={() => void verify()} disabled={status === 'checking'} className={smallBtn}>{status === 'checking' ? 'Reading…' : 'Verify tag'}</button>}
     </div>
-    {status === 'writing' && <p className="mt-2 text-[11px] text-zinc-600">Waiting for a tag. Hold {owner ? `${owner}’s` : 'the'} tag flat against the back of the phone, or tap Cancel.</p>}
-    {status === 'checking' && <p className="mt-2 text-[11px] text-zinc-600">Reading the tag back…</p>}
+    {status === 'writing' && <p className="mt-2 text-[11px] text-[#52525B]">Waiting for a tag. Hold {owner ? `${owner}’s` : 'the'} tag flat against the back of the phone, or tap Cancel.</p>}
+    {status === 'checking' && <p className="mt-2 text-[11px] text-[#52525B]">Reading the tag back…</p>}
     {showSuccess && <p role="status" className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-[#16794A]"><Check className="size-3.5" />{detail}</p>}
-    {(status === 'error' || status === 'mismatch') && <p role="alert" className="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-[11px] text-red-700">{detail}</p>}
+    {(status === 'error' || status === 'mismatch') && <p role="alert" className="mt-2 rounded-lg border border-red-200 bg-[#FDECEA] p-2.5 text-[11px] text-[#B42318]">{detail}</p>}
   </div>
 }
