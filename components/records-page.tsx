@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import { Check, Download, LocateFixed, MessageSquare, Plus, RefreshCw, Search, ShieldAlert, UserPlus } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
-import { api, when } from '@/lib/client'
+import { api, naira, when } from '@/lib/client'
 import { GuardMetrics } from '@/components/guard-metrics'
 import { Pagination } from '@/components/pagination'
 import { WriteTagButton } from '@/components/write-tag-button'
@@ -14,7 +14,7 @@ import { ALERT_RULES } from '@/lib/alerts-client'
 
 export type Section = 'guards' | 'sites' | 'attendance' | 'incidents' | 'alerts'
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
-type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void }
+type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void; open: (row: Row) => void }
 type Column = { head: string; cell: (row: Row, ctx: Ctx) => ReactNode }
 type Paged = { rows: Row[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: Record<string, number> }
 
@@ -26,7 +26,7 @@ const meta: Record<Section, { title: string; subtitle: string; search: string; c
     title: 'Guards', subtitle: '', search: 'Search name, phone, site…', addLabel: 'Register guard',
     stats: (rows) => [[String(rows.length), 'Registered'], [String(rows.filter((x) => x.status === 'active').length), 'Active'], [String(rows.filter((x) => x.status === 'suspended').length), 'Suspended'], [String(rows.filter((x) => x.nfcToken).length), 'NFC issued']],
     columns: [
-      { head: 'Guard', cell: (r) => <span className="flex items-center gap-3"><Avatar name={r.name} src={r.photoUrl} /><span><b className="block font-semibold">{r.name}</b><span className="text-[#6B6B72]">{r.phone}</span></span></span> },
+      { head: 'Guard', cell: (r, c) => <button type="button" onClick={() => c.open(r)} className="flex items-center gap-3 text-left"><Avatar name={r.name} src={r.photoUrl} /><span><b className="block font-semibold underline-offset-2 hover:underline">{r.name}</b><span className="text-[#6B6B72]">{r.phone}</span></span></button> },
       { head: 'NIN', cell: (r) => <span className="font-mono">{'••••' + String(r.nin).slice(-4)}</span> },
       { head: 'Site', cell: (r) => r.site ?? 'Unassigned' },
       { head: 'Salary', cell: (r) => `₦${Number(r.monthlySalary).toLocaleString('en-NG')}` },
@@ -193,6 +193,45 @@ function SiteMap({ sites, guards }: { sites: Row[]; guards: Row[] }) {
     <LiveMap sites={sites as never} guards={guards as never} selectedSiteId={id || undefined} height="h-96" /></section>
 }
 
+function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void }) {
+  const suspended = row.status === 'suspended'
+  const fields: [string, string, string?][] = [
+    ['Phone', row.phone ?? '—'],
+    ['NIN', row.nin ? `••••${String(row.nin).slice(-4)}` : '—'],
+    ['Site', row.site ?? 'Unassigned'],
+    ['Monthly salary', naira(Number(row.monthlySalary ?? 0))],
+    ['NFC tag', row.nfcToken ?? '—', 'font-mono text-[12px] break-all'],
+    ['Last check-in', row.lastCheckIn ? when(row.lastCheckIn) : 'No check-in yet'],
+    ['Added', row.createdAt ? when(row.createdAt) : '—'],
+    ['Guard login', row.loginUserId ? 'Linked to a user account' : 'Not linked'],
+  ]
+  return <Sheet title={row.name} kicker="GUARD PROFILE" onClose={close} footer={
+    <>
+      <button className={btn} onClick={() => { close(); c.metrics(row) }}>Performance</button>
+      <button className={btn} onClick={() => { close(); c.reissue(row) }}>Replace tag</button>
+      <button className={btn} onClick={() => { close(); c.edit(row) }}>Edit</button>
+      <button className={btnPrimary} onClick={async () => { await c.act(row, suspended ? 'reactivate' : 'suspend'); close() }}>{suspended ? 'Reactivate' : 'Suspend'}</button>
+    </>
+  }>
+    <div className="mb-5 flex items-center gap-4">
+      <Avatar name={row.name} src={row.photoUrl} size={64} />
+      <div className="min-w-0">
+        <p className="truncate text-lg font-semibold">{row.name}</p>
+        <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[#6B6B72]"><Badge value={row.status} />{row.site ?? 'Unassigned'}</p>
+      </div>
+    </div>
+    <dl className="divide-y divide-[#EFEFF1] text-sm">
+      {fields.map(([label, value, extra]) => (
+        <div key={label} className="flex items-start justify-between gap-6 py-3">
+          <dt className="shrink-0 text-[#6B6B72]">{label}</dt>
+          <dd className={`text-right font-medium ${extra ?? ''}`}>{value}</dd>
+        </div>
+      ))}
+    </dl>
+    <p className="mt-4 text-[11px] text-[#6B6B72]">Performance opens this guard’s attendance, patrol completion and geofence history.</p>
+  </Sheet>
+}
+
 export function RecordsPage({ section }: { section: Section }) {
   const page = meta[section]
   const [records, setRecords] = useState<Row[]>([]); const [guards, setGuards] = useState<Row[]>([]); const [sites, setSites] = useState<Row[]>([])
@@ -200,7 +239,7 @@ export function RecordsPage({ section }: { section: Section }) {
   const [filter, setFilter] = useState('all'); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
   const [currentPage, setCurrentPage] = useState(1); const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0); const [serverStats, setServerStats] = useState<Record<string, number> | null>(null)
-  const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'incident' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
+  const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'guard-detail' | 'incident' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -225,7 +264,7 @@ export function RecordsPage({ section }: { section: Section }) {
     guards, sites,
     act: async (row, action, extra = {}) => { try { const updated = await api<Row>('/api/operations', { method: 'PATCH', json: { section, id: row.id, action, ...extra } }); setRecords((items) => items.map((item) => item.id === row.id ? updated : item)); setDialog((d) => d?.row?.id === row.id ? { ...d, row: updated } : d); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update.') } },
     edit: (row) => setDialog({ kind: section === 'guards' ? 'guard' : 'site', row }), comment: (row) => setDialog({ kind: 'detail', row }), assign: (row) => setDialog({ kind: 'assign', row }),
-    metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }),
+    metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }), open: (row) => setDialog({ kind: 'guard-detail', row }),
     remove: async (row) => {
       const what = section === 'guards' ? `Delete ${row.name} permanently? Their attendance, patrol and payroll history is deleted with them. To keep the history, suspend the guard instead.` : `Delete ${row.name} permanently? Guards assigned here become unassigned. To keep the record, deactivate the site instead.`
       if (!window.confirm(what)) return
@@ -280,6 +319,7 @@ export function RecordsPage({ section }: { section: Section }) {
     {dialog?.kind === 'guard' && dialog.row && <GuardDialog row={dialog.row} sites={sites} close={() => setDialog(null)} done={() => void load()} />}
     {dialog?.kind === 'incident' && <IncidentDialog sites={sites} close={() => setDialog(null)} done={() => void load()} />}
     {dialog?.kind === 'detail' && dialog.row && <IncidentDetail row={records.find((r) => r.id === dialog.row?.id) ?? dialog.row} close={() => setDialog(null)} act={ctx.act} />}
+    {dialog?.kind === 'guard-detail' && dialog.row && <GuardDetail row={dialog.row} c={ctx} close={() => setDialog(null)} />}
     {dialog?.kind === 'metrics' && dialog.row && <GuardMetrics guard={dialog.row as never} photoUrl={dialog.row.photoUrl} close={() => setDialog(null)} />}
     {dialog?.kind === 'reissue' && dialog.row && <ReissueDialog row={dialog.row} close={() => setDialog(null)} done={(tag) => { setDialog({ kind: 'tag', row: dialog.row, tag }); void load() }} />}
     {dialog?.kind === 'tag' && dialog.row && <Sheet title="New tag code" kicker={dialog.row.name} onClose={() => setDialog(null)} footer={<button className={btnPrimary} onClick={() => setDialog(null)}>Done</button>}><p className="text-sm">The old tag no longer works. Write this code to the replacement tag, or give it to {dialog.row.name} to type in the guard app:</p><p className="mt-4 break-all rounded-xl bg-[#EFEFF1] p-4 text-center font-mono text-sm font-semibold tracking-wide">{dialog.tag}</p>{dialog.tag && <WriteTagButton token={dialog.tag} owner={dialog.row.name} />}</Sheet>}

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Logo } from '@/components/brand'
 import { authClient } from '@/lib/auth-client'
 
-export function AuthForm({ mode, databaseConfigured }: { mode: 'sign-in' | 'sign-up'; databaseConfigured: boolean }) {
+export function AuthForm({ mode, databaseConfigured, signUpAllowed = true }: { mode: 'sign-in' | 'sign-up'; databaseConfigured: boolean; signUpAllowed?: boolean }) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -76,7 +76,9 @@ export function AuthForm({ mode, databaseConfigured }: { mode: 'sign-in' | 'sign
           {error && <p role="alert" className="rounded-lg bg-[#FEF2F2] px-3 py-2 text-sm text-[#B42318]">{error}</p>}
           <button disabled={pending} className="mt-2 rounded-lg bg-[#2A2B2E] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60">{pending ? 'Verifying…' : isSignUp ? 'Create account' : 'Sign in to BastionOS'}</button>
         </form>
-        <p className="mt-6 text-center text-sm text-[#71717A]">{isSignUp ? 'Already have an account?' : 'New to BastionOS?'} <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href={isSignUp ? '/sign-in' : '/sign-up'}>{isSignUp ? 'Sign in' : 'Create an account'}</a></p>
+        <p className="mt-6 text-center text-sm text-[#71717A]">
+          {isSignUp ? <>Already have an account? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-in">Sign in</a></> : signUpAllowed ? <>New to BastionOS? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-up">Create an account</a></> : <>Accounts are created by your administrator.</>}
+        </p>
       </div>
     </section>
   </main>

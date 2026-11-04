@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import { accounts, authSessions, guards, members, users } from '@/lib/db/schema'
 import { actor, denyGuard, fail, isAdminRole } from '@/lib/server'
 import { ASSIGNABLE_ROLES } from '@/lib/permissions'
+import { provisioningSignup } from '@/lib/signup-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
     if (already) return fail('That person is already in your team.', 409)
   } else {
     if (!password) return fail('Set a temporary password of at least 8 characters for the new user.')
-    try { const created = await auth.api.signUpEmail({ body: { name, email, password } }); userId = created.user.id } catch (error) { return fail(error instanceof Error ? error.message : 'Unable to create the account.', 400) }
+    try { const created = await provisioningSignup.run(true, () => auth.api.signUpEmail({ body: { name, email, password } })); userId = created.user.id } catch (error) { return fail(error instanceof Error ? error.message : 'Unable to create the account.', 400) }
   }
   await db.insert(members).values({ id: crypto.randomUUID(), organizationId: current.organizationId, userId, role })
   if (role === 'guard' && guardId) await link(userId, guardId, current.organizationId)
