@@ -99,3 +99,12 @@ Allow **location** and **NFC** when prompted. Without location permission a scan
 Register a guard at `/guards/new`; the success panel shows the tag code and a **Write tag** button. Hold a blank tag to the back of the phone, then use **Verify tag** to read it back and confirm the stored code matches. **Replace tag** on the Guards page offers the same buttons for a reissued card.
 
 Web NFC cannot read a tag's hardware serial number — no browser can. The guard's tag code is written *onto* the card as an NDEF text record, which is what scans match against.
+
+
+## Account invite email
+
+When an owner or administrator adds a person in Settings -> Team, the API emails their sign-in
+address, temporary password and the app URL. Configure either Resend (`RESEND_API_KEY` + `MAIL_FROM`)
+or set `MAIL_OUTBOX_DIR` to capture messages as `.eml` files locally. With neither, the account is
+still created and the Team sheet tells the administrator to share the temporary password directly.
+New users can change it from Profile -> Change password; changing it signs other sessions out.

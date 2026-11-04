@@ -3,10 +3,11 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { accounts, authSessions, guards, members, users } from '@/lib/db/schema'
+import { accounts, authSessions, guards, members, organizations, users } from '@/lib/db/schema'
 import { actor, denyGuard, fail, isAdminRole } from '@/lib/server'
 import { ASSIGNABLE_ROLES } from '@/lib/permissions'
 import { provisioningSignup } from '@/lib/signup-policy'
+import { credentialsEmail, sendMail } from '@/lib/email'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
   const { name, email, password, role, guardId } = parsed.data
   if (role === 'admin' && current.role !== 'owner') return fail('Only the owner can create administrators.', 403)
   let userId: string
+  let createdAccount = false
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
   if (existing) {
     userId = existing.id
@@ -54,10 +56,24 @@ export async function POST(request: Request) {
   } else {
     if (!password) return fail('Set a temporary password of at least 8 characters for the new user.')
     try { const created = await provisioningSignup.run(true, () => auth.api.signUpEmail({ body: { name, email, password } })); userId = created.user.id } catch (error) { return fail(error instanceof Error ? error.message : 'Unable to create the account.', 400) }
+    createdAccount = true
   }
   await db.insert(members).values({ id: crypto.randomUUID(), organizationId: current.organizationId, userId, role })
   if (role === 'guard' && guardId) await link(userId, guardId, current.organizationId)
-  return NextResponse.json({ ok: true })
+
+  let emailed = false
+  let emailReason: string | undefined
+  if (createdAccount && password) {
+    try {
+      const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, current.organizationId)).limit(1)
+      const result = await sendMail(credentialsEmail({ name, email, password, organization: org?.name ?? 'your organization' }))
+      emailed = result.sent
+      emailReason = result.reason
+    } catch (error) {
+      emailReason = error instanceof Error ? error.message : 'Could not send the email.'
+    }
+  }
+  return NextResponse.json({ ok: true, emailed, ...(emailed ? {} : { emailReason: emailReason ?? 'Email is not configured.' }) })
 }
 
 /** Owner/admin edits a person's role, name, email or password. Only the owner can touch the owner or other administrators' roles. */

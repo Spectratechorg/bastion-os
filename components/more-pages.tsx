@@ -129,13 +129,18 @@ function UserSheet({ member, team, onClose, onSaved }: { member: Member | null; 
   const [guardId, setGuardId] = useState(member?.guardId ?? ''); const [guardList, setGuardList] = useState<Row[]>([])
   useEffect(() => { api<Row[]>('/api/operations?section=guards').then(setGuardList).catch(() => undefined) }, [])
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
+  const [created, setCreated] = useState<{ emailed: boolean; email: string; reason?: string } | null>(null)
   const isOwnerRow = member?.role === 'owner'; const isSelf = member?.userId === team.me
   const roleLocked = isOwnerRow || isSelf
   async function submit(event: FormEvent) {
     event.preventDefault(); setErr(''); setBusy(true)
     try {
-      if (!member) await api('/api/team', { method: 'POST', json: { name, email, role, ...(role === 'guard' && guardId ? { guardId } : {}), ...(password ? { password } : {}) } })
-      else await api('/api/team', { method: 'PATCH', json: { memberId: member.id, name, email, ...(roleLocked ? {} : { role }), ...((roleLocked ? member?.role : role) === 'guard' ? { guardId: guardId || null } : {}), ...(password ? { password } : {}) } })
+      if (!member) {
+        const result = await api<{ emailed: boolean; emailReason?: string }>('/api/team', { method: 'POST', json: { name, email, role, ...(role === 'guard' && guardId ? { guardId } : {}), ...(password ? { password } : {}) } })
+        setCreated({ emailed: result.emailed, email, reason: result.emailReason })
+        return
+      }
+      await api('/api/team', { method: 'PATCH', json: { memberId: member.id, name, email, ...(roleLocked ? {} : { role }), ...((roleLocked ? member?.role : role) === 'guard' ? { guardId: guardId || null } : {}), ...(password ? { password } : {}) } })
       onSaved()
     } catch (e) { setErr(e instanceof Error ? e.message : 'Unable to save.') } finally { setBusy(false) }
   }
@@ -144,6 +149,17 @@ function UserSheet({ member, team, onClose, onSaved }: { member: Member | null; 
     setBusy(true); try { await api(`/api/team?memberId=${member.id}`, { method: 'DELETE' }); onSaved() } catch (e) { setErr(e instanceof Error ? e.message : 'Unable to remove.') } finally { setBusy(false) }
   }
   const roleOptions = ASSIGNABLE_ROLES.filter((r) => r !== 'admin' || team.myRole === 'owner' || member?.role === 'admin')
+  if (created) {
+    return <Sheet title="Account created" kicker="TEAM" onClose={onSaved} footer={<button type="button" className={btnPrimary} onClick={onSaved}>Done</button>}>
+      <p className="text-sm leading-relaxed text-[#3F3F46]">
+        {created.emailed
+          ? <>Login details were emailed to <b className="font-semibold">{created.email}</b> with a temporary password.</>
+          : <>The account for <b className="font-semibold">{created.email}</b> is ready, but email is not configured. Share the temporary password with them securely.</>}
+      </p>
+      <p className="mt-3 text-xs leading-relaxed text-[#6B6B72]">They can change the password after signing in from <b className="font-semibold">Profile → Change password</b>.</p>
+      {!created.emailed && created.reason && <p className="mt-3 rounded-lg border border-[#F3E3BF] bg-[#FEF3E2] p-3 text-[11px] text-[#8A6413]">{created.reason}</p>}
+    </Sheet>
+  }
   return <Sheet title={member ? 'Edit user' : 'Add user'} kicker="TEAM" onClose={onClose} footer={<>{member && !isOwnerRow && !isSelf && <button type="button" className={`${btn} mr-auto text-[#B42318]`} onClick={() => void remove()} disabled={busy}>Remove</button>}<button type="button" className={btn} onClick={onClose}>Cancel</button><button form="user-form" className={btnPrimary} disabled={busy}>{busy ? 'Saving…' : 'Save'}</button></>}>
     <form id="user-form" onSubmit={submit} className="grid gap-4"><ErrorBanner message={err} />
       <Field label="Full name"><input required minLength={2} className={inputClass} value={name} onChange={(e) => setName(e.target.value)} /></Field>
