@@ -311,6 +311,22 @@ export const inventoryItems = pgTable('inventory_items', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
 })
 
+
+export const guardLocations = pgTable('guard_locations', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  organizationId: text('organization_id').references(() => organizations.id, { onDelete: 'cascade' }),
+  guardId: uuid('guard_id').references(() => guards.id, { onDelete: 'cascade' }).notNull(),
+  siteId: uuid('site_id').references(() => sites.id, { onDelete: 'set null' }),
+  latitude: doublePrecision('latitude').notNull(),
+  longitude: doublePrecision('longitude').notNull(),
+  batteryLevel: integer('battery_level'),
+  accuracy: doublePrecision('accuracy'),
+  speed: doublePrecision('speed'),
+  source: text('source').default('kafka'),
+  recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export const schema = {
   users,
   authSessions,
@@ -335,4 +351,5 @@ export const schema = {
   staff,
   contracts,
   inventoryItems,
+  guardLocations,
 }
