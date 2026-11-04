@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { RefreshCw } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, ErrorBanner, btn, smallBtn } from '@/components/ui-bits'
+import { WidgetBoundary } from '@/components/widget-boundary'
 import { api, naira, when } from '@/lib/client'
 
 const LiveMap = dynamic(() => import('@/components/live-map').then((m) => m.LiveMap), { ssr: false, loading: () => <div className="h-72 animate-pulse bg-zinc-100 sm:h-80" /> })
@@ -16,11 +17,27 @@ export function OverviewPage() {
   const [d, setD] = useState<{ guards: Row[]; sites: Row[]; attendance: Row[]; incidents: Row[]; alerts: Row[]; activity: Row[]; patrols: { summary: Record<string, number> }; payroll: { rows: Row[] } } | null>(null)
   const [error, setError] = useState(''); const [siteId, setSiteId] = useState(''); const [guardId, setGuardId] = useState('')
   const load = useCallback(async () => {
-    try {
-      const get = (s: string) => api<Row[]>(`/api/operations?section=${s}`)
-      const [guards, sites, attendance, incidents, alerts, activity, patrols, payroll] = await Promise.all([get('guards'), get('sites'), get('attendance'), get('incidents'), get('alerts'), get('activity'), api<{ summary: Record<string, number> }>('/api/patrols'), api<{ rows: Row[] }>('/api/payroll').catch(() => ({ rows: [] as Row[] }))])
-      setD({ guards, sites, attendance, incidents, alerts, activity, patrols, payroll }); setError('')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load the overview.') }
+    const get = (s: string) => api<Row[]>(`/api/operations?section=${s}`)
+    // Settle every section independently: one failing endpoint must not blank the whole dashboard.
+    const results = await Promise.allSettled([
+      get('guards'), get('sites'), get('attendance'), get('incidents'), get('alerts'), get('activity'),
+      api<{ summary: Record<string, number> }>('/api/patrols'),
+      api<{ rows: Row[] }>('/api/payroll'),
+    ])
+    const labels = ['guards', 'sites', 'attendance', 'incidents', 'alerts', 'activity', 'patrols', 'payroll']
+    const failed = results.flatMap((result, index) => result.status === 'rejected' ? [labels[index]] : [])
+    const pick = <T,>(index: number, fallback: T): T => results[index].status === 'fulfilled' ? results[index].value as T : fallback
+    setD({
+      guards: pick<Row[]>(0, []),
+      sites: pick<Row[]>(1, []),
+      attendance: pick<Row[]>(2, []),
+      incidents: pick<Row[]>(3, []),
+      alerts: pick<Row[]>(4, []),
+      activity: pick<Row[]>(5, []),
+      patrols: pick<{ summary: Record<string, number> }>(6, { summary: {} }),
+      payroll: pick<{ rows: Row[] }>(7, { rows: [] }),
+    })
+    setError(failed.length ? `Some sections could not load (${failed.join(', ')}). The rest of the page is still usable.` : '')
   }, [])
   useEffect(() => { void load(); const t = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(t) }, [load])
 
@@ -45,7 +62,7 @@ export function OverviewPage() {
       <section className="overflow-hidden rounded-[18px] border border-zinc-200 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-2 p-4"><div><h2 className="text-sm font-semibold">Live map</h2><p className="mt-0.5 text-xs text-zinc-500">{d ? `${d.sites.length} site${d.sites.length === 1 ? '' : 's'} · guards update as they scan · ${site ? `${site.geofenceRadius} m geofence` : ''}` : 'Loading…'}</p></div>
           {d && d.sites.length > 0 && <select aria-label="Zoom to site" value={siteId} onChange={(e) => { setSiteId(e.target.value); setGuardId('') }} className="h-10 max-w-full rounded-lg border border-zinc-200 px-2 text-xs"><option value="">All sites</option>{d.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>}</div>
-        {d && d.sites.length > 0 ? <LiveMap sites={d.sites as never} guards={d.guards as never} selectedSiteId={siteId || undefined} selectedGuardId={guardId || undefined} height="h-72 sm:h-80" /> : <div className="flex h-72 flex-col items-center justify-center gap-3 border-t border-zinc-200 text-xs text-zinc-500">No sites yet.<Link href="/sites" className={smallBtn}>Add a site</Link></div>}
+        {d && d.sites.length > 0 ? <WidgetBoundary title="Live map"><LiveMap sites={d.sites as never} guards={d.guards as never} selectedSiteId={siteId || undefined} selectedGuardId={guardId || undefined} height="h-72 sm:h-80" /></WidgetBoundary> : <div className="flex h-72 flex-col items-center justify-center gap-3 border-t border-zinc-200 text-xs text-zinc-500">No sites yet.<Link href="/sites" className={smallBtn}>Add a site</Link></div>}
         {d && d.sites.length > 0 && <div className="border-t border-zinc-200 p-4"><h3 className="text-xs font-semibold">Where guards last checked in</h3>
           <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">{d.guards.filter((g) => g.status === 'active').slice(0, 12).map((g) => { const located = g.lastLatitude != null && g.lastLongitude != null && g.lastCheckIn; return <li key={g.id}><button disabled={!located} onClick={() => { setSiteId(''); setGuardId(g.id) }} className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-lg border px-2.5 text-left text-xs disabled:opacity-60 ${guardId === g.id ? 'border-[#2A2B2E] bg-zinc-50' : 'border-zinc-200 hover:bg-zinc-50'}`}><Avatar name={g.name} src={g.photoUrl} size={28} /><span className="min-w-0 flex-1"><b className="block truncate font-semibold">{g.name}</b><span className="block truncate text-zinc-500">{located ? `${g.site ?? 'Unassigned'} · ${when(g.lastCheckIn)}` : 'No check-in yet'}</span></span></button></li> })}</ul></div>}
       </section>

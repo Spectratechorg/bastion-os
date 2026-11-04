@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -40,6 +40,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   const [unread, setUnread] = useState(0)
   const [role, setRole] = useState<string | null>(null)
   const [perms, setPerms] = useState<Record<string, boolean>>({})
+  const [syncIssue, setSyncIssue] = useState(false)
   const search = useRef<HTMLInputElement>(null)
   const user = session.data?.user
 
@@ -57,12 +58,22 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     if (session.isPending || !session.data?.user) return
     fetch('/api/me', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).then((me: { role: string; permissions: Record<string, boolean> } | null) => { if (me) { setRole(me.role); setPerms(me.permissions); if (me.role === 'guard') router.replace('/guard-app') } }).catch(() => undefined)
   }, [session.isPending, session.data, router])
+  const refreshAlerts = useCallback(async () => {
+    try {
+      const response = await fetch('/api/operations?section=alerts', { cache: 'no-store' })
+      if (!response.ok) throw new Error('alert refresh failed')
+      const rows = await response.json() as { acknowledged: boolean }[]
+      setUnread(rows.filter((row) => !row.acknowledged).length)
+      setSyncIssue(false)
+    } catch {
+      // The bell silently drifted before; surface it without interrupting the page.
+      setSyncIssue(true)
+    }
+  }, [])
   useEffect(() => {
     if (role === 'guard') return
-    let live = true
-    const load = () => fetch('/api/operations?section=alerts', { cache: 'no-store' }).then((r) => r.ok ? r.json() : []).then((rows: { acknowledged: boolean }[]) => { if (live) setUnread(rows.filter((row) => !row.acknowledged).length) }).catch(() => undefined)
-    void load(); const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => { live = false; window.clearInterval(timer) }
-  }, [pathname])
+    void refreshAlerts(); const timer = window.setInterval(() => { if (!document.hidden) void refreshAlerts() }, 60000); return () => window.clearInterval(timer)
+  }, [pathname, refreshAlerts, role])
 
   const navigation = allNavigation.filter((item) => !(item.label === 'Finance' && role !== null && perms.viewFinance === false))
   const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
@@ -111,6 +122,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
             <input ref={search} aria-label="Search workspace" placeholder="Search guards, or jump to a page..." className="w-full max-w-[350px] bg-transparent text-[13px] text-[#18181B] outline-none placeholder:text-[#9A9AA1]" />
             <kbd className="hidden whitespace-nowrap rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-[9px] text-zinc-500 sm:block">Ctrl K</kbd>
           </form>
+          {syncIssue && <button onClick={() => void refreshAlerts()} title="The alert count could not refresh. Click to retry." className="hidden h-8 items-center gap-1.5 rounded-full border border-[#F3E3BF] bg-[#FEF3E2] px-2.5 text-[10px] font-semibold text-[#8A6413] sm:inline-flex"><span aria-hidden className="size-1.5 rounded-full bg-[#B7791F]" />Sync issue</button>}
           <Link href="/alerts" aria-label={`${unread} unacknowledged alerts`} className="relative flex size-10 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"><Bell className="size-4" />{unread > 0 && <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-red-500" />}</Link>
           <Link href="/napoleon" className="flex h-10 items-center gap-2 whitespace-nowrap rounded-[10px] bg-[#2A2B2E] px-3 text-xs font-semibold text-white"><Sparkles className="size-3.5" /><span className="hidden sm:inline">Ask Napoleon</span></Link>
         </header>
