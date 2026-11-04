@@ -84,6 +84,39 @@ export function AdminDashboardPage() {
   const [broadcastMessage, setBroadcastMessage] = useState('')
   const [broadcasting, setBroadcasting] = useState(false)
   const [actionSuccess, setActionSuccess] = useState('')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiAnswer, setAiAnswer] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+
+  async function handleAskNapoleon(promptText: string) {
+    const q = promptText.trim()
+    if (!q || aiLoading) return
+    setAiLoading(true)
+    setAiError('')
+    setAiAnswer('')
+    try {
+      const res = await fetch('/api/napoleon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: q }] }),
+      })
+      let payload: { choices?: Array<{ message?: { content?: string } }>; error?: string } = {}
+      try {
+        payload = await res.json()
+      } catch {
+        payload = { error: `Server returned HTTP ${res.status}` }
+      }
+      if (!res.ok) throw new Error(payload.error ?? `Napoleon request failed (${res.status})`)
+      const answer = payload.choices?.[0]?.message?.content
+      if (!answer) throw new Error('Napoleon returned an empty response.')
+      setAiAnswer(answer)
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Could not query Napoleon AI.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   const loadMetrics = useCallback(async () => {
     try {
@@ -411,6 +444,84 @@ export function AdminDashboardPage() {
                 {broadcasting ? 'Dispatching…' : 'Broadcast to All Units'}
               </button>
             </form>
+          </div>
+
+          {/* Action 3: Tactical AI Assistant (Napoleon / DeepSeek) */}
+          <div className="rounded-[20px] border border-[#E4E4E7] bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-[#18181B]" />
+                <h3 className="text-sm font-semibold text-[#18181B]">Napoleon Tactical AI</h3>
+              </div>
+              <Link href="/napoleon" className="text-[11px] font-semibold text-[#18181B] hover:underline">
+                Full Screen →
+              </Link>
+            </div>
+            <p className="mt-1 text-xs text-[#71717A]">
+              Operational intelligence powered by DeepSeek AI and live database records.
+            </p>
+
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {[
+                "Which guards need attention?",
+                "Where are today's coverage gaps?",
+                "Which sites have highest risk?",
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => {
+                    setAiPrompt(suggestion)
+                    void handleAskNapoleon(suggestion)
+                  }}
+                  disabled={aiLoading}
+                  className="rounded-lg border border-[#E4E4E7] bg-[#F4F4F5] px-2 py-1 text-[10px] font-medium text-[#3F3F46] hover:bg-[#E4E4E7] disabled:opacity-50"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void handleAskNapoleon(aiPrompt)
+              }}
+              className="mt-3 flex gap-2"
+            >
+              <input
+                type="text"
+                placeholder="Ask Napoleon anything about personnel or sites…"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                className="w-full rounded-xl border border-[#E4E4E7] px-3 py-2 text-xs text-[#18181B] placeholder-[#A1A1AA] focus:border-[#18181B] focus:outline-hidden"
+              />
+              <button
+                type="submit"
+                disabled={aiLoading || !aiPrompt.trim()}
+                className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#2A2B2E] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#3F4045] disabled:opacity-50"
+              >
+                {aiLoading ? <RefreshCw className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+              </button>
+            </form>
+
+            {aiLoading && (
+              <p className="mt-2.5 text-[11px] text-[#71717A] animate-pulse">
+                Napoleon is analyzing operational records…
+              </p>
+            )}
+
+            {aiError && (
+              <div className="mt-2.5 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-800">
+                {aiError}
+              </div>
+            )}
+
+            {aiAnswer && (
+              <div className="mt-3 max-h-56 overflow-y-auto rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] p-3 text-xs leading-relaxed text-[#18181B] whitespace-pre-wrap">
+                {aiAnswer}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -4,27 +4,46 @@ import { eq, desc } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
 import { memberRole } from '@/lib/server'
 import { db } from '@/lib/db'
-import { sites, guards, alerts, incidents } from '@/lib/db/schema'
+import { sites, guards, alerts, incidents, members } from '@/lib/db/schema'
+
+function cleanEnv(val: string | undefined): string | undefined {
+  if (!val) return undefined
+  const cleaned = val.replace(/[\r\n\t]/g, '').trim().replace(/^["']|["']$/g, '')
+  return cleaned.length > 0 ? cleaned : undefined
+}
 
 async function getSessionInfo() {
   const session = await auth.api.getSession({ headers: await headers() })
-  const orgId = (session?.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId
-  if (!session?.user || !orgId) return null
+  if (!session?.user) return null
+  let orgId = (session.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId
+  if (!orgId) {
+    try {
+      const [membership] = await db
+        .select({ organizationId: members.organizationId })
+        .from(members)
+        .where(eq(members.userId, session.user.id))
+        .limit(1)
+      orgId = membership?.organizationId
+    } catch {
+      // Continue without orgId if DB query fails
+    }
+  }
+  if (!orgId) return null
   const role = await memberRole(orgId, session.user.id)
   if (!role || role === 'guard') return null
   return { user: session.user, orgId, role }
 }
 
 function getDeepSeekConfig() {
-  const apiKey = process.env.DEEPSEEK_API_KEY
-  const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat'
-  const baseUrl = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '')
+  const apiKey = cleanEnv(process.env.DEEPSEEK_API_KEY)
+  const model = cleanEnv(process.env.DEEPSEEK_MODEL) || 'deepseek-chat'
+  const baseUrl = (cleanEnv(process.env.DEEPSEEK_BASE_URL) || 'https://api.deepseek.com').replace(/\/+$/, '')
   return apiKey ? { apiKey, model, baseUrl } : null
 }
 
 function getLegacyNapoleonConfig() {
-  const baseUrl = process.env.NAPOLEON_API_URL?.replace(/\/+$/, '')
-  const apiKey = process.env.NAPOLEON_API_KEY
+  const baseUrl = cleanEnv(process.env.NAPOLEON_API_URL)?.replace(/\/+$/, '')
+  const apiKey = cleanEnv(process.env.NAPOLEON_API_KEY)
   return baseUrl && apiKey ? { baseUrl, apiKey } : null
 }
 
@@ -226,7 +245,10 @@ ${liveContext}
       if (!response.ok) {
         const errorText = await response.text()
         console.error('[Napoleon API - DeepSeek Error]', response.status, errorText)
-        return NextResponse.json({ error: `DeepSeek API returned status ${response.status}` }, { status: response.status })
+        return NextResponse.json(
+          { error: `Napoleon AI error (${response.status}): ${errorText}` },
+          { status: 502 }
+        )
       }
 
       const data = await response.json()

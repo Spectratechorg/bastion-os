@@ -28,7 +28,7 @@ const allNavigation = [
 ]
 const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', 'Finance']
 const navGroups: { label: string; items: string[] }[] = [
-  { label: 'Operations', items: ['Overview', 'Guards', 'Sites', 'Attendance', 'Patrols', 'Incidents', 'Alerts'] },
+  { label: 'Operations', items: ['Overview', 'Command Center', 'Guards', 'Sites', 'Attendance', 'Patrols', 'Incidents', 'Alerts'] },
   { label: 'Business', items: ['Clients', 'Finance', 'Reports'] },
   { label: 'Workspace', items: ['Napoleon AI', 'Settings'] },
 ]
@@ -87,7 +87,12 @@ const [syncIssue, setSyncIssue] = useState(false)
     if (item.label === 'Command Center' && role !== null && role !== 'owner' && role !== 'admin') return false
     return true
   })
-  const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Command Center' && pathname === '/admin') || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
+  const isActive = (label: string) =>
+    label.toLowerCase() === active.toLowerCase() ||
+    (label === 'Command Center' && (pathname === '/admin' || active === 'admin')) ||
+    (label === 'Napoleon AI' && (pathname === '/napoleon' || active === 'napoleon')) ||
+    (label === 'Finance' && pathname.startsWith('/finance')) ||
+    (label === 'Settings' && pathname.startsWith('/settings'))
   async function runSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const query = (search.current?.value ?? '').trim(); if (!query) return

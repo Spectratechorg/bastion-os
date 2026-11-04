@@ -30,7 +30,12 @@ export function NapoleonLivePage() {
   useEffect(() => {
     fetch('/api/napoleon', { cache: 'no-store' })
       .then(async (response) => {
-        const payload = await response.json()
+        let payload: { ok?: boolean; error?: string } = {}
+        try {
+          payload = await response.json()
+        } catch {
+          payload = { error: `Server returned HTTP ${response.status}` }
+        }
         setConnection(response.ok ? 'connected' : response.status === 503 ? 'not-configured' : 'unavailable')
         if (!response.ok && payload.error) setError(payload.error)
       })
@@ -56,8 +61,13 @@ export function NapoleonLivePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: modelForPrompt(prompt), messages: nextMessages }),
       })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error ?? 'Napoleon request failed.')
+      let payload: { choices?: Array<{ message?: { content?: string } }>; error?: string } = {}
+      try {
+        payload = await response.json()
+      } catch {
+        payload = { error: `Napoleon service returned HTTP ${response.status}` }
+      }
+      if (!response.ok) throw new Error(payload.error ?? `Napoleon request failed (${response.status})`)
 
       const answer = payload.choices?.[0]?.message?.content
       if (typeof answer !== 'string' || !answer.trim()) throw new Error('Napoleon returned no analysis.')
@@ -121,8 +131,8 @@ export function NapoleonLivePage() {
         </section>
         <aside className="rounded-2xl border border-[#E4E4E7] bg-white p-4">
           <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Before you ask</h2>
-          <p className="mt-2 text-xs leading-5 text-[#52525B]">Napoleon analyzes records ingested into its own database. Connecting the chat API does not automatically synchronize BastionOS records.</p>
-          <p className="mt-3 text-xs leading-5 text-[#52525B]">The service API key stays on the server and is never sent to the browser.</p>
+          <p className="mt-2 text-xs leading-5 text-[#52525B]">Napoleon analyzes live telemetry and operational records directly from Lakebase / Supabase database context.</p>
+          <p className="mt-3 text-xs leading-5 text-[#52525B]">The service API key stays securely on the server and is never sent to the browser.</p>
         </aside>
       </div>
     </>
