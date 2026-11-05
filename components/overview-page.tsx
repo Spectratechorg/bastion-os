@@ -8,6 +8,7 @@ import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, ErrorBanner, btn, smallBtn } from '@/components/ui-bits'
 import { WidgetBoundary } from '@/components/widget-boundary'
 import { api, naira, when } from '@/lib/client'
+import { FINANCE_ENABLED } from '@/lib/features'
 
 const LiveMap = dynamic(() => import('@/components/live-map').then((m) => m.LiveMap), { ssr: false, loading: () => <div className="h-72 animate-pulse bg-[#EFEFF1] sm:h-80" /> })
 
@@ -82,7 +83,7 @@ export function OverviewPage() {
         <dl className="mt-4 grid grid-cols-3 divide-x divide-[#E4E4E7] text-center">{([['Completed', d?.patrols.summary.completedToday], ['In progress', d?.patrols.summary.inProgressToday], ['Missed', d?.patrols.summary.missedToday]] as const).map(([k, v]) => <div key={k} className="px-3"><dd className="font-mono text-xl font-semibold">{v ?? '—'}</dd><dt className="text-[10px] text-[#6B6B72]">{k}</dt></div>)}</dl>
         <h3 className="mb-1 mt-4 text-xs font-semibold">Riskiest sites (30 days)</h3>
         <ul className="divide-y divide-[#EFEFF1]">{riskySites.map((x) => <li key={x.id} className="flex items-center gap-2 py-2 text-xs"><span className="min-w-0 flex-1"><b className="block truncate font-semibold">{x.name}</b><span className="block truncate text-[10px] text-[#6B6B72]">{x.riskReason}</span></span><Badge value={x.dangerLevel} /></li>)}{d && riskySites.length === 0 && <li className="py-2 text-xs text-[#6B6B72]">No sites yet.</li>}</ul>
-        {pending.length > 0 && <Link href="/finance/payroll" className="mt-3 block text-xs font-semibold underline">{pending.length} payroll pending · {naira(pending.reduce((t, r) => t + r.netPay, 0))}</Link>}</section>
+        {FINANCE_ENABLED && pending.length > 0 && <Link href="/finance/payroll" className="mt-3 block text-xs font-semibold underline">{pending.length} payroll pending · {naira(pending.reduce((t, r) => t + r.netPay, 0))}</Link>}</section>
     </div>
   </>
 }
