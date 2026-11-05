@@ -10,6 +10,7 @@ import {
 import { authClient } from '@/lib/auth-client'
 import { Logo, Wordmark } from '@/components/brand'
 import { Avatar } from '@/components/ui-bits'
+import { FINANCE_ENABLED } from '@/lib/features'
 
 const allNavigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
@@ -25,10 +26,10 @@ const allNavigation = [
   { label: 'Napoleon AI', href: '/napoleon', icon: Sparkles, tag: 'AI' },
   { label: 'Settings', href: '/settings/roles', icon: Settings },
 ]
-const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', 'Finance']
+const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', ...(FINANCE_ENABLED ? ['Finance'] : [])]
 const navGroups: { label: string; items: string[] }[] = [
   { label: 'Operations', items: ['Overview', 'Guards', 'Sites', 'Attendance', 'Patrols', 'Incidents', 'Alerts'] },
-  { label: 'Business', items: ['Clients', 'Finance', 'Reports'] },
+  { label: 'Business', items: ['Clients', ...(FINANCE_ENABLED ? ['Finance'] : []), 'Reports'] },
   { label: 'Workspace', items: ['Napoleon AI', 'Settings'] },
 ]
 
@@ -80,7 +81,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     void refreshAlerts(); const timer = window.setInterval(() => { if (!document.hidden) void refreshAlerts() }, 60000); return () => window.clearInterval(timer)
   }, [pathname, refreshAlerts, role])
 
-  const navigation = allNavigation.filter((item) => !(item.label === 'Finance' && role !== null && perms.viewFinance === false))
+  const navigation = allNavigation.filter((item) => (FINANCE_ENABLED || item.label !== 'Finance') && !(item.label === 'Finance' && role !== null && perms.viewFinance === false))
   const isActive = (label: string) => label.toLowerCase() === active.toLowerCase() || (label === 'Finance' && pathname.startsWith('/finance')) || (label === 'Settings' && pathname.startsWith('/settings'))
   function runSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()

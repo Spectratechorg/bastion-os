@@ -7,6 +7,7 @@ import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrima
 import { ASSIGNABLE_ROLES, EDITABLE_ROLES, PERMISSIONS, ROLE_LABELS } from '@/lib/permissions'
 import { api, when } from '@/lib/client'
 import { GuardAppSettings } from '@/components/guard-app-settings'
+import { FINANCE_ENABLED } from '@/lib/features'
 
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -35,7 +36,7 @@ export function ReportsPage() {
     ['guards', 'Guard roster', 'Guards registered in the period, with site, salary and NFC tag.', sum ? `${sum.guards.total} guards` : '…'],
     ['sites', 'Sites', 'Sites added in the period with geofence and client.', sum ? `${sum.sites.total} sites` : '…'],
     ['clients', 'Clients', 'Client accounts with contract value, SLA score and renewal date.', sum ? `${sum.summary?.clients ?? 0} clients` : '…'],
-    ['finances', 'Finance ledger', 'Invoices, expenses, budgets and inventory costs with client and site.', sum ? (sum.summary?.finance ? 'Revenue and costs' : 'Not available for your role') : '…'],
+    ...(FINANCE_ENABLED ? [['finances', 'Finance ledger', 'Invoices, expenses, budgets and inventory costs with client and site.', sum ? (sum.summary?.finance ? 'Revenue and costs' : 'Not available for your role') : '…'] as [string, string, string, string]] : []),
   ]
   return <>
     <PageHeader title="Reports" subtitle="Pick a time frame, see the headline numbers, then download any report as a CSV.">
