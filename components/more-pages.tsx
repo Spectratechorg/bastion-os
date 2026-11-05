@@ -91,7 +91,7 @@ export function SettingsPage() {
   return <>
     <PageHeader title="Settings" subtitle="Your organisation, the defaults new records start with, your team and what each role can do.">{tab === 'team' && team?.canManage && <button className={btnPrimary} onClick={() => setEditing('new')}><Plus className="size-4" />Add user</button>}</PageHeader>
     <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
-    <nav className="flex gap-1 overflow-x-auto lg:flex-col">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`min-h-[44px] whitespace-nowrap rounded-xl px-4 text-left text-[13px] ${tab === key ? 'bg-white font-semibold shadow-sm' : 'text-[#52525B] hover:bg-white/60'}`}>{label}</button>)}</nav>
+    <nav className="grid grid-cols-2 gap-1 sm:flex sm:overflow-x-auto lg:flex-col">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`min-h-[44px] min-w-0 rounded-[10px] px-3 py-2 text-left text-[12px] leading-tight sm:whitespace-nowrap lg:px-4 lg:text-[13px] ${tab === key ? 'bg-white font-semibold shadow-sm' : 'text-[#52525B] hover:bg-white/60'}`}>{label}</button>)}</nav>
     <div className="min-w-0">
     <ErrorBanner message={problem} retry={() => void refreshTeam()} />
     {tab === 'org' && <OrgSettings />}

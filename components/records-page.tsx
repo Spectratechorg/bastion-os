@@ -299,10 +299,18 @@ export function RecordsPage({ section }: { section: Section }) {
       {section === 'incidents' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'incident' })}><Plus className="size-4" />Report incident</button>}
     </PageHeader>
     <StatStrip stats={statPairs} />
-    {section === 'alerts' && <section className="mb-3 ws-card p-4"><h2 className="text-xs font-semibold">How alerts get their level</h2><ul className="mt-3 grid divide-y divide-[#EFEFF1] text-xs sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">{Object.values(ALERT_RULES).map((r) => <li key={r.label} className="px-3 py-2"><b className="block">{r.label} <span className="font-normal text-[#6B6B72]">· {r.severity}</span></b><span className="text-[#52525B]">{r.rule}</span></li>)}</ul><p className="mt-2 text-[11px] text-[#6B6B72]">Acknowledge an alert once someone has seen it and is dealing with it. Acknowledged alerts stay in the list as a record.</p></section>}
+    {section === 'alerts' && <details className="group mb-3 ws-card p-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">
+        How alerts get their level
+        <span className="text-[10px] font-normal text-[#6B6B72] group-open:hidden">Show</span>
+        <span className="hidden text-[10px] font-normal text-[#6B6B72] group-open:inline">Hide</span>
+      </summary>
+      <ul className="mt-3 grid divide-y divide-[#EFEFF1] text-xs sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-4">{Object.values(ALERT_RULES).map((r) => <li key={r.label} className="px-3 py-2"><b className="block">{r.label} <span className="font-normal text-[#6B6B72]">· {r.severity}</span></b><span className="text-[#52525B]">{r.rule}</span></li>)}</ul>
+      <p className="mt-2 text-[11px] text-[#6B6B72]">Acknowledge an alert once someone has seen it and is dealing with it. Acknowledged alerts stay in the list as a record.</p>
+    </details>}
     <div className="mb-3 flex flex-wrap items-center gap-2">
-      <label className="flex h-11 min-w-0 flex-1 basis-[200px] items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3 sm:h-10 sm:max-w-sm"><Search className="size-4 text-[#9A9AA1]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={page.search} className="w-full bg-transparent text-xs outline-none" /></label>
-      <select aria-label="Filter" value={filter} onChange={(e) => { setFilter(e.target.value); setCurrentPage(1) }} className="h-11 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-xs capitalize sm:h-10">{filterOptions[section].map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
+      <label className="flex h-10 min-w-0 flex-1 basis-full items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3 sm:h-10 sm:max-w-sm sm:basis-[200px]"><Search className="size-4 text-[#9A9AA1]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={page.search} className="w-full bg-transparent text-xs outline-none" /></label>
+      <select aria-label="Filter" className="h-10 min-w-[110px] flex-1 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-xs capitalize sm:flex-none" value={filter} onChange={(e) => { setFilter(e.target.value); setCurrentPage(1) }}>{filterOptions[section].map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
       <a href={`/api/export?section=${section}`} className={btn}><Download className="size-3.5" />Export CSV</a>
       <button onClick={() => { setLoading(true); void load() }} className={btn}><RefreshCw className="size-3.5" />Refresh</button>
     </div>

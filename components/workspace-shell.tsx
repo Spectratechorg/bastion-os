@@ -157,11 +157,11 @@ const [syncIssue, setSyncIssue] = useState(false)
         <main className="mx-auto max-w-[1560px] px-4 py-5 pb-28 sm:px-5 lg:px-7 lg:py-6 lg:pb-10">{children}</main>
       </div>
 
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-white/[0.08] bg-[#2A2B2E] pb-[env(safe-area-inset-bottom)] text-white lg:hidden">
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/[0.08] bg-[#2A2B2E] pb-[env(safe-area-inset-bottom)] text-white lg:hidden">
         {navigation.filter((item) => bottomNav.includes(item.label)).map(({ label, href, icon: Icon }) => (
-          <Link key={label} href={href} className={`flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] ${isActive(label) ? 'font-semibold text-white' : 'text-[#B4B4BB]'}`}><Icon className="size-[18px]" />{label}</Link>
+          <Link key={label} href={href} className={`flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[10px] ${isActive(label) ? 'font-semibold text-white' : 'text-[#B4B4BB]'}`}><Icon className="size-[18px]" />{label}</Link>
         ))}
-        <button onClick={() => setMore(true)} className="flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] text-[#B4B4BB]"><MoreHorizontal className="size-[18px]" />More</button>
+        <button onClick={() => setMore(true)} className="flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[10px] text-[#B4B4BB]"><MoreHorizontal className="size-[18px]" />More</button>
       </nav>
       {more && (
         <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onMouseDown={(event) => { if (event.target === event.currentTarget) setMore(false) }}>
