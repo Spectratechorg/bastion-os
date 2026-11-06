@@ -54,8 +54,8 @@ export function OverviewPage() {
     <ErrorBanner message={error} retry={() => void load()} />
     <StatStrip stats={[[d ? `${checkedToday.size}/${active.length}` : '—', 'Checked in today'], [d ? `${rate}%` : '—', 'Attendance'], [d ? String(d.patrols.summary.completedToday) : '—', 'Patrols done'], [d ? String(d.incidents.filter((i) => i.status !== 'resolved').length) : '—', 'Open incidents']]} />
 
-    <div className="grid items-start gap-4 xl:grid-cols-[1.55fr_1fr]">
-      <section className="min-w-0 overflow-hidden ws-card">
+    <div className="grid items-stretch gap-4 xl:grid-cols-[1.55fr_1fr]">
+      <section className="flex min-w-0 flex-col overflow-hidden ws-card">
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Live map</h2>
@@ -63,13 +63,13 @@ export function OverviewPage() {
           </div>
           {d && d.sites.length > 0 && <select aria-label="Zoom to site" value={siteId} onChange={(e) => setSiteId(e.target.value)} className="h-9 w-full rounded-[8px] border border-[#E4E4E7] bg-white px-2 text-xs sm:w-auto"><option value="">All sites</option>{d.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>}
         </div>
-        {d && d.sites.length > 0 ? <WidgetBoundary title="Live map"><LiveMap sites={d.sites as never} guards={d.guards as never} selectedSiteId={siteId || undefined} height="h-64 sm:h-80" /></WidgetBoundary> : <div className="flex h-64 flex-col items-center justify-center gap-3 border-t border-[#E4E4E7] text-xs text-[#6B6B72]">No sites yet.<Link href="/sites" className={smallBtn}>Add a site</Link></div>}
+        {d && d.sites.length > 0 ? <WidgetBoundary title="Live map"><div className="min-h-[16rem] flex-1 xl:min-h-0"><LiveMap sites={d.sites as never} guards={d.guards as never} selectedSiteId={siteId || undefined} height="h-64 sm:h-80 xl:h-full" /></div></WidgetBoundary> : <div className="flex h-64 flex-col items-center justify-center gap-3 border-t border-[#E4E4E7] text-xs text-[#6B6B72]">No sites yet.<Link href="/sites" className={smallBtn}>Add a site</Link></div>}
       </section>
 
       <div className="min-w-0 space-y-4">
         <section className="min-w-0 ws-card p-4">
           <div className="flex items-center justify-between"><h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Open alerts</h2><Link href="/alerts" className="text-xs font-semibold underline">All alerts</Link></div>
-          <ul className="mt-2 divide-y divide-[#EFEFF1]">{openAlerts.slice(0, 6).map((a) => <li key={a.id} className="flex items-start gap-3 py-3"><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{a.title}</p><p className="mt-0.5 truncate text-[11px] text-[#6B6B72]">{a.body}</p><span className="mt-1 inline-block"><Badge value={a.severity} /></span></div><button onClick={() => void acknowledge(a)} className={smallBtn}>Acknowledge</button></li>)}{openAlerts.length === 0 && <li className="py-8 text-center text-xs text-[#6B6B72]">{d ? 'No open alerts. Nothing needs attention.' : 'Loading…'}</li>}</ul>
+          <ul className="mt-2 divide-y divide-[#EFEFF1]">{openAlerts.slice(0, 5).map((a) => <li key={a.id} className="flex items-start gap-3 py-3"><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{a.title}</p><p className="mt-0.5 truncate text-[11px] text-[#6B6B72]">{a.body}</p><span className="mt-1 inline-block"><Badge value={a.severity} /></span></div><button onClick={() => void acknowledge(a)} className={smallBtn}>Acknowledge</button></li>)}{openAlerts.length === 0 && <li className="py-8 text-center text-xs text-[#6B6B72]">{d ? 'No open alerts. Nothing needs attention.' : 'Loading…'}</li>}</ul>
         </section>
 
         <section className="min-w-0 ws-card p-4">

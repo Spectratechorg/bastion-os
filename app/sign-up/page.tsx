@@ -8,7 +8,7 @@ import { Logo } from '@/components/brand'
 
 export default async function SignUpPage() {
   const session = await auth.api.getSession({ headers: await headers() })
-  if (session?.user) redirect('/guards')
+  if (session?.user) redirect('/overview')
   const open = await signUpOpen()
   if (!open) {
     return <main className="flex min-h-screen items-center justify-center bg-[#F5F5F6] p-6 text-[#18181B]">
