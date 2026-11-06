@@ -10,6 +10,7 @@ import {
 import { authClient } from '@/lib/auth-client'
 import { Logo, Wordmark } from '@/components/brand'
 import { Avatar } from '@/components/ui-bits'
+import { FINANCE_ENABLED } from '@/lib/features'
 
 const allNavigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
@@ -26,10 +27,10 @@ const allNavigation = [
   { label: 'Napoleon AI', href: '/napoleon', icon: Sparkles, tag: 'AI' },
   { label: 'Settings', href: '/settings/roles', icon: Settings },
 ]
-const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', 'Finance']
+const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', ...(FINANCE_ENABLED ? ['Finance'] : [])]
 const navGroups: { label: string; items: string[] }[] = [
   { label: 'Operations', items: ['Overview', 'Command Center', 'Guards', 'Sites', 'Attendance', 'Patrols', 'Incidents', 'Alerts'] },
-  { label: 'Business', items: ['Clients', 'Finance', 'Reports'] },
+  { label: 'Business', items: ['Clients', ...(FINANCE_ENABLED ? ['Finance'] : []), 'Reports'] },
   { label: 'Workspace', items: ['Napoleon AI', 'Settings'] },
 ]
 
@@ -46,8 +47,8 @@ export function WorkspaceShell({ active, children }: { active: string; children:
   const [unread, setUnread] = useState(0)
   const [role, setRole] = useState<string | null>(null)
   const [perms, setPerms] = useState<Record<string, boolean>>({})
-const [searchMessage, setSearchMessage] = useState('')
-const [syncIssue, setSyncIssue] = useState(false)
+  const [searchMessage, setSearchMessage] = useState('')
+  const [syncIssue, setSyncIssue] = useState(false)
   const search = useRef<HTMLInputElement>(null)
   const user = session.data?.user
 
@@ -83,7 +84,7 @@ const [syncIssue, setSyncIssue] = useState(false)
   }, [pathname, refreshAlerts, role])
 
   const navigation = allNavigation.filter((item) => {
-    if (item.label === 'Finance' && role !== null && perms.viewFinance === false) return false
+    if (item.label === 'Finance' && (!FINANCE_ENABLED || (role !== null && perms.viewFinance === false))) return false
     if (item.label === 'Command Center' && role !== null && role !== 'owner' && role !== 'admin') return false
     return true
   })
@@ -166,11 +167,11 @@ const [syncIssue, setSyncIssue] = useState(false)
         <main className="mx-auto max-w-[1560px] px-4 py-5 pb-28 sm:px-5 lg:px-7 lg:py-6 lg:pb-10">{children}</main>
       </div>
 
-      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-white/[0.08] bg-[#2A2B2E] pb-[env(safe-area-inset-bottom)] text-white lg:hidden">
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-white/[0.08] bg-[#2A2B2E] pb-[env(safe-area-inset-bottom)] text-white lg:hidden">
         {navigation.filter((item) => bottomNav.includes(item.label)).map(({ label, href, icon: Icon }) => (
-          <Link key={label} href={href} className={`flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] ${isActive(label) ? 'font-semibold text-white' : 'text-[#B4B4BB]'}`}><Icon className="size-[18px]" />{label}</Link>
+          <Link key={label} href={href} className={`flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[10px] ${isActive(label) ? 'font-semibold text-white' : 'text-[#B4B4BB]'}`}><Icon className="size-[18px]" />{label}</Link>
         ))}
-        <button onClick={() => setMore(true)} className="flex min-h-[56px] flex-col items-center justify-center gap-1 text-[10px] text-[#B4B4BB]"><MoreHorizontal className="size-[18px]" />More</button>
+        <button onClick={() => setMore(true)} className="flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-1 text-[10px] text-[#B4B4BB]"><MoreHorizontal className="size-[18px]" />More</button>
       </nav>
       {more && (
         <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onMouseDown={(event) => { if (event.target === event.currentTarget) setMore(false) }}>

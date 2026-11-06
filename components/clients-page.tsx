@@ -121,7 +121,7 @@ export function ClientsPage() {
       <button onClick={() => { setEditing(null); setForm(emptyForm); setFormOpen(true) }} className={btnPrimary}><Plus className="size-3.5" />Add client</button>
     </PageHeader>
 
-    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(monthlyTotal), 'Monthly contract value'], [String(unassignedSites.length), 'Sites without a client']]} />
+    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(monthlyTotal), 'Monthly value'], [String(unassignedSites.length), 'Unassigned sites']]} />
 
     {unassignedSites.length > 0 && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">{unassignedSites.length} site{unassignedSites.length === 1 ? ' is' : 's are'} not linked to a client yet: {unassignedSites.map((site) => site.name).join(', ')}. Use <b>Assign sites</b> on a client to link them.</p>}
     <ErrorBanner message={error} retry={() => void load()} />

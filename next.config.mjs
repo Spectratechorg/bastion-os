@@ -9,6 +9,8 @@ const security = [
 ]
 
 const nextConfig = {
+  // The dev badge overlaps the mobile bottom navigation while testing.
+  devIndicators: false,
   poweredByHeader: false,
   allowedDevOrigins: ['192.168.1.156', 'DESKTOP-N1SDAHP'],
   images: {
