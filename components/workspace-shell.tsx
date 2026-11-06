@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route, ShieldAlert,
+  Activity, Bell, BriefcaseBusiness, Clock3, FileText, Grid2X2, LogOut, MapPin, MoreHorizontal, Phone, Route,
   Search, Settings, Sparkles, Users, Wallet, X,
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
@@ -14,7 +14,6 @@ import { FINANCE_ENABLED } from '@/lib/features'
 
 const allNavigation = [
   { label: 'Overview', href: '/overview', icon: Grid2X2 },
-  { label: 'Command Center', href: '/admin', icon: ShieldAlert, tag: 'Admin' },
   { label: 'Guards', href: '/guards', icon: Users },
   { label: 'Sites', href: '/sites', icon: MapPin },
   { label: 'Attendance', href: '/attendance', icon: Clock3 },
@@ -29,7 +28,7 @@ const allNavigation = [
 ]
 const bottomNav = ['Overview', 'Guards', 'Patrols', 'Incidents', ...(FINANCE_ENABLED ? ['Finance'] : [])]
 const navGroups: { label: string; items: string[] }[] = [
-  { label: 'Operations', items: ['Overview', 'Command Center', 'Guards', 'Sites', 'Attendance', 'Patrols', 'Incidents', 'Alerts'] },
+  { label: 'Operations', items: ['Overview', 'Guards', 'Sites', 'Attendance', 'Patrols', 'Incidents', 'Alerts'] },
   { label: 'Business', items: ['Clients', ...(FINANCE_ENABLED ? ['Finance'] : []), 'Reports'] },
   { label: 'Workspace', items: ['Napoleon AI', 'Settings'] },
 ]
@@ -85,12 +84,10 @@ export function WorkspaceShell({ active, children }: { active: string; children:
 
   const navigation = allNavigation.filter((item) => {
     if (item.label === 'Finance' && (!FINANCE_ENABLED || (role !== null && perms.viewFinance === false))) return false
-    if (item.label === 'Command Center' && role !== null && role !== 'owner' && role !== 'admin') return false
     return true
   })
   const isActive = (label: string) =>
     label.toLowerCase() === active.toLowerCase() ||
-    (label === 'Command Center' && (pathname === '/admin' || active === 'admin')) ||
     (label === 'Napoleon AI' && (pathname === '/napoleon' || active === 'napoleon')) ||
     (label === 'Finance' && pathname.startsWith('/finance')) ||
     (label === 'Settings' && pathname.startsWith('/settings'))

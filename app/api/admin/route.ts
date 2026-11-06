@@ -11,7 +11,7 @@ import {
   patrols,
   sites,
 } from '@/lib/db/schema'
-import { actor, isAdminRole, fail } from '@/lib/server'
+import { actor, denyGuard, isAdminRole, fail } from '@/lib/server'
 import { newGuardAppCode } from '@/lib/guard-access'
 
 /**
@@ -27,7 +27,8 @@ import { newGuardAppCode } from '@/lib/guard-access'
 export async function GET() {
   const current = await actor()
   if (!current) return fail('Unauthorized', 401)
-  if (!isAdminRole(current.role)) return fail('Access restricted to administrators and owners.', 403)
+  const denied = denyGuard(current)
+  if (denied) return denied
 
   const orgId = current.organizationId
 
@@ -61,9 +62,11 @@ export async function GET() {
           id: sites.id,
           name: sites.name,
           address: sites.address,
+          latitude: sites.latitude,
+          longitude: sites.longitude,
+          geofenceRadius: sites.geofenceRadius,
           dangerLevel: sites.dangerLevel,
           status: sites.status,
-          geofenceRadius: sites.geofenceRadius,
         })
         .from(sites)
         .where(eq(sites.organizationId, orgId)),
@@ -72,9 +75,8 @@ export async function GET() {
         .select({
           id: guards.id,
           name: guards.name,
-          status: guards.status,
           site: guards.site,
-          lastCheckIn: guards.lastCheckIn,
+          status: guards.status,
           phone: guards.phone,
         })
         .from(guards)
@@ -86,9 +88,8 @@ export async function GET() {
           guardId: attendance.guardId,
           siteId: attendance.siteId,
           checkedInAt: attendance.checkedInAt,
+          checkedOutAt: attendance.checkedOutAt,
           withinGeofence: attendance.withinGeofence,
-          latitude: attendance.latitude,
-          longitude: attendance.longitude,
         })
         .from(attendance)
         .where(and(eq(attendance.organizationId, orgId), gte(attendance.checkedInAt, todayStart))),
@@ -106,17 +107,17 @@ export async function GET() {
         .from(alerts)
         .where(and(eq(alerts.organizationId, orgId), eq(alerts.acknowledged, false)))
         .orderBy(desc(alerts.createdAt))
-        .limit(10),
+        .limit(20),
 
       db
         .select({
           id: patrolCheckpoints.id,
           slot: patrolCheckpoints.slot,
           signedAt: patrolCheckpoints.signedAt,
+          patrolId: patrolCheckpoints.patrolId,
         })
         .from(patrolCheckpoints)
-        .innerJoin(patrols, eq(patrolCheckpoints.patrolId, patrols.id))
-        .where(and(eq(patrols.organizationId, orgId), gte(patrolCheckpoints.signedAt, todayStart))),
+        .where(gte(patrolCheckpoints.signedAt, todayStart)),
 
       db
         .select({
@@ -129,73 +130,87 @@ export async function GET() {
         .from(activityEvents)
         .where(eq(activityEvents.organizationId, orgId))
         .orderBy(desc(activityEvents.createdAt))
-        .limit(8),
+        .limit(10),
     ])
 
-    const org = orgRecord[0] ?? { name: 'Security Org', guardAppCode: 'GRD-NONE-0000' }
+    const org = orgRecord[0] ?? {
+      name: 'Bastion Security',
+      guardAppCode: 'GRD-DEMO-0000',
+      patrolStartHour: 8,
+      patrolEndHour: 18,
+    }
 
-    // 1. Compute Guard Fleet Readiness
+    // 1. Shift Readiness & Fleet Availability
     const activeGuards = allGuards.filter((g) => g.status === 'active')
     const suspendedGuards = allGuards.filter((g) => g.status === 'suspended')
-    const checkedInGuardIds = new Set(todayAttendance.map((a) => a.guardId))
+    const checkedInGuardIds = new Set(
+      todayAttendance.filter((a) => !a.checkedOutAt).map((a) => a.guardId)
+    )
     const onDutyGuards = activeGuards.filter((g) => checkedInGuardIds.has(g.id))
     const lateOrNoShow = activeGuards.filter((g) => !checkedInGuardIds.has(g.id))
 
-    // 2. Compute Site Coverage Matrix
-    const activeSites = allSites.filter((s) => s.status !== 'inactive')
-    const siteCoverageMatrix = activeSites.map((s) => {
-      const assignedCrew = allGuards.filter((g) => g.site === s.name && g.status === 'active')
-      const presentCrew = assignedCrew.filter((g) => checkedInGuardIds.has(g.id))
-      const coverageStatus =
-        presentCrew.length >= Math.max(1, assignedCrew.length)
+    // 2. Site Coverage Matrix
+    const activeSites = allSites.filter((s) => s.status === 'active')
+    const siteCoverageMatrix = activeSites.map((site) => {
+      const assigned = activeGuards.filter((g) => g.site === site.name)
+      const present = assigned.filter((g) => checkedInGuardIds.has(g.id))
+      const coverageStatus: 'optimal' | 'understaffed' | 'vacant' =
+        present.length >= Math.max(1, assigned.length)
           ? 'optimal'
-          : presentCrew.length > 0
+          : present.length > 0
           ? 'understaffed'
           : 'vacant'
 
       return {
-        ...s,
-        assignedCount: assignedCrew.length,
-        presentCount: presentCrew.length,
+        id: site.id,
+        name: site.name,
+        address: site.address,
+        dangerLevel: site.dangerLevel,
+        status: site.status,
+        geofenceRadius: site.geofenceRadius,
+        assignedCount: assigned.length,
+        presentCount: present.length,
         coverageStatus,
       }
     })
 
     const staffedSitesCount = siteCoverageMatrix.filter((s) => s.presentCount > 0).length
-    const shiftCoverageRatio =
-      activeSites.length > 0 ? Math.round((staffedSitesCount / activeSites.length) * 100) : 100
+    const shiftCoverageRatio = activeSites.length
+      ? Math.round((staffedSitesCount / activeSites.length) * 100)
+      : 100
 
-    // 3. Compute Patrol SLA
+    // 3. Patrol SLA Compliance
+    const expectedCheckpointsCount = Math.max(1, (org.patrolEndHour - org.patrolStartHour) * activeSites.length)
     const completedPatrolsCount = todayCheckpoints.length
-    // Assume expected 8-10 checkpoints per staffed site
-    const expectedCheckpointsCount = Math.max(1, staffedSitesCount * 8)
     const patrolSla = Math.min(100, Math.round((completedPatrolsCount / expectedCheckpointsCount) * 100))
 
-    // 4. Critical Exceptions
-    // Include geofence breaches detected in attendance today
+    // 4. Critical Exceptions & Breaches
     const geofenceBreaches = todayAttendance
       .filter((a) => a.withinGeofence === false)
       .map((a) => {
         const guard = allGuards.find((g) => g.id === a.guardId)
+        const site = allSites.find((s) => s.id === a.siteId)
         return {
           id: `breach-${a.id}`,
-          type: 'geofence_breach',
-          title: `Geofence Breach: ${guard?.name ?? 'Guard'}`,
-          body: `Scan occurred outside authorized perimeter (Lat: ${a.latitude.toFixed(4)}, Lng: ${a.longitude.toFixed(4)})`,
+          type: 'geofence',
+          title: `Geofence Breach: ${guard?.name ?? 'Unknown Guard'}`,
+          body: `${site?.name ?? 'Assigned site'} · Left authorized boundary`,
           severity: 'high',
-          time: a.checkedInAt,
+          time: (a.checkedInAt ?? now).toISOString(),
         }
       })
 
+    const alertExceptions = openAlerts.map((alt) => ({
+      id: alt.id,
+      type: alt.type,
+      title: alt.title,
+      body: alt.body,
+      severity: alt.severity,
+      time: alt.createdAt.toISOString(),
+    }))
+
     const combinedExceptions = [
-      ...openAlerts.map((al) => ({
-        id: al.id,
-        type: al.type,
-        title: al.title,
-        body: al.body,
-        severity: al.severity,
-        time: al.createdAt,
-      })),
+      ...alertExceptions,
       ...geofenceBreaches,
     ].slice(0, 8)
 
@@ -244,7 +259,8 @@ export async function GET() {
 export async function POST(request: Request) {
   const current = await actor()
   if (!current) return fail('Unauthorized', 401)
-  if (!isAdminRole(current.role)) return fail('Access restricted to administrators.', 403)
+  const denied = denyGuard(current)
+  if (denied) return denied
 
   let body: { action: string; [key: string]: unknown }
   try {
@@ -255,8 +271,9 @@ export async function POST(request: Request) {
 
   const { action } = body
 
-  // 1. Rotate Guard App Access Code
+  // 1. Rotate Guard App Access Code (Admins/Owners)
   if (action === 'rotate-code') {
+    if (!isAdminRole(current.role)) return fail('Access restricted to administrators and owners.', 403)
     const freshCode = newGuardAppCode()
     await db
       .update(organizations)
@@ -276,8 +293,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, code: freshCode })
   }
 
-  // 2. Broadcast High-Priority Dispatch Alert
+  // 2. Broadcast High-Priority Dispatch Alert (Admins/Owners)
   if (action === 'broadcast-alert') {
+    if (!isAdminRole(current.role)) return fail('Access restricted to administrators and owners.', 403)
     const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : 'Tactical Alert'
     const message = typeof body.message === 'string' && body.message.trim() ? body.message.trim() : 'Operational broadcast'
 
