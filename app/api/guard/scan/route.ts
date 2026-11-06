@@ -22,15 +22,20 @@ const scanSchema = z.object({
   code: z.string().trim().max(64).optional(),
 })
 
-function isWithinSite(latitude: number, longitude: number, site: typeof sites.$inferSelect) {
+function calculateDistanceMeters(latitude: number, longitude: number, siteLatitude: number, siteLongitude: number): number {
   const radians = (degrees: number) => (degrees * Math.PI) / 180
   const earthRadiusMeters = 6_371_000
-  const deltaLatitude = radians(site.latitude - latitude)
-  const deltaLongitude = radians(site.longitude - longitude)
+  const deltaLatitude = radians(siteLatitude - latitude)
+  const deltaLongitude = radians(siteLongitude - longitude)
   const distance = 2 * earthRadiusMeters * Math.asin(Math.sqrt(
     Math.sin(deltaLatitude / 2) ** 2
-      + Math.cos(radians(latitude)) * Math.cos(radians(site.latitude)) * Math.sin(deltaLongitude / 2) ** 2,
+      + Math.cos(radians(latitude)) * Math.cos(radians(siteLatitude)) * Math.sin(deltaLongitude / 2) ** 2,
   ))
+  return Math.round(distance)
+}
+
+function isWithinSite(latitude: number, longitude: number, site: typeof sites.$inferSelect) {
+  const distance = calculateDistanceMeters(latitude, longitude, site.latitude, site.longitude)
   return distance <= site.geofenceRadius
 }
 
@@ -88,25 +93,33 @@ export async function POST(request: Request) {
 
   const { type, latitude, longitude } = parsed.data
   const token = parsed.data.token.replace(/^nfc:/i, '').trim()
-  // A guard signed in with their own login can only act as their linked guard record.
-  const linkedGuardId = session?.organizationId && currentUser.userId === session.userId && (await memberRole(currentUser.organizationId, currentUser.userId)) === 'guard'
-    ? (await db.select({ id: guards.id }).from(guards).where(and(eq(guards.organizationId, currentUser.organizationId), eq(guards.loginUserId, currentUser.userId))).limit(1))[0]?.id ?? 'none'
-    : null
-  if (!token && !linkedGuardId) return NextResponse.json({ error: 'Tap your NFC tag or type its code to continue.' }, { status: 400 })
+
+  // 1. Resolve Guard Record (via Login or NFC Token)
+  let effectiveGuardId: string | null = null
+  if (session?.organizationId && currentUser.userId === session.userId) {
+    const [linked] = await db
+      .select({ id: guards.id })
+      .from(guards)
+      .where(and(eq(guards.organizationId, currentUser.organizationId), eq(guards.loginUserId, currentUser.userId)))
+      .limit(1)
+    if (linked) effectiveGuardId = linked.id
+  }
+
+  if (!token && !effectiveGuardId) {
+    return NextResponse.json({ error: 'Please sign in with your guard account or tap your NFC tag.' }, { status: 400 })
+  }
 
   const [guard] = await db
     .select()
     .from(guards)
     .where(and(
       eq(guards.organizationId, currentUser.organizationId),
-      linkedGuardId && !token ? eq(guards.id, linkedGuardId) : eq(guards.nfcToken, token),
+      effectiveGuardId && !token ? eq(guards.id, effectiveGuardId) : eq(guards.nfcToken, token),
     ))
     .limit(1)
 
   if (!guard) {
-    if (!token) return NextResponse.json({ error: 'Tap your NFC tag or type its code to continue.' }, { status: 400 })
-    // The code may belong to a guard in another organization in the same database. Say so, rather than
-    // reporting a plain mismatch, because the fix is completely different (sign in as the right account).
+    if (!token) return NextResponse.json({ error: 'Your account is not linked to an active guard profile. Ask your supervisor to link it in Settings -> Team.' }, { status: 400 })
     const [elsewhere] = await db.select({ id: guards.id }).from(guards).where(eq(guards.nfcToken, token)).limit(1)
     if (elsewhere) {
       return NextResponse.json({
@@ -114,18 +127,33 @@ export async function POST(request: Request) {
       }, { status: 409 })
     }
     return NextResponse.json({
-      error: `No guard anywhere in this database has the tag code this tag holds (${token}). The guard was probably deleted after the tag was written, or the tag was replaced. Open Guards, compare the NFC tag column, and write the current code to the tag again.`,
+      error: `No guard anywhere in this database has the tag code this tag holds (${token}). Open Guards and verify the NFC tag code.`,
     }, { status: 404 })
   }
-  if (linkedGuardId && guard.id !== linkedGuardId) return NextResponse.json({ error: 'This tag belongs to another guard. Use your own tag.' }, { status: 403 })
-  if (guard.status === 'suspended') return NextResponse.json({ error: `${guard.name} is suspended and cannot check in or patrol.` }, { status: 403 })
 
+  if (effectiveGuardId && guard.id !== effectiveGuardId) {
+    return NextResponse.json({ error: 'This tag belongs to another guard. Use your own tag.' }, { status: 403 })
+  }
+  if (guard.status === 'suspended') {
+    return NextResponse.json({ error: `${guard.name} is suspended and cannot check in or patrol.` }, { status: 403 })
+  }
+
+  // 2. Emergency SOS
   if (type === 'sos') {
-    await raiseAlert({ userId: currentUser.userId, organizationId: currentUser.organizationId, type: 'sos', title: 'SOS activated', body: `${guard.name} at ${guard.site ?? 'an unassigned site'} needs help (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`, severity: 'critical', key: `sos:${guard.id}:${Math.floor(Date.now() / 60000)}` })
+    await raiseAlert({
+      userId: currentUser.userId,
+      organizationId: currentUser.organizationId,
+      type: 'sos',
+      title: 'SOS activated',
+      body: `${guard.name} at ${guard.site ?? 'an unassigned site'} needs help (${latitude.toFixed(5)}, ${longitude.toFixed(5)})`,
+      severity: 'critical',
+      key: `sos:${guard.id}:${Math.floor(Date.now() / 60000)}`,
+    })
     await db.update(guards).set({ lastLatitude: latitude, lastLongitude: longitude }).where(eq(guards.id, guard.id))
     return NextResponse.json({ ok: true, action: 'sos', guardId: guard.id, guardName: guard.name, message: 'SOS sent. Your supervisor has been alerted.' })
   }
 
+  // 3. Assigned Site Verification
   const site = guard.site
     ? (await db.select().from(sites).where(and(
       eq(sites.organizationId, currentUser.organizationId),
@@ -133,13 +161,17 @@ export async function POST(request: Request) {
       eq(sites.status, 'active'),
     )).limit(1))[0]
     : undefined
+
   if (!site) {
-    return NextResponse.json({ error: 'This guard has no active assigned site. Assign the guard to an active site before scanning.' }, { status: 409 })
+    return NextResponse.json({ error: 'This guard has no active assigned site. Assign the guard to an active site in BastionOS before checking in.' }, { status: 409 })
   }
-  const withinBounds = isWithinSite(latitude, longitude, site)
+
+  const distance = calculateDistanceMeters(latitude, longitude, site.latitude, site.longitude)
+  const withinBounds = distance <= site.geofenceRadius
   const now = new Date()
   const siteId = site.id
 
+  // 4. Attendance Flow (Check In & Check Out)
   if (type === 'attendance') {
     const [activeAttendance] = await db
       .select()
@@ -152,6 +184,7 @@ export async function POST(request: Request) {
       .orderBy(desc(attendance.checkedInAt))
       .limit(1)
 
+    // CHECKOUT FLOW
     if (activeAttendance) {
       await db.update(attendance)
         .set({ checkedOutAt: now, ...(withinBounds ? {} : { withinGeofence: false }) })
@@ -168,10 +201,25 @@ export async function POST(request: Request) {
         guardName: guard.name,
         siteName: site?.name ?? null,
         withinBounds,
-        message: `Checked out ${guard.name}${site ? ` at ${site.name}` : ''}.`,
+        message: `Checked out ${guard.name}${site ? ` at ${site.name}` : ''}. Duty complete.`,
       })
     }
 
+    // STRICT CHECK-IN FLOW:
+    // If guard is NOT at their pre-assigned site, check-in is STRICTLY REJECTED!
+    if (!withinBounds) {
+      const excessDistance = Math.max(0, distance - site.geofenceRadius)
+      return NextResponse.json({
+        error: `Check-in rejected: You are ${distance}m away from ${site.name} (${excessDistance}m outside the ${site.geofenceRadius}m perimeter). You must be physically on-site to check in.`,
+        distance,
+        excessDistance,
+        geofenceRadius: site.geofenceRadius,
+        siteName: site.name,
+        withinBounds: false,
+      }, { status: 403 })
+    }
+
+    // Inside geofence: Check-in approved!
     const [record] = await db.insert(attendance).values({
       userId: currentUser.userId,
       organizationId: currentUser.organizationId,
@@ -180,17 +228,14 @@ export async function POST(request: Request) {
       checkedInAt: now,
       latitude,
       longitude,
-      method: 'nfc',
-      withinGeofence: withinBounds,
+      method: token ? 'nfc' : 'gps',
+      withinGeofence: true,
       createdAt: now,
     }).returning()
 
     await db.update(guards)
-      .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude })
+      .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude, status: 'active' })
       .where(eq(guards.id, guard.id))
-    if (!withinBounds) await raiseAlert({ userId: currentUser.userId, organizationId: currentUser.organizationId, type: 'geofence', title: 'Outside geofence', body: `${guard.name} checked in outside ${site.name}`, severity: 'high', key: `geofence:${record.id}` })
-
-    if (!withinBounds) await raiseBreachAlert(currentUser, guard, site, siteId)
 
     return NextResponse.json({
       ok: true,
@@ -199,13 +244,15 @@ export async function POST(request: Request) {
       checkedIn: true,
       guardId: guard.id,
       guardName: guard.name,
-      siteName: site?.name ?? null,
-      withinBounds,
-      message: `Checked in ${guard.name}${site ? ` at ${site.name}` : ''}.`,
+      siteName: site.name,
+      withinBounds: true,
+      distance,
+      message: `Verified on-site: Checked in ${guard.name} at ${site.name}.`,
       record,
     })
   }
 
+  // 5. Patrol Checkpoints Flow
   const lagos = lagosParts(now)
   const [organization] = await db.select({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour })
     .from(organizations).where(eq(organizations.id, currentUser.organizationId)).limit(1)
@@ -229,7 +276,7 @@ export async function POST(request: Request) {
       patrolDate: lagos.date,
       latitude,
       longitude,
-      method: 'nfc',
+      method: token ? 'nfc' : 'gps',
       withinBounds,
       createdAt: now,
     }).onConflictDoNothing().returning()

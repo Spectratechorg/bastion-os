@@ -46,7 +46,12 @@ export function AuthForm({ mode, databaseConfigured, signUpAllowed = true }: { m
           return
         }
       }
-      router.push('/overview')
+      const me = await fetch('/api/me', { cache: 'no-store' }).then((r) => r.ok ? r.json() : null).catch(() => null)
+      if (me?.role === 'guard') {
+        router.push('/guard-app')
+      } else {
+        router.push('/overview')
+      }
       router.refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to connect to BastionOS. Check the server and try again.')
