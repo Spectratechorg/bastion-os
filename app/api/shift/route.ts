@@ -20,7 +20,7 @@ export async function GET() {
 
 const shiftSchema = z.object({
   startHour: z.coerce.number().int().min(0).max(23),
-  endHour: z.coerce.number().int().min(1).max(24),
+  endHour: z.coerce.number().int().min(0).max(24),
 })
 
 export async function POST(request: Request) {
@@ -30,8 +30,8 @@ export async function POST(request: Request) {
   if (!(await isModerator(current))) return fail('Only an owner, administrator or moderator can change the patrol shift.', 403)
 
   const parsed = shiftSchema.safeParse(await request.json().catch(() => null))
-  if (!parsed.success) return fail('Pick a start hour between 0 and 23 and an end hour between 1 and 24.')
-  if (parsed.data.endHour <= parsed.data.startHour) return fail('The shift must end after it starts.')
+  if (!parsed.success) return fail('Pick a start hour between 0 and 23 and an end hour between 0 and 24.')
+  if (parsed.data.endHour === parsed.data.startHour) return fail('The shift start and end hours must be different.')
 
   const [updated] = await db.update(organizations).set({ patrolStartHour: parsed.data.startHour, patrolEndHour: parsed.data.endHour })
     .where(eq(organizations.id, current.organizationId))

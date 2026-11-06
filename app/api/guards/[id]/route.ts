@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { pool } from '@/lib/db'
-import { actor, denyGuard, fail, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
+import { actor, denyGuard, fail, isShiftClosed, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
 import { monthBounds } from '@/lib/payroll'
 
 export const dynamic = 'force-dynamic'
@@ -33,7 +33,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const days: { date: string; present: boolean; outside: boolean; signed: number; windowClosed: boolean; counted: boolean }[] = []
   for (let d = Number(start.slice(8)); start <= upTo && d <= Number(upTo.slice(8)); d++) {
     const date = `${period}-${String(d).padStart(2, '0')}`
-    days.push({ date, present: present.has(date), outside: present.get(date) === false, signed: signed.get(date) ?? 0, windowClosed: date < now.date || (date === now.date && now.hour >= shift.endHour), counted: true })
+    days.push({ date, present: present.has(date), outside: present.get(date) === false, signed: signed.get(date) ?? 0, windowClosed: isShiftClosed(date, now, shift), counted: true })
   }
   const expected = days.length; const daysPresent = days.filter((x) => x.present).length
   const due = days.filter((x) => x.windowClosed); const completed = due.filter((x) => x.signed >= slotCount).length

@@ -513,9 +513,10 @@ export function GuardMobilePage() {
   const patrolDone = slots.length > 0 && signedCount >= slots.length
   const hour = today?.hour ?? 0
   const shift = today?.shift
-  const windowOpen = shift ? hour >= shift.startHour && hour < shift.endHour : false
-  const nextSlot = slots.find((slot) => !signed[slot])
+  const windowOpen = shift ? (shift.endHour > shift.startHour ? hour >= shift.startHour && hour < shift.endHour : hour >= shift.startHour || hour < shift.endHour) : false
+  const nextSlot = slots.find((slot) => !signed[slot])
   const currentSlot = shift && windowOpen ? hourLabel(hour) : null
+  const isCurrentSlotSigned = currentSlot ? Boolean(signed[currentSlot]) : false
 
   const assignedSite = me?.assignedSite
 
@@ -775,26 +776,33 @@ export function GuardMobilePage() {
                 )}
                 {step(
                   patrolDone,
-                  `Patrol checkpoints: ${signedCount} of ${slots.length || '–'} signed`,
+                  `Hourly Patrol Check-in: ${signedCount} of ${slots.length || '–'} signed`,
                   shift
-                    ? `Sign hourly checkpoints from ${hourLabel(shift.startHour)} to ${hourLabel(shift.endHour)}.`
+                    ? `Hourly stay-awake patrol checks from ${hourLabel(shift.startHour)} to ${hourLabel(shift.endHour)}. You must be at your post every hour.`
                     : 'Checkpoints open during shift hours.',
                 )}
               </ol>
 
+              <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <Radio className="mt-0.5 size-4 shrink-0 text-amber-700" />
+                <div>
+                  <span className="font-semibold">Stay-Awake Vigilance Verification:</span> Guards must check in every hour during shift while physically at post. Off-post signing is strictly blocked.
+                </div>
+              </div>
+
               {slots.length > 0 && (
-                <div className="mt-3 grid grid-cols-4 gap-2">
+                <div className="mt-3 grid grid-cols-3 sm:grid-cols-5 gap-2">
                   {slots.map((slot) => (
                     <span
                       key={slot}
                       className={`flex min-h-[46px] flex-col items-center justify-center rounded-xl border text-xs ${
                         signed[slot]
                           ? 'border-emerald-600 bg-emerald-600 text-white font-semibold'
-                          : 'border-[#E4E4E7] text-[#6B6B72] bg-zinc-50'
+                          : slot === currentSlot ? 'border-amber-400 bg-amber-50 text-amber-950 font-bold ring-2 ring-amber-400/60' : 'border-[#E4E4E7] text-[#6B6B72] bg-zinc-50'
                       }`}
                     >
-                      <b className="font-mono">{slot}</b>
-                      <span className="text-[10px]">{signed[slot] ? clock(signed[slot]) : 'Open'}</span>
+                      <b className="font-mono text-[11px]">{slot}</b>
+                      <span className="text-[10px]">{signed[slot] ? clock(signed[slot]) : slot === currentSlot ? 'Due Now' : 'Upcoming'}</span>
                     </span>
                   ))}
                 </div>
@@ -811,10 +819,22 @@ export function GuardMobilePage() {
                     onClick={() => void submit('attendance', '')}
                   >
                     <Navigation className="size-5" />
-                    Verify Location &amp; Check In
+                    Verify Location &amp; Check In for Shift
                   </button>
                   <p className="mt-1.5 text-center text-xs text-[#6B6B72]">
                     Uses your phone&apos;s GPS to verify you are physically at your site. Independent of NFC tags.
+                  </p>
+                  {windowOpen && currentSlot && (
+                    <button
+                      className={`${big} mt-2.5 border-2 border-emerald-700 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 shadow-sm`}
+                      disabled={busy || scanning !== null}
+                      onClick={() => void submit('patrol', '')}
+                    >
+                      <CheckCircle2 className="size-5 text-emerald-700" />
+                      Verify Location &amp; Sign {currentSlot} Hourly Patrol
+                    </button>
+                  )}
+                  <p className="hidden">
                   </p>
                 </div>
               )}
@@ -837,19 +857,38 @@ export function GuardMobilePage() {
 
               {checkedIn && (
                 <>
-                  {/* PATROL ACTION */}
-                  {!patrolDone && windowOpen && (
-                    <button
-                      className={`${big} bg-[#1E1F22] text-white hover:bg-zinc-800`}
-                      disabled={busy || scanning !== null || (currentSlot ? Boolean(signed[currentSlot]) : false)}
-                      onClick={() => void submit('patrol', '')}
-                    >
-                      <Check className="size-5" />
-                      {currentSlot && signed[currentSlot]
-                        ? `${currentSlot} Checkpoint Signed`
-                        : `Sign Checkpoint ${currentSlot ?? nextSlot ?? ''}`.trim()}
-                    </button>
+                  {/* HOURLY PATROL (STAY-AWAKE) PRIMARY ACTION */}
+                  {windowOpen && currentSlot && (
+                    <div className="grid gap-1.5">
+                      {!isCurrentSlotSigned ? (
+                        <button
+                          className={`${big} bg-[#16794A] text-white hover:bg-emerald-700 shadow-md`}
+                          disabled={busy || scanning !== null}
+                          onClick={() => void submit('patrol', '')}
+                        >
+                          <CheckCircle2 className="size-5" />
+                          Verify Location &amp; Sign {currentSlot} Hourly Patrol
+                        </button>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3.5 text-center text-sm font-semibold text-emerald-900 shadow-sm">
+                          <CheckCircle2 className="size-5 text-emerald-700 shrink-0" />
+                          <span>{currentSlot} Hourly Patrol Signed (Awake Verified)</span>
+                        </div>
+                      )}
+                      <p className="text-center text-xs text-[#6B6B72]">
+                        {!isCurrentSlotSigned
+                          ? `Hourly vigilance check for ${currentSlot}. Must be physically at ${assignedSite?.name ?? 'your post'} to sign.`
+                          : `Next stay-awake check will open at ${String((hour + 1) % 24).padStart(2, '0')}:00.`}
+                      </p>
+                    </div>
                   )}
+
+                  {!windowOpen && shift && (
+                    <p className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-center text-xs text-zinc-600">
+                      Hourly patrol check-ins open during active shift hours ({hourLabel(shift.startHour)} – {hourLabel(shift.endHour)}).
+                    </p>
+                  )}
+
 
                   {/* CHECK OUT ACTION */}
                   <button

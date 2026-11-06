@@ -8,7 +8,7 @@ import { attendance, guards, organizations, patrolCheckpoints, patrols, sites } 
 import { raiseAlert } from '@/lib/alerts'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
 import { todayStatus } from '@/lib/guard-today'
-import { lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
+import { currentShiftDate, lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
       .from(guards)
       .where(and(eq(guards.organizationId, currentUser.organizationId), eq(guards.loginUserId, currentUser.userId)))
       .limit(1)
-    if (linked) effectiveGuardId = linked.id
+  if (linked) effectiveGuardId = linked.id
   }
 
   if (!token && !effectiveGuardId) {
@@ -252,19 +252,75 @@ export async function POST(request: Request) {
     })
   }
 
-  // 5. Patrol Checkpoints Flow
+  // 5. Patrol Checkpoints Flow (Hourly Stay-Awake Check)
+  // STRICT BLOCKING: Guard MUST be physically at their post / assigned site to complete hourly sign
+  if (!withinBounds) {
+    const excessDistance = Math.max(0, distance - site.geofenceRadius)
+    await raiseBreachAlert(currentUser, guard, site, siteId)
+    return NextResponse.json({
+      error: `Hourly patrol rejected: You are ${distance}m away from ${site.name} (${excessDistance}m outside the ${site.geofenceRadius}m perimeter). You must be physically at your patrol location to complete your hourly stay-awake check-in.`,
+      distance,
+      excessDistance,
+      geofenceRadius: site.geofenceRadius,
+      siteName: site.name,
+      withinBounds: false,
+    }, { status: 403 })
+  }
+
   const lagos = lagosParts(now)
   const [organization] = await db.select({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour })
     .from(organizations).where(eq(organizations.id, currentUser.organizationId)).limit(1)
   const shift = normalizeShift(organization?.startHour, organization?.endHour)
   const slots = patrolSlots(shift)
   const slot = slotForHour(lagos.hour, shift)
-  if (!slot) return NextResponse.json({ error: `Patrol checkpoints can only be signed between ${String(shift.startHour).padStart(2, '0')}:00 and ${String(shift.endHour - 1).padStart(2, '0')}:59 Lagos time. Ask your supervisor to change the patrol shift in Settings.` }, { status: 409 })
+  if (!slot) {
+    const shiftStart = `${String(shift.startHour).padStart(2, '0')}:00`
+    const shiftEnd = `${String(shift.endHour).padStart(2, '0')}:00`
+    return NextResponse.json({
+      error: `Hourly patrol checkpoints can only be signed during active shift hours (${shiftStart} to ${shiftEnd} Lagos time). Current hour is ${String(lagos.hour).padStart(2, '0')}:00.`,
+    }, { status: 409 })
+  }
+
+  // Active shift date (overnight shifts crossing midnight attach to the shift date)
+  const shiftDate = currentShiftDate(lagos, shift)
+
+  // Ensure guard's active shift attendance is confirmed on-duty
+  const [activeAttendance] = await db
+    .select({ id: attendance.id })
+    .from(attendance)
+    .where(and(
+      eq(attendance.organizationId, currentUser.organizationId),
+      eq(attendance.guardId, guard.id),
+      isNull(attendance.checkedOutAt),
+    ))
+    .limit(1)
+
+  if (!activeAttendance) {
+    await db.insert(attendance).values({
+      userId: currentUser.userId,
+      organizationId: currentUser.organizationId,
+      guardId: guard.id,
+      siteId,
+      checkedInAt: now,
+      latitude,
+      longitude,
+      method: token ? 'nfc' : 'gps',
+      withinGeofence: true,
+      createdAt: now,
+    })
+    await db.update(guards)
+      .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude, status: 'active' })
+      .where(eq(guards.id, guard.id))
+  } else {
+    await db.update(guards)
+      .set({ lastLatitude: latitude, lastLongitude: longitude })
+      .where(eq(guards.id, guard.id))
+  }
 
   let [patrol] = await db.select().from(patrols).where(and(
     eq(patrols.organizationId, currentUser.organizationId),
     eq(patrols.guardId, guard.id),
-    eq(patrols.patrolDate, lagos.date),
+    eq(patrols.patrolDate, shiftDate),
   )).limit(1)
   if (!patrol) {
     ;[patrol] = await db.insert(patrols).values({
@@ -273,22 +329,22 @@ export async function POST(request: Request) {
       guardId: guard.id,
       siteId,
       loggedAt: now,
-      patrolDate: lagos.date,
+      patrolDate: shiftDate,
       latitude,
       longitude,
       method: token ? 'nfc' : 'gps',
-      withinBounds,
+      withinBounds: true,
       createdAt: now,
     }).onConflictDoNothing().returning()
     if (!patrol) {
       ;[patrol] = await db.select().from(patrols).where(and(
         eq(patrols.organizationId, currentUser.organizationId),
         eq(patrols.guardId, guard.id),
-        eq(patrols.patrolDate, lagos.date),
+        eq(patrols.patrolDate, shiftDate),
       )).limit(1)
     }
   }
-  if (!patrol) return NextResponse.json({ error: 'Could not open today’s patrol record.' }, { status: 500 })
+  if (!patrol) return NextResponse.json({ error: 'Could not open patrol record for this shift.' }, { status: 500 })
 
   const [checkpoint] = await db.insert(patrolCheckpoints).values({
     userId: currentUser.userId,
@@ -297,7 +353,11 @@ export async function POST(request: Request) {
     slot,
     signedAt: now,
   }).onConflictDoNothing().returning()
-  if (!checkpoint) return NextResponse.json({ error: `The ${slot} checkpoint has already been signed today.` }, { status: 409 })
+  if (!checkpoint) {
+    return NextResponse.json({
+      error: `The ${slot} hourly patrol checkpoint has already been signed. Next hourly check is at ${String((lagos.hour + 1) % 24).padStart(2, '0')}:00.`,
+    }, { status: 409 })
+  }
 
   const checkpointRows = await db.select({ id: patrolCheckpoints.id }).from(patrolCheckpoints).where(and(
     eq(patrolCheckpoints.organizationId, currentUser.organizationId),
@@ -308,13 +368,14 @@ export async function POST(request: Request) {
     progress: Math.round((signedCount / Math.max(slots.length, 1)) * 100),
     status: signedCount >= slots.length ? 'completed' : 'in_progress',
   }).where(eq(patrols.id, patrol.id))
+
   const [todayPatrols] = await db.select({ total: count() })
     .from(patrolCheckpoints)
     .innerJoin(patrols, eq(patrolCheckpoints.patrolId, patrols.id))
     .where(and(
       eq(patrolCheckpoints.organizationId, currentUser.organizationId),
       eq(patrols.guardId, guard.id),
-      eq(patrols.patrolDate, lagos.date),
+      eq(patrols.patrolDate, shiftDate),
     ))
 
   return NextResponse.json({
@@ -324,11 +385,11 @@ export async function POST(request: Request) {
     checkedIn: true,
     guardId: guard.id,
     guardName: guard.name,
-    siteName: site?.name ?? null,
-    withinBounds,
+    siteName: site.name,
+    withinBounds: true,
     checkpoint: slot,
-    patrolCount: Number(todayPatrols?.total ?? 0),
-    message: `Patrol checkpoint recorded for ${guard.name}${site ? ` at ${site.name}` : ''}.`,
+    patrolCount: Number(todayPatrols?.total ?? signedCount),
+    message: `Hourly patrol verified: ${guard.name} signed ${slot} stay-awake checkpoint on-site at ${site.name}.`,
     record: patrol,
   })
 }

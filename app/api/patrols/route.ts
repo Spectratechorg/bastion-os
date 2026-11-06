@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { and, desc, eq, gte } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
-import { actor, denyGuard, fail, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
+import { actor, currentShiftDate, denyGuard, fail, isShiftClosed, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
 import { raiseAlert } from '@/lib/alerts'
 
 export const dynamic = 'force-dynamic'
@@ -32,19 +32,21 @@ export async function GET(request: Request) {
     const day = patrol.patrolDate ?? lagosParts(patrol.loggedAt).date
     const checkpoints = signed.get(patrol.id) ?? {}
     const count = Object.keys(checkpoints).length
-    const windowClosed = day < now.date || (day === now.date && now.hour >= shift.endHour)
+    const windowClosed = isShiftClosed(day, now, shift)
     const status = count >= slots.length ? 'completed' : windowClosed ? 'missed' : 'in_progress'
     const guard = guardById.get(patrol.guardId)
     return { id: patrol.id, date: day, guardId: patrol.guardId, guardName: guard?.name ?? 'Unknown guard', photoUrl: guard?.photoUrl ?? null, site: (patrol.siteId && siteById.get(patrol.siteId)?.name) || guard?.site || '—', checkpoints, signedCount: count, status }
   })
-  const today = enriched.filter((patrol) => patrol.date === now.date)
+  const shiftDate = currentShiftDate(now, shift)
+  const today = enriched.filter((patrol) => patrol.date === shiftDate || patrol.date === now.date)
   const month = enriched.filter((patrol) => patrol.date.slice(0, 7) === now.month)
   const patrolled = new Set(today.map((patrol) => patrol.guardId))
   const notStarted = guardRows.filter((guard) => guard.status === 'active' && !patrolled.has(guard.id)).map((guard) => ({ guardId: guard.id, guardName: guard.name, site: guard.site ?? '—' }))
+  
   // Once the shift has ended, raise one "missed patrol" alert per guard for today (idempotent).
-  if (now.hour >= shift.endHour) {
+  if (isShiftClosed(shiftDate, now, shift)) {
     const missed = [...today.filter((patrol) => patrol.status === 'missed').map((patrol) => ({ id: patrol.guardId, name: patrol.guardName, site: patrol.site })), ...notStarted.map((guard) => ({ id: guard.guardId, name: guard.guardName, site: guard.site }))]
-    for (const guard of missed) await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'patrol', title: 'Missed patrol', body: `${guard.name} did not complete all checkpoints at ${guard.site}`, severity: 'medium', key: `patrol:${guard.id}:${now.date}` })
+    for (const guard of missed) await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'patrol', title: 'Missed patrol', body: `${guard.name} did not complete all checkpoints at ${guard.site}`, severity: 'medium', key: `patrol:${guard.id}:${shiftDate}` })
   }
   return NextResponse.json({
     date, today: now.date, slots, shift,
@@ -53,7 +55,7 @@ export async function GET(request: Request) {
     summary: {
       completedToday: today.filter((patrol) => patrol.status === 'completed').length,
       inProgressToday: today.filter((patrol) => patrol.status === 'in_progress').length,
-      missedToday: today.filter((patrol) => patrol.status === 'missed').length + (now.hour >= shift.endHour ? notStarted.length : 0),
+      missedToday: today.filter((patrol) => patrol.status === 'missed').length + (isShiftClosed(shiftDate, now, shift) ? notStarted.length : 0),
       completedThisMonth: month.filter((patrol) => patrol.status === 'completed').length,
     },
   })
