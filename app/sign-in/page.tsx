@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth'
 import { signUpOpen } from '@/lib/signup'
 import { memberRole } from '@/lib/server'
 import { AuthForm } from '@/components/auth-form'
+import { AuthUnavailable } from '@/components/auth-unavailable'
 
 export default async function SignInPage() {
   const session = await auth.api.getSession({ headers: await headers() })

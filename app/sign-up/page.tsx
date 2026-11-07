@@ -4,10 +4,13 @@ import { redirect } from 'next/navigation'
 import { auth } from '@/lib/auth'
 import { signUpOpen } from '@/lib/signup'
 import { AuthForm } from '@/components/auth-form'
+import { AuthUnavailable } from '@/components/auth-unavailable'
 import { Logo } from '@/components/brand'
 
 export default async function SignUpPage() {
-  const session = await auth.api.getSession({ headers: await headers() })
+  let session
+  try { session = await auth.api.getSession({ headers: await headers() }) }
+  catch { return <AuthUnavailable /> }
   if (session?.user) redirect('/overview')
   const open = await signUpOpen()
   if (!open) {
