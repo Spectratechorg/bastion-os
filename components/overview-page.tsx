@@ -275,6 +275,27 @@ export function OverviewPage() {
             )}
           </section>
 
+          {/* Site coverage snapshot */}
+          <section className="rounded-[12px] border border-[#E4E4E7] bg-white">
+            <div className="flex items-center justify-between px-4 py-3">
+              <div>
+                <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Site coverage</h2>
+                <p className="mt-0.5 text-xs text-[#6B6B72]">Guards present against each site’s assignment.</p>
+              </div>
+              <Link href="/sites" className="text-[11px] font-medium text-[#6B6B72] underline-offset-4 hover:text-[#18181B] hover:underline">Manage sites</Link>
+            </div>
+            <ul className="divide-y divide-[#EFEFF1] border-t border-[#E4E4E7]">
+              {admin?.coverage.matrix.length ? admin.coverage.matrix.slice(0, 6).map((site) => {
+                const risk = site.dangerLevel === 'high' ? ['bg-[#B42318]', 'text-[#8C2B1E]', 'High'] : site.dangerLevel === 'medium' ? ['bg-[#B7791F]', 'text-[#8A5A12]', 'Medium'] : ['bg-[#16794A]', 'text-[#16794A]', 'Low']
+                return <li key={site.id} className="flex items-center gap-3 px-4 py-2.5 text-xs">
+                  <span className="min-w-0 flex-1 truncate font-medium text-[#18181B]">{site.name}</span>
+                  <span className="font-mono tabular-nums text-[#3F3F46]">{site.presentCount}/{site.assignedCount}</span>
+                  <span className={`inline-flex items-center gap-1.5 text-[10.5px] font-medium ${risk[1]}`}><span aria-hidden className={`size-1.5 rounded-full ${risk[0]}`} />{risk[2]}</span>
+                </li>
+              }) : <li className="px-4 py-6 text-center text-xs text-[#6B6B72]">No active sites yet. Add one on the Sites page.</li>}
+            </ul>
+          </section>
+
           {/* Attendance by Site Today & Latest Activity Stream */}
           <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
