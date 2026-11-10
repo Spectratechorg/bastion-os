@@ -108,7 +108,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     try {
       const results = await Promise.all(sources.map(async (section) => ({ section, rows: await fetch(`/api/operations?section=${section}`, { cache: 'no-store' }).then((response) => response.ok ? response.json() : []) as Record<string, unknown>[] })))
       const hit = results.find(({ rows }) => rows.some((row) => Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(normalized))))
-      if (hit) { setSearchMessage(''); router.push(`/${hit.section}`) } else setSearchMessage(`No workspace record matched “${query}”.`)
+      if (hit) { setSearchMessage(''); router.push(`/${hit.section}?q=${encodeURIComponent(query)}`) } else setSearchMessage(`No workspace record matched “${query}”.`)
     } catch { setSearchMessage('Search is temporarily unavailable.') }
   }
   async function signOut() { await authClient.signOut(); router.push('/sign-in'); router.refresh() }
@@ -119,10 +119,6 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     <div className="workspace-theme min-h-screen bg-[#F5F5F6] text-[#18181B]">
       <aside className="workspace-sidebar fixed inset-y-0 left-0 z-20 hidden w-[244px] flex-col bg-[#2A2B2E] text-white lg:flex">
         <Link href="/overview" className="flex h-[62px] items-center px-5"><Wordmark /></Link>
-        <div className="mx-3 mb-5 flex h-[50px] items-center gap-2.5 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-2.5">
-          <span className="flex size-7 items-center justify-center rounded-[7px] bg-[#E4E4E7] text-[9px] font-bold text-[#3F3F46]">{initials(organization.data?.name)}</span>
-          <span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-semibold">{organization.data?.name ?? 'Your company'}</span><span className="block text-[9.5px] uppercase tracking-[0.08em] text-[#A1A1AA]">{process.env.NEXT_PUBLIC_BRAND_TAGLINE ?? 'Fortewings Security'}</span></span>
-        </div>
         <nav className="flex-1 overflow-y-auto px-2.5 pb-4">
           {navGroups.map((group) => {
             const items = navigation.filter((item) => group.items.includes(item.label))

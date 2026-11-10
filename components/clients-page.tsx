@@ -121,7 +121,7 @@ export function ClientsPage() {
       <button onClick={() => { setEditing(null); setForm(emptyForm); setFormOpen(true) }} className={btnPrimary}><Plus className="size-3.5" />Add client</button>
     </PageHeader>
 
-    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(monthlyTotal), 'Monthly value'], [String(unassignedSites.length), 'Unassigned sites']]} />
+    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(monthlyTotal), 'Total contract size'], [String(unassignedSites.length), 'Unassigned sites']]} />
 
     {unassignedSites.length > 0 && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">{unassignedSites.length} site{unassignedSites.length === 1 ? ' is' : 's are'} not linked to a client yet: {unassignedSites.map((site) => site.name).join(', ')}. Use <b>Assign sites</b> on a client to link them.</p>}
     <ErrorBanner message={error} retry={() => void load()} />
@@ -139,7 +139,7 @@ export function ClientsPage() {
           return <li key={client.id} className="p-4">
             <div className="flex flex-wrap items-start gap-3">
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2"><b className="text-sm font-semibold">{client.name}</b><Badge value={client.status} />{client.slaScore !== null && <span className="text-[10px] text-[#6B6B72]">SLA {client.slaScore}%</span>}</div>
+                <div className="flex flex-wrap items-center gap-2"><b className="text-sm font-semibold">{client.name}</b><Badge value={client.status} /></div>
                 <p className="mt-0.5 text-[11px] text-[#6B6B72]">{client.contactName ?? 'No contact'}{client.phone ? ` · ${client.phone}` : ''}{client.email ? ` · ${client.email}` : ''}</p>
                 <p className="mt-1 text-[11px] text-[#52525B]"><b>{naira(Number(client.monthlyValue))}</b>/month{client.renewalDate ? ` · renews ${new Date(client.renewalDate).toLocaleDateString()}` : ''}</p>
               </div>
@@ -174,7 +174,7 @@ export function ClientsPage() {
         <Field label="Email"><input type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
         <Field label="Monthly contract value (₦)"><input required type="number" min={0} step="any" className={inputClass} value={form.monthlyValue} onChange={(event) => setForm({ ...form, monthlyValue: event.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="SLA score (%)"><input type="number" min={0} max={100} className={inputClass} value={form.slaScore} onChange={(event) => setForm({ ...form, slaScore: event.target.value })} /></Field>
+
           <Field label="Renewal date"><input type="date" className={inputClass} value={form.renewalDate} onChange={(event) => setForm({ ...form, renewalDate: event.target.value })} /></Field>
         </div>
         <Field label="Status"><select className={inputClass} value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="active">Active</option><option value="inactive">Inactive</option></select></Field>

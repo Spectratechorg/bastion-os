@@ -175,6 +175,7 @@ export function OverviewPage() {
   const suspendedGuards = d?.guards.filter((guard) => guard.status === 'suspended').length ?? 0
   const totalSites = d?.sites.length ?? 0
   const rate = activeGuards.length ? Math.round((checkedToday.size / activeGuards.length) * 100) : 0
+  const attendanceToday = d?.attendance.filter((row) => new Date(row.checkedInAt).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' }) === today).length ?? 0
   const openAlerts = d?.alerts.filter((a) => !a.acknowledged) ?? []
   const openIncidents = d?.incidents.filter((i) => i.status !== 'resolved') ?? []
   const bySite = (d?.sites ?? [])
@@ -215,9 +216,9 @@ export function OverviewPage() {
         </article>
 
         <article className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
-          <div className="flex items-start justify-between gap-2"><p className="text-[11px] font-medium text-[#6B6B72]">Guards on duty</p><Activity className="size-4 shrink-0 text-[#9A9AA1]" strokeWidth={1.75} /></div>
-          <p className="mt-2 text-[24px] font-semibold leading-none tracking-[-0.02em] text-[#18181B]">{checkedToday.size}/{activeGuards.length || '—'}</p>
-          <p className="mt-1.5 text-[10.5px] text-[#8A938B]">{rate}% of the fleet{activeGuards.length > checkedToday.size ? ` · ${activeGuards.length - checkedToday.size} no-show` : ''}</p>
+          <div className="flex items-start justify-between gap-2"><p className="text-[11px] font-medium text-[#6B6B72]">Attendance today</p><Activity className="size-4 shrink-0 text-[#9A9AA1]" strokeWidth={1.75} /></div>
+          <p className="mt-2 text-[24px] font-semibold leading-none tracking-[-0.02em] text-[#18181B]">{attendanceToday}</p>
+          <p className="mt-1.5 text-[10.5px] text-[#8A938B]">{checkedToday.size}/{activeGuards.length || '—'} guards · {rate}%</p>
           <div className="mt-3 h-1.5 rounded-full bg-[#EFEFF1]"><div className="h-1.5 rounded-full bg-[#2A2B2E] transition-[width] duration-500" style={{ width: `${Math.min(100, rate)}%` }} /></div>
         </article>
 
@@ -272,7 +273,7 @@ export function OverviewPage() {
                     sites={d.sites as never}
                     guards={d.guards as never}
                     selectedSiteId={siteId || undefined}
-                    height="h-72 sm:h-84 xl:h-96"
+                    height="h-56 sm:h-64"
                   />
                 </div>
               </WidgetBoundary>
@@ -349,8 +350,8 @@ export function OverviewPage() {
                 Incidents
               </Link>
             </div>
-            <dl className="mt-2.5 grid grid-cols-4 gap-px overflow-hidden rounded-[10px] bg-[#EFEFF1] text-center">
-              {(['critical', 'high', 'medium', 'low'] as const).map((sev) => {
+            <dl className="mt-2.5 grid grid-cols-3 gap-px overflow-hidden rounded-[10px] bg-[#EFEFF1] text-center">
+              {(['high', 'medium', 'low'] as const).map((sev) => {
                 const n = openIncidents.filter((i) => i.severity === sev).length
                 return (
                   <div key={sev} className="bg-white px-2 py-2">

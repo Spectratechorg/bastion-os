@@ -1,12 +1,13 @@
 'use client'
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Check, Download, LocateFixed, MapPin, MessageSquare, Plus, RefreshCw, Search, ShieldAlert, UserPlus, X } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
-import { api, clearClientCache, naira, when } from '@/lib/client'
+import { api, clearClientCache, naira, photoToDataUrl, when } from '@/lib/client'
 import { GuardMetrics } from '@/components/guard-metrics'
 import { Pagination } from '@/components/pagination'
 import { WriteTagButton } from '@/components/write-tag-button'
@@ -14,7 +15,7 @@ import { ALERT_RULES } from '@/lib/alerts-client'
 
 export type Section = 'guards' | 'sites' | 'attendance' | 'incidents' | 'alerts'
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
-type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void; open: (row: Row) => void; openMap: (guardId?: string) => void }
+type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void; open: (row: Row) => void; openMap: (guardId?: string) => void; openSitesMap: () => void }
 type Column = { head: string; cell: (row: Row, ctx: Ctx) => ReactNode }
 type Paged = { rows: Row[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: Record<string, number> }
 
@@ -186,15 +187,10 @@ function AssignDialog({ row, guards, close, act }: { row: Row; guards: Row[]; cl
 
 const LiveMap = dynamic(() => import('@/components/live-map').then((m) => m.LiveMap), { ssr: false, loading: () => <div className="h-96 animate-pulse bg-[#EFEFF1]" /> })
 
-function SiteMap({ sites, guards }: { sites: Row[]; guards: Row[] }) {
-  const [id, setId] = useState('')
-  if (sites.length === 0) return null
-  return <section className="mt-4 overflow-hidden ws-card"><div className="flex flex-wrap items-center gap-3 border-b border-[#E4E4E7] p-4"><b className="text-xs">Live map</b><select aria-label="Zoom to site" value={id} onChange={(e) => setId(e.target.value)} className="h-10 rounded-[8px] border border-[#E4E4E7] px-2 text-xs"><option value="">All sites</option>{sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select><span className="text-xs text-[#6B6B72]">Circles are geofences, coloured by risk. Dark dots are guards at their last check-in.</span></div>
-    <LiveMap sites={sites as never} guards={guards as never} selectedSiteId={id || undefined} height="h-96" /></section>
-}
-
 function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void }) {
   const suspended = row.status === 'suspended'
+  const photoInput = useRef<HTMLInputElement>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
   const fields: [string, string, string?][] = [
     ['Phone', row.phone ?? '—'],
     ['NIN', row.nin ? `••••${String(row.nin).slice(-4)}` : '—'],
@@ -205,6 +201,19 @@ function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void })
     ['Added', row.createdAt ? when(row.createdAt) : '—'],
     ['Guard login', row.loginUserId ? 'Linked to a user account' : 'Not linked'],
   ]
+
+  async function changePhoto(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setPhotoBusy(true)
+    try { await c.act(row, 'update', { photoUrl: await photoToDataUrl(file, 320) }) } finally { setPhotoBusy(false) }
+  }
+  async function removePhoto() {
+    setPhotoBusy(true)
+    try { await c.act(row, 'update', { photoUrl: null }) } finally { setPhotoBusy(false) }
+  }
+
   return <Sheet title={row.name} kicker="GUARD PROFILE" onClose={close} footer={
     <>
       <button className={btn} onClick={() => { close(); c.metrics(row) }}>Performance</button>
@@ -215,10 +224,18 @@ function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void })
     </>
   }>
     <div className="mb-5 flex items-center gap-4">
-      <Avatar name={row.name} src={row.photoUrl} size={64} />
-      <div className="min-w-0">
+      <button type="button" onClick={() => photoInput.current?.click()} aria-label="Change guard photo" className="group relative shrink-0 rounded-full" disabled={photoBusy}>
+        <Avatar name={row.name} src={row.photoUrl} size={64} />
+        <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/45 text-[9px] font-semibold text-white opacity-0 transition group-hover:opacity-100">Edit</span>
+      </button>
+      <div className="min-w-0 flex-1">
         <p className="truncate text-lg font-semibold">{row.name}</p>
         <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[#6B6B72]"><Badge value={row.status} />{row.site ?? 'Unassigned'}</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button type="button" className={smallBtn} disabled={photoBusy} onClick={() => photoInput.current?.click()}>{photoBusy ? 'Saving…' : row.photoUrl ? 'Change photo' : 'Add photo'}</button>
+          {row.photoUrl && <button type="button" className={`${smallBtn} text-[#B42318]`} disabled={photoBusy} onClick={() => void removePhoto()}>Remove photo</button>}
+        </div>
+        <input ref={photoInput} type="file" accept="image/*" onChange={changePhoto} className="hidden" />
       </div>
     </div>
     <dl className="divide-y divide-[#EFEFF1] text-sm">
@@ -229,12 +246,13 @@ function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void })
         </div>
       ))}
     </dl>
-    <p className="mt-4 text-[11px] text-[#6B6B72]">Performance opens this guard’s attendance, patrol completion and geofence history.</p>
+    <p className="mt-4 text-[11px] text-[#6B6B72]">Performance opens attendance, patrol completion and geofence history. Location opens the guard on the map.</p>
   </Sheet>
 }
 
 export function RecordsPage({ section }: { section: Section }) {
   const page = meta[section]
+  const searchParams = useSearchParams()
   const [records, setRecords] = useState<Row[]>([]); const [guards, setGuards] = useState<Row[]>([]); const [sites, setSites] = useState<Row[]>([])
   const [query, setQuery] = useState(''); const [term, setTerm] = useState('')
   const [filter, setFilter] = useState('all'); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
@@ -242,6 +260,8 @@ export function RecordsPage({ section }: { section: Section }) {
   const [total, setTotal] = useState(0); const [serverStats, setServerStats] = useState<Record<string, number> | null>(null)
   const [mapGuards, setMapGuards] = useState<Row[]>([])
   const [mapOpen, setMapOpen] = useState(false); const [mapGuardId, setMapGuardId] = useState('')
+  const [mapMode, setMapMode] = useState<'guards' | 'sites'>('guards')
+  const [mapSites, setMapSites] = useState<Row[]>([])
   const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'guard-detail' | 'incident' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
 
   const load = useCallback(async () => {
@@ -260,14 +280,15 @@ export function RecordsPage({ section }: { section: Section }) {
   useEffect(() => { setFilter('all'); setCurrentPage(1) }, [section])
   useEffect(() => { setLoading(true); void load() }, [load])
   useEffect(() => { const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
-  useEffect(() => { const q = new URLSearchParams(window.location.search).get('q'); if (q) setQuery(q) }, [])
+  useEffect(() => { const q = searchParams.get('q'); if (q) { setQuery(q); setCurrentPage(1) } }, [searchParams])
   useEffect(() => { const timer = window.setTimeout(() => { setTerm(query.trim()); setCurrentPage(1) }, 300); return () => window.clearTimeout(timer) }, [query])
   useEffect(() => {
-    if (section !== 'guards' || !mapOpen) return
+    if (!mapOpen) return
     let live = true
-    api<Row[]>('/api/operations?section=guards').then((rows) => { if (live) setMapGuards(rows) }).catch(() => undefined)
+    if (mapMode === 'guards') api<Row[]>('/api/operations?section=guards').then((rows) => { if (live) setMapGuards(rows) }).catch(() => undefined)
+    else api<Row[]>('/api/operations?section=sites').then((rows) => { if (live) setMapSites(rows) }).catch(() => undefined)
     return () => { live = false }
-  }, [section, mapOpen])
+  }, [mapMode, mapOpen])
   useEffect(() => {
     if (!mapOpen) return
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMapOpen(false); setMapGuardId('') } }
@@ -279,7 +300,7 @@ export function RecordsPage({ section }: { section: Section }) {
     guards, sites,
     act: async (row, action, extra = {}) => { try { const updated = await api<Row>('/api/operations', { method: 'PATCH', json: { section, id: row.id, action, ...extra } }); setRecords((items) => items.map((item) => item.id === row.id ? updated : item)); setDialog((d) => d?.row?.id === row.id ? { ...d, row: updated } : d); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update.') } },
     edit: (row) => setDialog({ kind: section === 'guards' ? 'guard' : 'site', row }), comment: (row) => setDialog({ kind: 'detail', row }), assign: (row) => setDialog({ kind: 'assign', row }),
-    metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }), open: (row) => setDialog({ kind: 'guard-detail', row }), openMap: (guardId = '') => { setMapGuardId(guardId); setMapOpen(true) },
+    metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }), open: (row) => setDialog({ kind: 'guard-detail', row }), openMap: (guardId = '') => { setMapMode('guards'); setMapGuardId(guardId); setMapOpen(true) }, openSitesMap: () => { setMapMode('sites'); setMapGuardId(''); setMapOpen(true) },
     remove: async (row) => {
       const what = section === 'guards' ? `Delete ${row.name} permanently? Their attendance, patrol and payroll history is deleted with them. To keep the history, suspend the guard instead.` : `Delete ${row.name} permanently? Guards assigned here become unassigned. To keep the record, deactivate the site instead.`
       if (!window.confirm(what)) return
@@ -290,7 +311,7 @@ export function RecordsPage({ section }: { section: Section }) {
   const filterOptions: Record<Section, [string, (r: Row) => boolean][]> = {
     guards: [['all', () => true], ['active', (r) => r.status === 'active'], ['suspended', (r) => r.status === 'suspended']],
     sites: [['all', () => true], ['active', (r) => r.status === 'active'], ['inactive', (r) => r.status === 'inactive']],
-    attendance: [['all', () => true], ['flagged', (r) => r.reviewStatus === 'flagged'], ['outside geofence', (r) => !r.withinGeofence], ['approved', (r) => r.reviewStatus === 'approved']],
+    attendance: [['all', () => true], ['outside geofence', (r) => !r.withinGeofence]],
     incidents: [['all', () => true], ['open', (r) => r.status !== 'resolved'], ['critical', (r) => r.severity === 'critical'], ['resolved', (r) => r.status === 'resolved']],
     alerts: [['all', () => true], ['open', (r) => !r.acknowledged], ['high or critical', (r) => r.severity === 'high' || r.severity === 'critical'], ['acknowledged', (r) => r.acknowledged]],
   }
@@ -298,9 +319,9 @@ export function RecordsPage({ section }: { section: Section }) {
   const statPairs: [string, string][] = serverStats ? (
     section === 'guards' ? [[String(serverStats.total), 'Registered'], [String(serverStats.active), 'Active'], [String(serverStats.suspended), 'Suspended'], [String(serverStats.nfc), 'NFC issued']]
       : section === 'sites' ? [[String(serverStats.total), 'Sites'], [String(serverStats.active), 'Active'], [String(serverStats.deployed), 'Guards deployed'], [String(serverStats.highRisk), 'High risk']]
-        : section === 'attendance' ? [[String(serverStats.total), 'Check-ins'], [String(serverStats.inside), 'Inside geofence'], [String(serverStats.outside), 'Outside geofence'], [String(serverStats.flagged), 'Flagged']]
+        : section === 'attendance' ? [[String(serverStats.total), 'Check-ins'], [String(serverStats.inside), 'Inside geofence'], [String(serverStats.outside), 'Outside geofence']]
           : section === 'incidents' ? [[String(serverStats.total), 'Incidents'], [String(serverStats.open), 'Open'], [String(serverStats.critical), 'Critical'], [String(serverStats.resolved), 'Resolved']]
-            : [[String(serverStats.total), 'Alerts'], [String(serverStats.open), 'Open'], [String(serverStats.highCritical), 'High or critical'], [String(serverStats.acknowledged), 'Acknowledged']]
+            : [[String(serverStats.total), 'Alerts'], [String(serverStats.highCritical), 'High or critical'], [String(serverStats.acknowledged), 'Acknowledged']]
   ) : page.stats(records)
 
   const head = page.columns.filter((c) => c.head)
@@ -311,6 +332,7 @@ export function RecordsPage({ section }: { section: Section }) {
     <PageHeader title={page.title} subtitle={page.subtitle || undefined}>
       {section === 'guards' && <button className={btn} onClick={() => ctx.openMap()}><MapPin className="size-3.5" />Live locations</button>}
       {section === 'guards' && <Link href="/guards/new" className={btnPrimary}><UserPlus className="size-4" />Register guard</Link>}
+      {section === 'sites' && <button className={btn} onClick={() => ctx.openSitesMap()}><MapPin className="size-3.5" />Live map</button>}
       {section === 'sites' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'site' })}><Plus className="size-4" />Add site</button>}
       {section === 'incidents' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'incident' })}><Plus className="size-4" />Report incident</button>}
     </PageHeader>
@@ -338,7 +360,6 @@ export function RecordsPage({ section }: { section: Section }) {
         <ul className="divide-y divide-[#EFEFF1] md:hidden">{rows.map((r) => <li key={r.id} className="p-4 text-xs"><div className="text-sm">{first.cell(r, ctx)}</div><dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">{rest.map((c) => <div key={c.head}><dt className="text-[10px] font-medium text-[#8A938B]">{c.head}</dt><dd className="mt-0.5">{c.cell(r, ctx)}</dd></div>)}</dl><div className="mt-3">{actions.cell(r, ctx)}</div></li>)}</ul></>}
       {total > 0 && <Pagination page={currentPage} pageSize={pageSize} total={total} busy={loading} onPage={setCurrentPage} onPageSize={(size) => { setPageSize(size); setCurrentPage(1) }} />}
     </div>
-    {section === 'sites' && <SiteMap sites={rows} guards={guards} />}
     {dialog?.kind === 'site' && <SiteDialog row={dialog.row} close={() => setDialog(null)} done={() => void load()} />}
     {dialog?.kind === 'guard' && dialog.row && <GuardDialog row={dialog.row} sites={sites} close={() => setDialog(null)} done={() => void load()} />}
     {dialog?.kind === 'incident' && <IncidentDialog sites={sites} close={() => setDialog(null)} done={() => void load()} />}
@@ -347,10 +368,10 @@ export function RecordsPage({ section }: { section: Section }) {
     {mapOpen && <div role="dialog" aria-modal="true" aria-label="Guard locations" className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3 sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setMapOpen(false); setMapGuardId('') } }}>
       <div className="w-full max-w-5xl overflow-hidden rounded-[12px] border border-[#E4E4E7] bg-white shadow-[0_20px_60px_-20px_rgba(11,18,15,0.45)]">
         <div className="flex items-start justify-between gap-3 border-b border-[#E4E4E7] px-4 py-3">
-          <div><h2 className="text-[14px] font-semibold">Guard locations</h2><p className="mt-0.5 text-xs text-[#6B6B72]">Solid markers are real scans; dashed markers sit at the assigned site until a guard scans.</p></div>
+          <div><h2 className="text-[14px] font-semibold">{mapMode === 'guards' ? 'Guard locations' : 'Site locations'}</h2><p className="mt-0.5 text-xs text-[#6B6B72]">{mapMode === 'guards' ? 'Solid markers are real scans; dashed markers sit at the assigned site until a guard scans.' : 'Every registered site with its geofence circle.'}</p></div>
           <button aria-label="Close map" onClick={() => { setMapOpen(false); setMapGuardId('') }} className="flex size-9 shrink-0 items-center justify-center rounded-[7px] text-[#6B6B72] transition-colors hover:bg-[#F0F0F1]"><X className="size-4" /></button>
         </div>
-        <LiveMap sites={sites as never} guards={mapGuards as never} selectedGuardId={mapGuardId || undefined} height="h-[60vh] sm:h-[68vh]" />
+        <LiveMap sites={(mapMode === 'sites' ? mapSites : sites) as never} guards={(mapMode === 'guards' ? mapGuards : []) as never} selectedGuardId={mapMode === 'guards' ? mapGuardId || undefined : undefined} height="h-[60vh] sm:h-[68vh]" />
       </div>
     </div>}
     {dialog?.kind === 'metrics' && dialog.row && <GuardMetrics guard={dialog.row as never} photoUrl={dialog.row.photoUrl} close={() => setDialog(null)} />}
