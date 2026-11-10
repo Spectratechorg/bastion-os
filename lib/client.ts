@@ -5,7 +5,7 @@ export class ApiError extends Error {}
  * requests (the shell and the page both asking for alerts, for example) share one flight.
  * A mutation clears the cache so the next read sees the new state.
  */
-const CLIENT_TTL_MS = 8_000
+const CLIENT_TTL_MS = 20_000
 const cache = new Map<string, { value: unknown; expires: number }>()
 const inflight = new Map<string, Promise<unknown>>()
 let lastMutationAt = 0

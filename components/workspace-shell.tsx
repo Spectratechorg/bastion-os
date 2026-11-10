@@ -126,7 +126,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
                 <p className="mb-1.5 px-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#9A9AA1]">{group.label}</p>
                 <div className="space-y-0.5">
                   {items.map(({ label, href, icon: Icon, tag }) => (
-                    <Link key={label} href={href} className={`group flex h-[34px] items-center gap-2.5 rounded-[7px] px-2.5 text-[11.5px] transition-colors ${isActive(label) ? 'bg-white/[0.08] font-semibold text-white' : 'text-[#B4B4BB] hover:bg-white/[0.05] hover:text-white'}`}>
+                    <Link key={label} href={href} prefetch className={`group flex h-[34px] items-center gap-2.5 rounded-[7px] px-2.5 text-[11.5px] transition-colors ${isActive(label) ? 'bg-white/[0.08] font-semibold text-white' : 'text-[#B4B4BB] hover:bg-white/[0.05] hover:text-white'}`}>
                       <span aria-hidden className={`size-1.5 rounded-[2px] ${isActive(label) ? 'bg-white' : 'bg-transparent'}`} />
                       <Icon className={`size-[15px] ${isActive(label) ? 'text-white' : 'text-[#A1A1AA] group-hover:text-white'}`} strokeWidth={1.75} /><span className="flex-1">{label}</span>
                       {label === 'Alerts' && unread > 0 && <span className="rounded-[4px] bg-[#B3402A] px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-white">{unread}</span>}
