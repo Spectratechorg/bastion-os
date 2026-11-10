@@ -9,6 +9,7 @@ import { raiseAlert } from '@/lib/alerts'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
 import { todayStatus } from '@/lib/guard-today'
 import { currentShiftDate, lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
+import { invalidate } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -90,6 +91,8 @@ export async function POST(request: Request) {
     currentUser = { userId: ownerId, organizationId: organization.id }
   }
   if (!currentUser) return NextResponse.json({ error: 'Enter your company guard app code, or sign in, before scanning a guard tag.' }, { status: 401 })
+  // A scan changes attendance/patrols; drop the short-lived list caches.
+  invalidate('ops:'); invalidate('patrols:')
 
   const { type, latitude, longitude } = parsed.data
   const token = parsed.data.token.replace(/^nfc:/i, '').trim()

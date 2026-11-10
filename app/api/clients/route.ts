@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import { activityEvents, clients, guards, sites } from '@/lib/db/schema'
 import { actor, denyGuard } from '@/lib/server'
 import { likeTerm, pageResponse, readPage } from '@/lib/pagination'
+import { cachedJsonResponse, invalidate } from '@/lib/cache'
 
 const clientSchema = z.object({
   name: z.string().trim().min(2).max(200),
@@ -41,6 +42,7 @@ async function readBody(request: Request): Promise<unknown> {
 export async function GET(request: Request) {
   const { user, response } = await getCurrent()
   if (response) return response
+  return cachedJsonResponse(`clients:${user.organizationId}:${new URL(request.url).search}`, 8_000, async () => {
   const url = new URL(request.url)
   const paginated = url.searchParams.has('page')
   const page = readPage(url)
@@ -71,11 +73,13 @@ export async function GET(request: Request) {
   })
   if (!paginated) return NextResponse.json(enriched)
   return NextResponse.json(pageResponse(enriched, Number(totals?.[0]?.total ?? enriched.length), page, stats ? { total: Number(stats[0].total), active: Number(stats[0].active), monthlyValue: Number(stats[0].monthlyValue) } : undefined))
+  })
 }
 
 export async function POST(request: Request) {
   const { user, response } = await getCurrent()
   if (response) return response
+  invalidate('clients:')
   const parsed = clientSchema.safeParse(await readBody(request))
   if (!parsed.success) return error(parsed.error.issues[0]?.message ?? 'Invalid client.')
 
@@ -106,6 +110,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const { user, response } = await getCurrent()
   if (response) return response
+  invalidate('clients:')
   const body = await readBody(request)
   if (!body || typeof body !== 'object' || !('id' in body)) return error('Provide a client ID and update fields.')
   const id = z.string().uuid().safeParse(body.id)

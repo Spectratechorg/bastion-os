@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { pool } from '@/lib/db'
 import { actor, denyGuard } from '@/lib/server'
+import { cachedJsonResponse } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,7 @@ export async function GET() {
   if (!current) return NextResponse.json({ error: 'Sign in first.' }, { status: 401 })
   const denied = denyGuard(current)
   if (denied) return denied
+  return cachedJsonResponse(`system:${current.organizationId}`, 10_000, async () => {
 
   const started = Date.now()
   let connected = false
@@ -30,5 +32,6 @@ export async function GET() {
     auth: { provider: 'Better Auth', emailPassword: true },
     napoleon: { configured: Boolean(process.env.NAPOLEON_API_URL) },
     telemetry: { configured: Boolean(process.env.REDIS_URL) },
+  })
   })
 }

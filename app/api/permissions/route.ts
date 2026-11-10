@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { rolePermissions } from '@/lib/db/schema'
 import { actor, denyGuard, fail, isAdminRole, permissionsFor } from '@/lib/server'
 import { EDITABLE_ROLES, PERMISSIONS } from '@/lib/permissions'
+import { invalidate } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,5 +26,6 @@ export async function PATCH(request: Request) {
   // An administrator can never lock out the people who manage roles, so finance and payroll stay on for admins.
   if (role === 'admin' && !allowed) return fail('The Administrator role keeps every permission.', 400)
   await db.insert(rolePermissions).values({ organizationId: current.organizationId, role, permission, allowed }).onConflictDoUpdate({ target: [rolePermissions.organizationId, rolePermissions.role, rolePermissions.permission], set: { allowed } })
+  invalidate(`perms:${current.organizationId}:`)
   return NextResponse.json({ ok: true })
 }

@@ -13,6 +13,7 @@ import {
 } from '@/lib/db/schema'
 import { actor, denyGuard, isAdminRole, fail } from '@/lib/server'
 import { newGuardAppCode } from '@/lib/guard-access'
+import { cachedJsonResponse, invalidate } from '@/lib/cache'
 
 /**
  * GET /api/admin
@@ -29,6 +30,7 @@ export async function GET() {
   if (!current) return fail('Unauthorized', 401)
   const denied = denyGuard(current)
   if (denied) return denied
+  return cachedJsonResponse(`admin:${current.organizationId}`, 8_000, async () => {
 
   const orgId = current.organizationId
 
@@ -247,6 +249,7 @@ export async function GET() {
     console.error('[Admin API] Failed to aggregate metrics:', err)
     return fail('Could not load admin command center data.', 500)
   }
+  })
 }
 
 /**
@@ -261,6 +264,7 @@ export async function POST(request: Request) {
   if (!current) return fail('Unauthorized', 401)
   const denied = denyGuard(current)
   if (denied) return denied
+  invalidate(`admin:${current.organizationId}:`); invalidate(`ops:${current.organizationId}:`); invalidate(`patrols:${current.organizationId}:`)
 
   let body: { action: string; [key: string]: unknown }
   try {

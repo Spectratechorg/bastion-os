@@ -8,6 +8,7 @@ import { raiseAlert } from '@/lib/alerts'
 import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
 import { actor, can, denyGuard, isModerator } from '@/lib/server'
 import { likeTerm, pageResponse, readPage } from '@/lib/pagination'
+import { cachedJsonResponse, invalidate } from '@/lib/cache'
 import type { PermissionKey } from '@/lib/permissions'
 
 const sectionSchema = z.enum(['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts', 'finances', 'live-map', 'activity'])
@@ -117,6 +118,7 @@ export async function GET(request: Request) {
   if (!parsedSection.success) return fail('Unknown section')
   const section = parsedSection.data === 'live-map' ? 'patrols' : parsedSection.data
   const organizationId = current.organizationId
+  return cachedJsonResponse(`ops:${organizationId}:${url.search}`, 8_000, async () => {
   const wantsPage = url.searchParams.has('page')
   const page = readPage(url)
   const term = (url.searchParams.get('q') ?? '').trim()
@@ -291,6 +293,7 @@ export async function GET(request: Request) {
       return NextResponse.json(pageResponse(rows, Number(totals[0].total), page))
     }
   }
+  })
 }
 
 export async function POST(request: Request) {
@@ -431,6 +434,7 @@ export async function PATCH(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
+  invalidate(`ops:${current.organizationId}:`); invalidate('clients:')
 
   const parsed = updateSchema.safeParse(await readJson(request))
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid update.')
@@ -598,6 +602,7 @@ export async function DELETE(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
+  invalidate(`ops:${current.organizationId}:`); invalidate('clients:')
   if (!(await isModerator(current))) return fail('Only an owner, admin or moderator can delete records.', 403)
   const url = new URL(request.url)
   const section = url.searchParams.get('section')

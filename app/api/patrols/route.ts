@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { guards, organizations, patrolCheckpoints, patrols, sites } from '@/lib/db/schema'
 import { actor, currentShiftDate, denyGuard, fail, isShiftClosed, lagosParts, normalizeShift, patrolSlots } from '@/lib/server'
 import { raiseAlert } from '@/lib/alerts'
+import { cachedJsonResponse } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
   const now = lagosParts()
   const date = new URL(request.url).searchParams.get('date') ?? now.date
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail('Date must look like 2026-10-20')
+  return cachedJsonResponse(`patrols:${current.organizationId}:${date}`, 8_000, async () => {
   const since = new Date(Date.now() - 62 * 86400000)
   const [organization] = await db.select({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour })
     .from(organizations).where(eq(organizations.id, current.organizationId)).limit(1)
@@ -58,5 +60,6 @@ export async function GET(request: Request) {
       missedToday: today.filter((patrol) => patrol.status === 'missed').length + (isShiftClosed(shiftDate, now, shift) ? notStarted.length : 0),
       completedThisMonth: month.filter((patrol) => patrol.status === 'completed').length,
     },
+  })
   })
 }

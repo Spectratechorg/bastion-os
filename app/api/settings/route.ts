@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { orgSettings, organizations } from '@/lib/db/schema'
 import { actor, denyGuard, fail, isAdminRole } from '@/lib/server'
 import { getSettings } from '@/lib/settings'
+import { invalidate } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,7 @@ export async function PATCH(request: Request) {
   const parsed = body.safeParse(await request.json().catch(() => null)); if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the values and try again.')
   const { name, ...rest } = parsed.data
   if (name) await db.update(organizations).set({ name }).where(eq(organizations.id, current.organizationId))
+  invalidate(`settings:${current.organizationId}`)
   const merged = { ...(await getSettings(current.organizationId)), ...rest }
   await db.insert(orgSettings).values({ organizationId: current.organizationId, data: merged }).onConflictDoUpdate({ target: orgSettings.organizationId, set: { data: merged } })
   return NextResponse.json({ ok: true })

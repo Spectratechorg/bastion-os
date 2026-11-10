@@ -1,10 +1,50 @@
 export class ApiError extends Error {}
 
-export async function api<T = unknown>(url: string, init?: RequestInit & { json?: unknown }): Promise<T> {
-  const response = await fetch(url, { cache: 'no-store', ...init, headers: { ...(init?.json ? { 'content-type': 'application/json' } : {}), ...init?.headers }, body: init?.json ? JSON.stringify(init.json) : init?.body })
-  const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new ApiError((body as { error?: string }).error ?? 'Something went wrong. Please try again.')
-  return body as T
+/**
+ * Client-side GET cache. Navigating back to a page inside the TTL is instant, and overlapping
+ * requests (the shell and the page both asking for alerts, for example) share one flight.
+ * A mutation clears the cache so the next read sees the new state.
+ */
+const CLIENT_TTL_MS = 8_000
+const cache = new Map<string, { value: unknown; expires: number }>()
+const inflight = new Map<string, Promise<unknown>>()
+let lastMutationAt = 0
+
+export async function api<T = unknown>(url: string, init: RequestInit & { json?: unknown; ttl?: number } = {}): Promise<T> {
+  const { json, ttl: requestedTtl, ...rest } = init
+  const method = (rest.method ?? 'GET').toUpperCase()
+  const cacheable = method === 'GET' && !json && !rest.body
+  const ttl = requestedTtl ?? CLIENT_TTL_MS
+  const now = Date.now()
+
+  if (cacheable && ttl > 0 && now - lastMutationAt > 1_500) {
+    const hit = cache.get(url)
+    if (hit && hit.expires > now) return hit.value as T
+    const pending = inflight.get(url)
+    if (pending) return pending as T
+  }
+
+  const request = (async () => {
+    const response = await fetch(url, {
+      cache: 'no-store',
+      ...rest,
+      headers: { ...(json ? { 'content-type': 'application/json' } : {}), ...rest.headers },
+      body: json ? JSON.stringify(json) : rest.body,
+    })
+    const body = await response.json().catch(() => ({}))
+    if (!response.ok) throw new ApiError((body as { error?: string }).error ?? 'Something went wrong. Please try again.')
+    return body as T
+  })()
+
+  if (cacheable && ttl > 0) inflight.set(url, request)
+  try {
+    const value = await request
+    if (cacheable && ttl > 0) cache.set(url, { value, expires: Date.now() + ttl })
+    if (!cacheable) { lastMutationAt = Date.now(); cache.clear() }
+    return value
+  } finally {
+    inflight.delete(url)
+  }
 }
 
 export const naira = (value: number) => `₦${Math.round(value).toLocaleString('en-NG')}`

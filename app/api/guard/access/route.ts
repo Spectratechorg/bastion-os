@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { organizations } from '@/lib/db/schema'
 import { newGuardAppCode, normalizeGuardAppCode } from '@/lib/guard-access'
 import { actor, fail, isModerator } from '@/lib/server'
+import { invalidate } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
   const code = requested || newGuardAppCode()
   if (!/^GRD-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) return fail('Use the format GRD-XXXX-XXXX.')
 
+  invalidate(`admin:${current.organizationId}:`)
   const [updated] = await db.update(organizations).set({ guardAppCode: code })
     .where(eq(organizations.id, current.organizationId)).returning({ code: organizations.guardAppCode })
   if (!updated) return fail('Organization not found.', 404)

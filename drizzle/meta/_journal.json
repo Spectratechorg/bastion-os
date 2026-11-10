@@ -78,6 +78,13 @@
       "when": 1793804835524,
       "tag": "0010_natural_katie_power",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794317189769,
+      "tag": "0011_perf_indexes",
+      "breakpoints": true
     }
   ]
 }

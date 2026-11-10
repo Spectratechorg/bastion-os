@@ -4,6 +4,9 @@ import { getActiveOrganization } from '@/lib/auth/organization'
 import { db } from '@/lib/db'
 import { members, rolePermissions } from '@/lib/db/schema'
 import { DEFAULT_PERMISSIONS, type PermissionKey } from '@/lib/permissions'
+import { cached } from '@/lib/cache'
+import { headers } from 'next/headers'
+import { createHash } from 'node:crypto'
 
 export type Actor = { userId: string; organizationId: string; role: string }
 
@@ -19,6 +22,16 @@ export async function memberRole(organizationId: string, userId: string): Promis
 
 /** Signed-in user plus their active organization and role, or null. */
 export async function actor(): Promise<Actor | null> {
+  // The session lookup plus member query costs several network round-trips on Supabase. Cache the
+  // resolved actor per session cookie for a short window; role changes settle within 30s.
+  let cookie = ''
+  try { cookie = (await headers()).get('cookie') ?? '' } catch { /* not in a request */ }
+  if (!cookie) return resolveActor()
+  const key = `actor:${createHash('sha256').update(cookie).digest('base64url').slice(0, 32)}`
+  return cached(key, 30_000, resolveActor)
+}
+
+async function resolveActor(): Promise<Actor | null> {
   const current = await getActiveOrganization()
   if (!current?.organizationId) return null
   const role = await memberRole(current.organizationId, current.userId)
@@ -34,12 +47,14 @@ export const isAdminRole = (role: string) => role === 'owner' || role === 'admin
 
 /** Permission switches for a role: built-in defaults overridden by the organization's saved settings. */
 export async function permissionsFor(organizationId: string, role: string) {
-  const base = { ...(DEFAULT_PERMISSIONS[role] ?? DEFAULT_PERMISSIONS.member) }
-  if (role === 'owner' || role === 'guard') return base
-  const rows = await db.select({ permission: rolePermissions.permission, allowed: rolePermissions.allowed }).from(rolePermissions)
-    .where(and(eq(rolePermissions.organizationId, organizationId), eq(rolePermissions.role, role)))
-  for (const row of rows) if (row.permission in base) base[row.permission as PermissionKey] = row.allowed
-  return base
+  return cached(`perms:${organizationId}:${role}`, 60_000, async () => {
+    const base = { ...(DEFAULT_PERMISSIONS[role] ?? DEFAULT_PERMISSIONS.member) }
+    if (role === 'owner' || role === 'guard') return base
+    const rows = await db.select({ permission: rolePermissions.permission, allowed: rolePermissions.allowed }).from(rolePermissions)
+      .where(and(eq(rolePermissions.organizationId, organizationId), eq(rolePermissions.role, role)))
+    for (const row of rows) if (row.permission in base) base[row.permission as PermissionKey] = row.allowed
+    return base
+  })
 }
 export async function can(current: Actor, permission: PermissionKey) { return (await permissionsFor(current.organizationId, current.role))[permission] }
 
