@@ -15,7 +15,7 @@ import {
 import { PageHeader } from '@/components/workspace-shell'
 import { Badge, ErrorBanner, btn, smallBtn } from '@/components/ui-bits'
 import { WidgetBoundary } from '@/components/widget-boundary'
-import { api, when } from '@/lib/client'
+import { api, clearClientCache, when } from '@/lib/client'
 
 const LiveMap = dynamic(() => import('@/components/live-map').then((m) => m.LiveMap), {
   ssr: false,
@@ -192,7 +192,7 @@ export function OverviewPage() {
         subtitle="Live activity, coverage and alerts across all sites."
         action={
           <div className="flex items-center gap-2">
-            <button onClick={() => void loadAll()} className={smallBtn}>
+            <button onClick={() => { clearClientCache(); void loadAll() }} className={smallBtn}>
               <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>

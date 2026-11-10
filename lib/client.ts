@@ -10,6 +10,9 @@ const cache = new Map<string, { value: unknown; expires: number }>()
 const inflight = new Map<string, Promise<unknown>>()
 let lastMutationAt = 0
 
+/** Drops the GET cache so the next read goes to the network (used by explicit Refresh buttons). */
+export function clearClientCache() { cache.clear() }
+
 export async function api<T = unknown>(url: string, init: RequestInit & { json?: unknown; ttl?: number } = {}): Promise<T> {
   const { json, ttl: requestedTtl, ...rest } = init
   const method = (rest.method ?? 'GET').toUpperCase()
@@ -25,15 +28,28 @@ export async function api<T = unknown>(url: string, init: RequestInit & { json?:
   }
 
   const request = (async () => {
-    const response = await fetch(url, {
-      cache: 'no-store',
-      ...rest,
-      headers: { ...(json ? { 'content-type': 'application/json' } : {}), ...rest.headers },
-      body: json ? JSON.stringify(json) : rest.body,
-    })
-    const body = await response.json().catch(() => ({}))
-    if (!response.ok) throw new ApiError((body as { error?: string }).error ?? 'Something went wrong. Please try again.')
-    return body as T
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          cache: 'no-store',
+          ...rest,
+          headers: { ...(json ? { 'content-type': 'application/json' } : {}), ...rest.headers },
+          body: json ? JSON.stringify(json) : rest.body,
+        })
+        const body = await response.json().catch(() => ({}))
+        if (!response.ok) throw new ApiError((body as { error?: string }).error ?? 'Something went wrong. Please try again.')
+        return body as T
+      } catch (error) {
+        // A network failure (not an HTTP error) is usually a restarted server or a dropped
+        // connection. Reads retry quietly for a few seconds; writes are never retried.
+        const network = error instanceof TypeError
+        if (!network || method !== 'GET' || attempt >= 3) {
+          if (network) throw new ApiError('Can’t reach the server. Check your connection and try again.')
+          throw error
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt === 0 ? 400 : attempt === 1 ? 1_200 : 3_000))
+      }
+    }
   })()
 
   if (cacheable && ttl > 0) inflight.set(url, request)

@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic'
 import { Check, Download, LocateFixed, MapPin, MessageSquare, Plus, RefreshCw, Search, ShieldAlert, UserPlus, X } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
-import { api, naira, when } from '@/lib/client'
+import { api, clearClientCache, naira, when } from '@/lib/client'
 import { GuardMetrics } from '@/components/guard-metrics'
 import { Pagination } from '@/components/pagination'
 import { WriteTagButton } from '@/components/write-tag-button'
@@ -328,7 +328,7 @@ export function RecordsPage({ section }: { section: Section }) {
       <label className="flex h-10 min-w-0 flex-1 basis-full items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3 sm:h-10 sm:max-w-sm sm:basis-[200px]"><Search className="size-4 text-[#9A9AA1]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={page.search} className="w-full bg-transparent text-xs outline-none" /></label>
       <select aria-label="Filter" className="h-10 min-w-[110px] flex-1 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-xs capitalize sm:flex-none" value={filter} onChange={(e) => { setFilter(e.target.value); setCurrentPage(1) }}>{filterOptions[section].map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
       <a href={`/api/export?section=${section}`} className={btn}><Download className="size-3.5" />Export CSV</a>
-      <button onClick={() => { setLoading(true); void load() }} className={btn}><RefreshCw className="size-3.5" />Refresh</button>
+      <button onClick={() => { clearClientCache(); setLoading(true); void load() }} className={btn}><RefreshCw className="size-3.5" />Refresh</button>
     </div>
     <ErrorBanner message={error} retry={() => void load()} />
     <div className="overflow-hidden ws-card">

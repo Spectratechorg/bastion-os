@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, inputClass, smallBtn } from '@/components/ui-bits'
-import { api } from '@/lib/client'
+import { api, clearClientCache } from '@/lib/client'
 
 type Patrol = { id: string; date: string; guardName: string; photoUrl: string | null; site: string; checkpoints: Record<string, string>; signedCount: number; status: string }
 type Data = { date: string; today: string; slots: string[]; shift: { startHour: number; endHour: number }; rows: Patrol[]; notStarted: { guardId: string; guardName: string; site: string }[]; summary: { completedToday: number; inProgressToday: number; missedToday: number; completedThisMonth: number } }
@@ -36,7 +36,7 @@ export function PatrolsPage() {
         <input type="date" aria-label="Patrol date" value={date || data?.today || ''} max={data?.today} onChange={(e) => setDate(e.target.value)} className={`${inputClass.replace("w-full", "w-auto")}`} />
         <button type="button" aria-label="Next day" className={smallBtn} onClick={() => shiftDate(1)} disabled={(date || data?.today || '') >= (data?.today ?? '')}><ChevronRight className="size-4" /></button>
       </div>
-      <button className={btn} onClick={() => { setLoading(true); void load() }}><RefreshCw className="size-3.5" />Refresh</button>
+      <button className={btn} onClick={() => { clearClientCache(); setLoading(true); void load() }}><RefreshCw className="size-3.5" />Refresh</button>
       <a href="/api/export?section=patrols" className={btn}><Download className="size-3.5" />Export CSV</a>
     </div>
     <ErrorBanner message={error} retry={() => void load()} />

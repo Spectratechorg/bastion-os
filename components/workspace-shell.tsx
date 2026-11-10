@@ -81,6 +81,12 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     if (role === 'guard') return
     void refreshAlerts(); const timer = window.setInterval(() => { if (!document.hidden) void refreshAlerts() }, 60000); return () => window.clearInterval(timer)
   }, [pathname, refreshAlerts, role])
+  useEffect(() => {
+    // While the count is failing, retry sooner than the minute poll so a restart heals itself.
+    if (!syncIssue) return
+    const timer = window.setTimeout(() => void refreshAlerts(), 6_000)
+    return () => window.clearTimeout(timer)
+  }, [syncIssue, refreshAlerts])
 
   const navigation = allNavigation.filter((item) => {
     if (item.label === 'Finance' && (!FINANCE_ENABLED || (role !== null && perms.viewFinance === false))) return false

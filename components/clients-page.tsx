@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { Download, Plus, RefreshCw, Search, Trash2, UserPlus } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
-import { api, naira } from '@/lib/client'
+import { api, clearClientCache, naira } from '@/lib/client'
 import { Pagination } from '@/components/pagination'
 
 type ClientRecord = {
@@ -128,7 +128,7 @@ export function ClientsPage() {
 
     <div className="mb-3 flex items-center gap-2">
       <label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3"><Search className="size-4 text-[#9A9AA1]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients…" className="w-full text-xs outline-none" /></label>
-      <button onClick={() => void load()} aria-label="Refresh clients" className={btn}><RefreshCw className="size-3.5" />Refresh</button>
+      <button onClick={() => { clearClientCache(); void load() }} aria-label="Refresh clients" className={btn}><RefreshCw className="size-3.5" />Refresh</button>
     </div>
 
     <div className="overflow-hidden ws-card">
