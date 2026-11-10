@@ -65,41 +65,31 @@ export function AuthForm({ mode, databaseConfigured, signUpAllowed = true }: { m
   const field = 'h-11 w-full rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-[14px] text-[#18181B] outline-none transition-colors placeholder:text-[#9A9AA1] focus:border-[#2A2B2E] focus:ring-2 focus:ring-[#2A2B2E]/10'
   const label = 'flex flex-col gap-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#5D665F]'
 
-  return <main className="min-h-screen bg-[#F5F5F6] text-[#18181B] lg:flex">
-    <section className="hidden flex-1 flex-col justify-between bg-[#2A2B2E] p-12 text-white lg:flex">
-      <div>
-        <div className="flex items-center gap-3"><Logo size={40} /><span className="text-xl font-bold">Bastion<span className="text-[#B4B4BB]">OS</span></span></div>
-        <div className="mt-24 max-w-lg"><h1 className="text-[44px] font-semibold leading-[1.08] tracking-[-0.02em]">Make every post visible.</h1><p className="mt-5 max-w-md text-base leading-7 text-[#D4D4D8]">A focused operating picture for the people, sites and signals that keep your perimeter secure.</p></div>
-      </div>
-      <p className="text-xs text-[#B4B4BB]">BastionOS · Security operations</p>
-    </section>
+  return <main className="flex min-h-screen items-center justify-center bg-[#F5F5F6] px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))] text-[#18181B]">
+    <section className="w-full max-w-[400px] rounded-[14px] border border-[#E4E4E7] bg-white p-6 sm:p-8">
+      <div className="mb-7 flex items-center gap-2.5"><Logo size={34} /><span className="text-[17px] font-bold tracking-tight">Bastion<span className="text-[#9A9AA1]">OS</span></span></div>
 
-    <section className="flex min-h-screen w-full items-center justify-center px-4 py-10 pb-[max(2.5rem,env(safe-area-inset-bottom))] sm:px-6 lg:min-h-0 lg:w-[480px] lg:bg-white lg:p-0">
-      <div className="w-full max-w-[400px] rounded-[14px] border border-[#E4E4E7] bg-white p-6 sm:p-8 lg:max-w-sm lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0">
-        <div className="mb-7 flex items-center gap-2.5 lg:hidden"><Logo size={34} /><span className="text-[17px] font-bold tracking-tight">Bastion<span className="text-[#9A9AA1]">OS</span></span></div>
+      <h2 className="text-[26px] font-semibold leading-[1.15] tracking-[-0.02em]">{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
+      <p className="mt-2 text-[13px] leading-relaxed text-[#6B6B72]">{isSignUp ? 'Set up the account your company will use to run operations.' : 'Sign in to your company’s operations workspace.'}</p>
 
-        <h2 className="text-[26px] font-semibold leading-[1.15] tracking-[-0.02em]">{isSignUp ? 'Create your account' : 'Welcome back'}</h2>
-        <p className="mt-2 text-[13px] leading-relaxed text-[#6B6B72]">{isSignUp ? 'Set up the account your company will use to run operations.' : 'Sign in to your company’s operations workspace.'}</p>
+      <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
+        {isSignUp && <label className={label}>Full name<input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" className={`${field} mt-1.5 normal-case tracking-normal`} placeholder="Adaeze Okafor" /></label>}
+        <label className={label}>Email<input required type="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" className={`${field} mt-1.5 normal-case tracking-normal`} placeholder="you@company.com" /></label>
+        <label className={label}>Password
+          <span className="relative mt-1.5 block">
+            <input required minLength={8} type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={isSignUp ? 'new-password' : 'current-password'} className={`${field} pr-11 normal-case tracking-normal`} placeholder="At least 8 characters" />
+            <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-[6px] text-[#6B6B72] hover:bg-[#F5F5F6]">
+              {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+          </span>
+        </label>
+        {error && <p role="alert" className="rounded-[8px] border border-[#E9CFC9] bg-[#FDECEA] px-3 py-2.5 text-[12px] leading-relaxed text-[#B42318]">{error}</p>}
+        <button disabled={pending} className="mt-1 h-11 w-full rounded-[8px] bg-[#2A2B2E] text-[12.5px] font-semibold text-white transition-colors hover:bg-[#3F4045] disabled:opacity-60">{pending ? (isSignUp ? 'Creating account…' : 'Signing in…') : isSignUp ? 'Create account' : 'Sign in to BastionOS'}</button>
+      </form>
 
-        <form onSubmit={submit} className="mt-7 flex flex-col gap-4">
-          {isSignUp && <label className={label}>Full name<input required value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" className={`${field} mt-1.5 normal-case tracking-normal`} placeholder="Adaeze Okafor" /></label>}
-          <label className={label}>Email<input required type="email" inputMode="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" className={`${field} mt-1.5 normal-case tracking-normal`} placeholder="you@company.com" /></label>
-          <label className={label}>Password
-            <span className="relative mt-1.5 block">
-              <input required minLength={8} type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={isSignUp ? 'new-password' : 'current-password'} className={`${field} pr-11 normal-case tracking-normal`} placeholder="At least 8 characters" />
-              <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-1 top-1/2 flex size-9 -translate-y-1/2 items-center justify-center rounded-[6px] text-[#6B6B72] hover:bg-[#F5F5F6]">
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </span>
-          </label>
-          {error && <p role="alert" className="rounded-[8px] border border-[#E9CFC9] bg-[#FDECEA] px-3 py-2.5 text-[12px] leading-relaxed text-[#B42318]">{error}</p>}
-          <button disabled={pending} className="mt-1 h-11 w-full rounded-[8px] bg-[#2A2B2E] text-[12.5px] font-semibold text-white transition-colors hover:bg-[#3F4045] disabled:opacity-60">{pending ? (isSignUp ? 'Creating account…' : 'Signing in…') : isSignUp ? 'Create account' : 'Sign in to BastionOS'}</button>
-        </form>
-
-        <p className="mt-6 text-center text-[12px] leading-relaxed text-[#6B6B72]">
-          {isSignUp ? <>Already have an account? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-in">Sign in</a></> : signUpAllowed ? <>New to BastionOS? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-up">Create an account</a></> : <>Accounts are created by your administrator.</>}
-        </p>
-      </div>
+      <p className="mt-6 text-center text-[12px] leading-relaxed text-[#6B6B72]">
+        {isSignUp ? <>Already have an account? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-in">Sign in</a></> : signUpAllowed ? <>New to BastionOS? <a className="font-semibold text-[#2A2B2E] underline underline-offset-4" href="/sign-up">Create an account</a></> : <>Accounts are created by your administrator.</>}
+      </p>
     </section>
   </main>
 }
