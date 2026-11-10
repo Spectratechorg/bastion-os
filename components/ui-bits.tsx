@@ -4,11 +4,15 @@ import { useEffect, useState } from 'react'
 import { LoaderCircle, X } from 'lucide-react'
 
 export function Badge({ value }: { value: unknown }) {
-  const text = String(value ?? '—')
-  const tone = /critical|high|suspended|flagged|outside|escalated|missed|unacknowledged|overdue/i.test(text) ? 'bg-[#FDECEA] text-[#B42318]'
-    : /medium|pending|open|inactive|in_progress|in progress|investigating|restock|due soon/i.test(text) ? 'bg-[#FEF3E2] text-[#B7791F]'
-    : /paid|completed|approved|active|resolved|inside|acknowledged|low/i.test(text) ? 'bg-[#E3F4EA] text-[#16794A]' : 'bg-[#EFEFF1] text-[#52525B]'
-  return <span className={`inline-flex items-center whitespace-nowrap rounded-[6px] px-2 py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.06em] ${tone}`}>{text.replace('_', ' ')}</span>
+  const text = String(value ?? '—').replace(/_/g, ' ')
+  const tone = /critical|high|suspended|flagged|outside|escalated|missed|unacknowledged|overdue/i.test(text)
+    ? { dot: 'bg-[#B42318]', text: 'text-[#8C2B1E]' }
+    : /medium|pending|open|inactive|in progress|investigating|restock|due soon/i.test(text)
+      ? { dot: 'bg-[#B7791F]', text: 'text-[#8A5A12]' }
+      : /paid|completed|approved|active|resolved|inside|acknowledged|low/i.test(text)
+        ? { dot: 'bg-[#16794A]', text: 'text-[#16794A]' }
+        : { dot: 'bg-[#9A9AA1]', text: 'text-[#6B6B72]' }
+  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[10.5px] font-medium capitalize ${tone.text}`}><span aria-hidden className={`size-1.5 rounded-full ${tone.dot}`} />{text}</span>
 }
 
 export function Avatar({ name, src, size = 36 }: { name: string; src?: string | null; size?: number }) {
@@ -36,10 +40,10 @@ export function Empty({ title, text }: { title: string; text?: string }) {
 export const inputClass = 'h-10 w-full rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-[13px] text-[#18181B] outline-none transition-colors placeholder:text-[#9A9AA1] focus:border-[#2A2B2E] focus:ring-2 focus:ring-[#2A2B2E]/10'
 export const btn = 'inline-flex h-10 items-center justify-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-[11.5px] font-semibold text-[#3F3F46] transition-colors hover:border-[#D4D4D8] hover:bg-[#F5F5F6] disabled:opacity-50 disabled:hover:bg-white sm:h-9'
 export const btnPrimary = 'inline-flex h-10 items-center justify-center gap-2 rounded-[8px] bg-[#2A2B2E] px-3.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-[#3F4045] disabled:opacity-50 sm:h-9'
-export const smallBtn = 'inline-flex min-h-[32px] items-center justify-center gap-1 rounded-[7px] border border-[#E4E4E7] bg-white px-2.5 text-[10.5px] font-semibold text-[#3F3F46] transition-colors hover:border-[#D4D4D8] hover:bg-[#F5F5F6] disabled:opacity-50'
+export const smallBtn = 'inline-flex min-h-[32px] items-center justify-center gap-1 rounded-[6px] px-2 text-[10.5px] font-medium text-[#3F3F46] transition-colors hover:bg-[#F0F0F1] disabled:opacity-40'
 
 export function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
-  return <label className="flex flex-col gap-1.5 text-[10px] font-semibold uppercase tracking-[0.07em] text-[#6B6B72]">{label}{children}{hint && <span className="text-[10px] font-normal normal-case tracking-normal text-[#9A9AA1]">{hint}</span>}</label>
+  return <label className="flex flex-col gap-1.5 text-[11.5px] font-medium text-[#3F3F46]">{label}{children}{hint && <span className="text-[10.5px] font-normal text-[#8A938B]">{hint}</span>}</label>
 }
 
 /** Right-hand drawer on desktop, full-screen on phones. */

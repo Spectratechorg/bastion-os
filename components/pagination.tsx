@@ -54,7 +54,7 @@ export function Pagination({ page, pageSize, total, onPage, onPageSize, busy = f
         </label>
       </div>
 
-      <nav aria-label="Pagination" className="flex items-center gap-1.5 self-end sm:self-auto">
+      {pages > 1 && <nav aria-label="Pagination" className="flex items-center gap-1.5 self-end sm:self-auto">
         <button type="button" aria-label="Previous page" className={arrow} onClick={() => onPage(page - 1)} disabled={busy || page <= 1}>
           <ChevronLeft className="size-4" />
         </button>
@@ -84,7 +84,7 @@ export function Pagination({ page, pageSize, total, onPage, onPageSize, busy = f
         <button type="button" aria-label="Next page" className={arrow} onClick={() => onPage(page + 1)} disabled={busy || page >= pages}>
           <ChevronRight className="size-4" />
         </button>
-      </nav>
+      </nav>}
     </div>
   )
 }

@@ -258,32 +258,22 @@ export function OverviewPage() {
     }
   }
 
+  const statusDot = (label: string, dot: string, text: string) => (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[10.5px] font-medium ${text}`}>
+      <span aria-hidden className={`size-1.5 rounded-full ${dot}`} />{label}
+    </span>
+  )
+
   const dangerBadge = (level: string) => {
-    if (level === 'high')
-      return <span className="rounded-full bg-[#FEE2E2] px-2 py-0.5 text-[10px] font-semibold text-[#DC2626]">High Risk</span>
-    if (level === 'medium')
-      return <span className="rounded-full bg-[#FEF3E2] px-2 py-0.5 text-[10px] font-semibold text-[#B7791F]">Medium</span>
-    return <span className="rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#16A34A]">Low</span>
+    if (level === 'high') return statusDot('High risk', 'bg-[#B42318]', 'text-[#8C2B1E]')
+    if (level === 'medium') return statusDot('Medium', 'bg-[#B7791F]', 'text-[#8A5A12]')
+    return statusDot('Low', 'bg-[#16794A]', 'text-[#16794A]')
   }
 
   const coverageBadge = (status: 'optimal' | 'understaffed' | 'vacant') => {
-    if (status === 'optimal')
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] px-2 py-0.5 text-[10px] font-semibold text-[#16A34A]">
-          <CheckCircle2 className="size-3" /> Staffed
-        </span>
-      )
-    if (status === 'understaffed')
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-[#FEF3E2] px-2 py-0.5 text-[10px] font-semibold text-[#B7791F]">
-          <AlertTriangle className="size-3" /> Understaffed
-        </span>
-      )
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#FEE2E2] px-2 py-0.5 text-[10px] font-semibold text-[#DC2626]">
-        <XCircle className="size-3" /> Vacant
-      </span>
-    )
+    if (status === 'optimal') return statusDot('Staffed', 'bg-[#16794A]', 'text-[#16794A]')
+    if (status === 'understaffed') return statusDot('Understaffed', 'bg-[#B7791F]', 'text-[#8A5A12]')
+    return statusDot('Vacant', 'bg-[#B42318]', 'text-[#8C2B1E]')
   }
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' })
@@ -314,13 +304,9 @@ export function OverviewPage() {
     <>
       <PageHeader
         title="Operations Overview"
-        subtitle="Live tactical telemetry, site coverage SLA, real-time map, and supervisor dispatch."
+        subtitle="Live activity, coverage and alerts across all sites."
         action={
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-medium text-[#18181B] shadow-xs border border-[#E4E4E7]">
-              <span className="size-2 rounded-full bg-[#16A34A] animate-pulse" />
-              Live · Supabase Synced
-            </span>
             <button onClick={() => void loadAll()} className={smallBtn}>
               <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -332,119 +318,44 @@ export function OverviewPage() {
       <ErrorBanner message={error} retry={() => void loadAll()} />
 
       {actionSuccess && (
-        <div className="mb-4 flex items-center justify-between rounded-xl bg-[#DCFCE7] px-4 py-2 text-xs font-medium text-[#16A34A] shadow-xs">
+        <div className="mb-4 flex items-center justify-between rounded-[8px] border border-[#E4E4E7] bg-white px-4 py-2 text-xs text-[#16794A]">
           <span>{actionSuccess}</span>
-          <button onClick={() => setActionSuccess('')} className="hover:opacity-75">
-            ✕
-          </button>
+          <button onClick={() => setActionSuccess('')} className="text-[10.5px] text-[#6B6B72] hover:text-[#18181B]">Dismiss</button>
         </div>
       )}
 
-      {/* 1. TACTICAL SLA READINESS & FLEET COVERAGE GAUGES */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Gauge 1: Shift Site Coverage */}
-        <div className="rounded-[18px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-[#71717A]">
-            <span>Shift Site Coverage</span>
-            <MapPin className="size-4 text-[#18181B]" />
-          </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-[#18181B]">
-              {admin ? `${admin.coverage.shiftCoverageRatio}%` : `${rate}%`}
-            </span>
-            <span className="text-xs text-[#71717A]">
-              {admin ? `${admin.coverage.staffedSitesCount}/${admin.coverage.activeSitesCount} staffed` : ''}
-            </span>
-          </div>
-          <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#F4F4F5]">
-            <div
-              className={`h-full transition-all duration-500 ${
-                (admin?.coverage.shiftCoverageRatio ?? rate) >= 80
-                  ? 'bg-[#16A34A]'
-                  : (admin?.coverage.shiftCoverageRatio ?? rate) >= 50
-                    ? 'bg-[#D97706]'
-                    : 'bg-[#DC2626]'
-              }`}
-              style={{ width: `${admin ? admin.coverage.shiftCoverageRatio : rate}%` }}
-            />
-          </div>
+      <section className="mb-5 flex flex-wrap items-end gap-x-10 gap-y-4 border-b border-[#E4E4E7] pb-4">
+        <div>
+          <p className="ws-num text-[22px] font-semibold leading-none text-[#18181B]">{admin ? `${admin.coverage.shiftCoverageRatio}%` : `${rate}%`}</p>
+          <p className="mt-1.5 text-[11px] text-[#6B6B72]">Shift coverage</p>
+          <p className="mt-0.5 text-[10px] text-[#9A9AA1]">{admin ? `${admin.coverage.staffedSitesCount}/${admin.coverage.activeSitesCount} sites staffed` : 'No site data'}</p>
         </div>
-
-        {/* Gauge 2: Guard Fleet Attendance */}
-        <div className="rounded-[18px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-[#71717A]">
-            <span>Guard Fleet Attendance</span>
-            <Users className="size-4 text-[#18181B]" />
-          </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-[#18181B]">
-              {checkedToday.size}/{activeGuards.length || '—'}
-            </span>
-            <span className="text-xs text-[#71717A]">{rate}% on duty</span>
-          </div>
-          <div className="mt-2.5 flex gap-2 text-[11px]">
-            <span className="rounded-md bg-[#DCFCE7] px-2 py-0.5 font-medium text-[#16A34A]">
-              {checkedToday.size} On Duty
-            </span>
-            <span className="rounded-md bg-[#FEF3E2] px-2 py-0.5 font-medium text-[#B7791F]">
-              {activeGuards.length - checkedToday.size} No-show
-            </span>
-          </div>
+        <div>
+          <p className="ws-num text-[22px] font-semibold leading-none text-[#18181B]">{checkedToday.size}/{activeGuards.length || '—'}</p>
+          <p className="mt-1.5 text-[11px] text-[#6B6B72]">Guards on duty</p>
+          <p className="mt-0.5 text-[10px] text-[#9A9AA1]">{rate}% of the fleet</p>
         </div>
-
-        {/* Gauge 3: Patrol Checkpoint SLA */}
-        <div className="rounded-[18px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-[#71717A]">
-            <span>Patrol Checkpoint SLA</span>
-            <Clock className="size-4 text-[#18181B]" />
-          </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold tracking-tight text-[#18181B]">
-              {admin ? `${admin.sla.patrolSlaPercent}%` : `${d?.patrols.summary.completedToday ?? 0}`}
-            </span>
-            <span className="text-xs text-[#71717A]">
-              {admin ? `${admin.sla.completedPatrols}/${admin.sla.expectedPatrols} scans` : 'completed today'}
-            </span>
-          </div>
-          <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-[#F4F4F5]">
-            <div
-              className="h-full bg-[#2A2B2E] transition-all duration-500"
-              style={{ width: `${admin ? admin.sla.patrolSlaPercent : 50}%` }}
-            />
-          </div>
+        <div>
+          <p className="ws-num text-[22px] font-semibold leading-none text-[#18181B]">{admin ? `${admin.sla.patrolSlaPercent}%` : `${d?.patrols.summary.completedToday ?? 0}`}</p>
+          <p className="mt-1.5 text-[11px] text-[#6B6B72]">Patrol SLA</p>
+          <p className="mt-0.5 text-[10px] text-[#9A9AA1]">{admin ? `${admin.sla.completedPatrols}/${admin.sla.expectedPatrols} scans` : 'Completed today'}</p>
         </div>
-
-        {/* Gauge 4: Open Exceptions & Breaches */}
-        <div className="rounded-[18px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-medium text-[#71717A]">
-            <span>Critical Exceptions</span>
-            <ShieldAlert className="size-4 text-[#DC2626]" />
-          </div>
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span
-              className={`text-2xl font-bold tracking-tight ${
-                (admin?.exceptions.length ?? openAlerts.length) > 0 ? 'text-[#DC2626]' : 'text-[#16A34A]'
-              }`}
-            >
-              {admin ? admin.exceptions.length : openAlerts.length}
-            </span>
-            <span className="text-xs text-[#71717A]">requiring action</span>
-          </div>
-          <div className="mt-2.5 text-[11px] text-[#71717A]">
-            {(admin?.exceptions.length ?? openAlerts.length) === 0 ? 'All perimeters secured' : 'Active breaches logged'}
-          </div>
+        <div>
+          <p className={`ws-num text-[22px] font-semibold leading-none ${(admin?.exceptions.length ?? openAlerts.length) > 0 ? 'text-[#B42318]' : 'text-[#18181B]'}`}>{admin ? admin.exceptions.length : openAlerts.length}</p>
+          <p className="mt-1.5 text-[11px] text-[#6B6B72]">Critical exceptions</p>
+          <p className="mt-0.5 text-[10px] text-[#9A9AA1]">{(admin?.exceptions.length ?? openAlerts.length) === 0 ? 'All clear' : 'Requires action'}</p>
         </div>
-      </div>
+      </section>
 
       {/* 2. PRIMARY OPERATIONS GRID */}
       <div className="grid items-start gap-4 xl:grid-cols-[1.55fr_1fr]">
         {/* LEFT COLUMN: LIVE MAP & SITE COVERAGE MATRIX */}
         <div className="space-y-4 min-w-0">
           {/* Live Map */}
-          <section className="flex min-w-0 flex-col overflow-hidden rounded-[20px] border border-[#E4E4E7] bg-white shadow-xs">
+          <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[#E4E4E7] bg-white">
             <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Live Tactical Map</h2>
+                <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Live map</h2>
                 <p className="mt-0.5 text-xs text-[#6B6B72]">
                   {d ? `${d.sites.length} site${d.sites.length === 1 ? '' : 's'} · guards update live as coordinates sync` : 'Loading…'}
                 </p>
@@ -487,21 +398,21 @@ export function OverviewPage() {
           </section>
 
           {/* Site Coverage & Risk Matrix Table */}
-          <section className="rounded-[20px] border border-[#E4E4E7] bg-white p-5 shadow-xs">
+          <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-[#18181B]">Site Coverage &amp; Perimeter Matrix</h2>
-                <p className="text-xs text-[#71717A]">Real-time site post requirements vs. on-duty guards present.</p>
+                <h2 className="text-sm font-semibold text-[#18181B]">Site coverage</h2>
+                <p className="text-xs text-[#6B6B72]">Real-time site post requirements vs. on-duty guards present.</p>
               </div>
               <Link href="/sites" className={smallBtn}>
-                Manage Sites
+                Manage sites
               </Link>
             </div>
 
             <div className="mt-3.5 overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-[#E4E4E7] text-[11px] font-semibold text-[#71717A]">
+                  <tr className="border-b border-[#E4E4E7] text-[11px] font-semibold text-[#6B6B72]">
                     <th className="pb-2.5">Site Name</th>
                     <th className="pb-2.5">Risk Level</th>
                     <th className="pb-2.5">Geofence</th>
@@ -513,7 +424,7 @@ export function OverviewPage() {
                 <tbody className="divide-y divide-[#F4F4F5]">
                   {!admin || admin.coverage.matrix.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-xs text-[#71717A]">
+                      <td colSpan={6} className="py-6 text-center text-xs text-[#6B6B72]">
                         No active sites registered. Go to Sites to create your first security perimeter.
                       </td>
                     </tr>
@@ -522,10 +433,10 @@ export function OverviewPage() {
                       <tr key={site.id} className="hover:bg-[#FAFAFA]">
                         <td className="py-2.5 font-medium text-[#18181B]">{site.name}</td>
                         <td className="py-2.5">{dangerBadge(site.dangerLevel)}</td>
-                        <td className="py-2.5 text-[#71717A]">{site.geofenceRadius}m radius</td>
+                        <td className="py-2.5 text-[#6B6B72]">{site.geofenceRadius}m radius</td>
                         <td className="py-2.5">
                           <span className="font-semibold text-[#18181B]">{site.presentCount}</span>
-                          <span className="text-[#71717A]"> / {site.assignedCount} assigned</span>
+                          <span className="text-[#6B6B72]"> / {site.assignedCount} assigned</span>
                         </td>
                         <td className="py-2.5">{coverageBadge(site.coverageStatus)}</td>
                         <td className="py-2.5 text-right">
@@ -533,7 +444,7 @@ export function OverviewPage() {
                             onClick={() => setSiteId(site.id)}
                             className="rounded-md border border-[#E4E4E7] px-2 py-0.5 text-[10.5px] font-medium text-[#18181B] hover:bg-[#F4F4F5]"
                           >
-                            Zoom on Map
+                            View on map
                           </button>
                         </td>
                       </tr>
@@ -546,7 +457,7 @@ export function OverviewPage() {
 
           {/* Attendance by Site Today & Latest Activity Stream */}
           <div className="grid gap-4 lg:grid-cols-2">
-            <section className="rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+            <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Attendance by Site Today</h2>
                 <Link href="/attendance" className="text-xs font-semibold text-zinc-900 underline">
@@ -574,9 +485,9 @@ export function OverviewPage() {
               </ul>
             </section>
 
-            <section className="rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+            <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Latest Operations Stream</h2>
+                <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Latest activity</h2>
                 <Link href="/reports" className="text-xs font-semibold text-zinc-900 underline">
                   Reports
                 </Link>
@@ -602,18 +513,18 @@ export function OverviewPage() {
           {/* Supervisor Rapid Actions Panel */}
           <div className="space-y-3.5">
             {/* Action 1: Guard App Security Access Code */}
-            <div className="rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+            <div className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <KeyRound className="size-4 text-[#18181B]" />
-                  <h3 className="text-xs font-bold tracking-tight text-[#18181B] uppercase">Guard App Access Lockout</h3>
+                  <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Guard app code</h3>
                 </div>
                 <Badge value="Security" />
               </div>
-              <p className="mt-1 text-xs text-[#71717A]">
-                Shared code for phone scan access. Rotate if a guard loses a device.
+              <p className="mt-1 text-xs text-[#6B6B72]">
+                Shared code for phone scan access. Replace it if a device is lost.
               </p>
-              <div className="mt-3 flex items-center justify-between rounded-xl bg-[#F4F4F5] p-2.5">
+              <div className="mt-3 flex items-center justify-between rounded-[8px] bg-[#F4F4F5] p-2.5">
                 <span className="font-mono text-sm font-bold tracking-wider text-[#18181B]">
                   {admin?.organization.guardAppCode ?? 'GRD-....-....'}
                 </span>
@@ -628,50 +539,50 @@ export function OverviewPage() {
               </div>
             </div>
 
-            {/* Action 2: Dispatch Tactical Broadcast */}
-            <div className="rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+            {/* Action 2: Broadcast */}
+            <div className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center gap-2">
-                <Radio className="size-4 text-[#DC2626]" />
-                <h3 className="text-xs font-bold tracking-tight text-[#18181B] uppercase">Dispatch Tactical Broadcast</h3>
+                <Radio className="size-4 text-[#6B6B72]" />
+                <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Broadcast</h3>
               </div>
               <form onSubmit={handleBroadcast} className="mt-2.5 space-y-2">
                 <input
                   type="text"
-                  placeholder="Alert headline (e.g. Heightened Alert: Gate 3)"
+                  placeholder="Alert headline"
                   value={broadcastTitle}
                   onChange={(e) => setBroadcastTitle(e.target.value)}
-                  className="w-full rounded-xl border border-[#E4E4E7] px-3 py-1.5 text-xs text-[#18181B] placeholder-[#A1A1AA] focus:border-[#18181B] focus:outline-hidden"
+                  className="w-full rounded-[8px] border border-[#E4E4E7] px-3 py-1.5 text-xs text-[#18181B] placeholder-[#A1A1AA] focus:border-[#18181B] focus:outline-hidden"
                 />
                 <textarea
                   rows={2}
                   placeholder="Operational directive to supervisors..."
                   value={broadcastMessage}
                   onChange={(e) => setBroadcastMessage(e.target.value)}
-                  className="w-full resize-none rounded-xl border border-[#E4E4E7] px-3 py-1.5 text-xs text-[#18181B] placeholder-[#A1A1AA] focus:border-[#18181B] focus:outline-hidden"
+                  className="w-full resize-none rounded-[8px] border border-[#E4E4E7] px-3 py-1.5 text-xs text-[#18181B] placeholder-[#A1A1AA] focus:border-[#18181B] focus:outline-hidden"
                 />
                 <button
                   type="submit"
                   disabled={broadcasting || !broadcastTitle.trim()}
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[#DC2626] py-1.5 text-xs font-semibold text-white hover:bg-[#B91C1C] disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-[8px] bg-[#2A2B2E] py-1.5 text-xs font-semibold text-white hover:bg-[#3F4045] disabled:opacity-50"
                 >
                   <Send className="size-3" />
-                  {broadcasting ? 'Dispatching…' : 'Broadcast to Units'}
+                  {broadcasting ? 'Dispatching…' : 'Send broadcast'}
                 </button>
               </form>
             </div>
 
-            {/* Action 3: Napoleon Tactical AI Widget */}
-            <div className="rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+            {/* Action 3: Napoleon Widget */}
+            <div className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="size-4 text-[#18181B]" />
-                  <h3 className="text-xs font-bold tracking-tight text-[#18181B] uppercase">Napoleon Tactical AI</h3>
+                  <h3 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Napoleon</h3>
                 </div>
                 <Link href="/napoleon" className="text-[11px] font-semibold text-[#18181B] hover:underline">
-                  Full Page →
+                  Open →
                 </Link>
               </div>
-              <p className="mt-1 text-xs text-[#71717A]">DeepSeek operational intelligence on personnel and posts.</p>
+              <p className="mt-1 text-xs text-[#6B6B72]">Ask about guards, sites and coverage.</p>
 
               <div className="mt-2.5 flex flex-wrap gap-1">
                 {[
@@ -687,7 +598,7 @@ export function OverviewPage() {
                       void handleAskNapoleon(s)
                     }}
                     disabled={aiLoading}
-                    className="rounded-md border border-[#E4E4E7] bg-[#F4F4F5] px-2 py-0.5 text-[10px] font-medium text-[#3F3F46] hover:bg-[#E4E4E7] disabled:opacity-50"
+                    className="rounded-[6px] px-2 py-1 text-[10.5px] font-medium text-[#3F3F46] hover:bg-[#F0F0F1] disabled:opacity-50"
                   >
                     {s}
                   </button>
@@ -706,31 +617,31 @@ export function OverviewPage() {
                   placeholder="Ask Napoleon about security operations…"
                   value={aiPrompt}
                   onChange={(e) => setAiPrompt(e.target.value)}
-                  className="w-full rounded-xl border border-[#E4E4E7] px-3 py-1.5 text-xs text-[#18181B] placeholder-[#A1A1AA] focus:border-[#18181B] focus:outline-hidden"
+                  className="w-full rounded-[8px] border border-[#E4E4E7] px-3 py-1.5 text-xs text-[#18181B] placeholder-[#A1A1AA] focus:border-[#18181B] focus:outline-hidden"
                 />
                 <button
                   type="submit"
                   disabled={aiLoading || !aiPrompt.trim()}
-                  className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#2A2B2E] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F4045] disabled:opacity-50"
+                  className="inline-flex shrink-0 items-center justify-center rounded-[8px] bg-[#2A2B2E] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F4045] disabled:opacity-50"
                 >
                   {aiLoading ? <RefreshCw className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
                 </button>
               </form>
 
               {aiLoading && (
-                <p className="mt-2 text-[11px] text-[#71717A] animate-pulse">
+                <p className="mt-2 text-[11px] text-[#6B6B72] animate-pulse">
                   Napoleon is analyzing operational records…
                 </p>
               )}
 
               {aiError && (
-                <div className="mt-2 rounded-xl border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+                <div className="mt-2 rounded-[8px] border border-red-200 bg-red-50 p-2 text-xs text-red-800">
                   {aiError}
                 </div>
               )}
 
               {aiAnswer && (
-                <div className="mt-2.5 max-h-48 overflow-y-auto rounded-xl border border-[#E4E4E7] bg-[#FAFAFA] p-2.5 text-xs leading-relaxed text-[#18181B] whitespace-pre-wrap">
+                <div className="mt-2.5 max-h-48 overflow-y-auto rounded-[8px] border border-[#E4E4E7] bg-[#FAFAFA] p-2.5 text-xs leading-relaxed text-[#18181B] whitespace-pre-wrap">
                   {aiAnswer}
                 </div>
               )}
@@ -738,15 +649,15 @@ export function OverviewPage() {
           </div>
 
           {/* Critical Exception Feed */}
-          <section className="flex flex-col rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+          <section className="flex flex-col rounded-[12px] border border-[#E4E4E7] bg-white p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertOctagon className="size-4 text-[#DC2626]" />
-                <h2 className="text-xs font-bold tracking-tight text-[#18181B] uppercase">
-                  Critical Exceptions &amp; Ticker
+                <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">
+                  Critical exceptions
                 </h2>
               </div>
-              <span className="text-xs text-[#71717A]">{admin?.exceptions.length ?? openAlerts.length} active</span>
+              <span className="text-xs text-[#6B6B72]">{admin?.exceptions.length ?? openAlerts.length} active</span>
             </div>
 
             <div className="mt-3 space-y-2">
@@ -754,13 +665,13 @@ export function OverviewPage() {
                 <div className="flex flex-col items-center justify-center py-6 text-center">
                   <CheckCircle2 className="size-6 text-[#16A34A]" />
                   <p className="mt-1 text-xs font-medium text-[#18181B]">Zero Critical Exceptions</p>
-                  <p className="text-[11px] text-[#71717A]">All patrols, check-ins, and geofences are compliant.</p>
+                  <p className="text-[11px] text-[#6B6B72]">All patrols, check-ins, and geofences are compliant.</p>
                 </div>
               ) : (
                 admin.exceptions.slice(0, 6).map((ex) => (
                   <div
                     key={ex.id}
-                    className="flex items-start justify-between rounded-xl border border-[#FEE2E2] bg-[#FEF2F2]/50 p-2.5 text-xs"
+                    className="flex items-start justify-between rounded-[8px] border border-[#FEE2E2] bg-[#FEF2F2]/50 p-2.5 text-xs"
                   >
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-1.5">
@@ -790,9 +701,9 @@ export function OverviewPage() {
           </section>
 
           {/* Open Incidents Severity Strip */}
-          <section className="rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+          <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-bold tracking-tight text-[#18181B] uppercase">Open Incidents by Severity</h2>
+              <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Open Incidents by Severity</h2>
               <Link href="/incidents" className="text-xs font-semibold text-zinc-900 underline">
                 Incidents
               </Link>
@@ -811,25 +722,25 @@ export function OverviewPage() {
           </section>
 
           {/* Supervisor Security Audit Trail */}
-          <section className="rounded-[20px] border border-[#E4E4E7] bg-white p-4 shadow-xs">
+          <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Activity className="size-3.5 text-[#18181B]" />
-                <h2 className="text-xs font-bold tracking-tight text-[#18181B] uppercase">Security Audit Trail</h2>
+                <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Security Audit Trail</h2>
               </div>
-              <Link href="/reports" className="text-[11px] text-[#71717A] hover:underline">
+              <Link href="/reports" className="text-[11px] text-[#6B6B72] hover:underline">
                 Full Log →
               </Link>
             </div>
             <div className="mt-2.5 divide-y divide-[#F4F4F5]">
               {!admin || admin.auditLogs.length === 0 ? (
-                <p className="py-3 text-center text-xs text-[#71717A]">No security events logged today.</p>
+                <p className="py-3 text-center text-xs text-[#6B6B72]">No security events logged today.</p>
               ) : (
                 admin.auditLogs.slice(0, 4).map((log) => (
                   <div key={log.id} className="flex items-center justify-between py-2 text-xs">
                     <div className="truncate pr-2">
                       <span className="font-medium text-[#18181B]">{log.title}</span>
-                      <span className="ml-1.5 text-[11px] text-[#71717A] truncate">{log.body}</span>
+                      <span className="ml-1.5 text-[11px] text-[#6B6B72] truncate">{log.body}</span>
                     </div>
                     <span className="shrink-0 text-[10px] text-[#A1A1AA]">
                       {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

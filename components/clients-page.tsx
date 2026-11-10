@@ -151,11 +151,11 @@ export function ClientsPage() {
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <div className="rounded-lg bg-[#F5F5F6] p-2.5 text-[11px]">
-                <b className="block text-[10px] uppercase tracking-wide text-[#6B6B72]">Sites protected ({clientSites.length})</b>
+                <b className="block text-[10px] font-medium text-[#8A938B]">Sites protected ({clientSites.length})</b>
                 {clientSites.length === 0 ? <span className="text-[#6B6B72]">No sites linked yet.</span> : <span className="text-[#3F3F46]">{clientSites.map((site) => site.name).join(', ')}</span>}
               </div>
               <div className="rounded-lg bg-[#F5F5F6] p-2.5 text-[11px]">
-                <b className="block text-[10px] uppercase tracking-wide text-[#6B6B72]">Guards deployed ({deployed.length})</b>
+                <b className="block text-[10px] font-medium text-[#8A938B]">Guards deployed ({deployed.length})</b>
                 {deployed.length === 0 ? <span className="text-[#6B6B72]">Nobody deployed to these sites yet.</span> : <span className="text-[#3F3F46]">{deployed.map((guard) => guard.name).join(', ')}</span>}
               </div>
             </div>

@@ -157,7 +157,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
             <kbd className="hidden whitespace-nowrap rounded-[4px] border border-[#E4E4E7] bg-[#F5F5F6] px-1.5 py-0.5 font-mono text-[9px] text-[#6B6B72] sm:block">Ctrl K</kbd>
             {searchMessage && <span role="status" className="hidden max-w-[260px] truncate text-[10px] text-[#6B6B72] md:block">{searchMessage}</span>}
           </form>
-          {syncIssue && <button onClick={() => void refreshAlerts()} title="The alert count could not refresh. Click to retry." className="hidden h-7 items-center gap-1.5 rounded-[6px] border border-[#F3E3BF] bg-[#FEF3E2] px-2 text-[9.5px] font-semibold uppercase tracking-[0.04em] text-[#B7791F] sm:inline-flex"><span aria-hidden className="size-1.5 rounded-[2px] bg-[#B07A18]" />Sync issue</button>}
+          {syncIssue && <button onClick={() => void refreshAlerts()} title="The alert count could not refresh. Click to retry." className="hidden h-7 items-center gap-1.5 rounded-[6px] border border-[#F3E3BF] bg-[#FEF3E2] px-2 text-[9.5px] font-semibold tracking-[0.01em] text-[#8A5A12] sm:inline-flex"><span aria-hidden className="size-1.5 rounded-[2px] bg-[#B07A18]" />Sync issue</button>}
           <Link href="/alerts" aria-label={`${unread} unacknowledged alerts`} className="relative flex size-9 items-center justify-center rounded-[7px] text-[#6B6B72] transition-colors hover:bg-[#F0F2EC]"><Bell className="size-[16px]" strokeWidth={1.75} />{unread > 0 && <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-[#B3402A]" />}</Link>
           <Link href="/napoleon" className="flex h-9 items-center gap-2 whitespace-nowrap rounded-[7px] bg-[#2A2B2E] px-3 text-[11px] font-semibold text-white transition-colors hover:bg-[#3F4045]"><Sparkles className="size-3.5" strokeWidth={1.75} /><span className="hidden sm:inline">Ask Napoleon</span></Link>
         </header>
@@ -197,5 +197,12 @@ export function PageAction({ children, primary = false, href, onClick }: { child
 }
 
 export function StatStrip({ stats }: { stats: [string, string][] }) {
-  return <section className="mb-5 grid grid-cols-2 divide-y divide-[#E4E4E7] overflow-hidden rounded-[14px] border border-[#E4E4E7] bg-white sm:grid-cols-4 sm:divide-x sm:divide-y-0">{stats.map(([value, label]) => <div key={label} className="px-4 py-3.5"><p className="text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#6B6B72]">{label}</p><p className="ws-num mt-1 text-[22px] font-semibold leading-none text-[#18181B]">{value}</p></div>)}</section>
+  return <section className="mb-5 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-[#E4E4E7] pb-4">
+    {stats.map(([value, label]) => (
+      <div key={label} className="flex items-baseline gap-2">
+        <span className="ws-num text-[17px] font-semibold leading-none text-[#18181B]">{value}</span>
+        <span className="text-[11px] leading-none text-[#6B6B72]">{label}</span>
+      </div>
+    ))}
+  </section>
 }
