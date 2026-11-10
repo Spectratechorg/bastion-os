@@ -7,6 +7,8 @@ import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrima
 import { ASSIGNABLE_ROLES, EDITABLE_ROLES, PERMISSIONS, ROLE_LABELS } from '@/lib/permissions'
 import { api, when } from '@/lib/client'
 import { GuardAppSettings } from '@/components/guard-app-settings'
+import { AccountSettings } from '@/components/account-settings'
+import { SystemStatus } from '@/components/system-status'
 import { FINANCE_ENABLED } from '@/lib/features'
 
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -76,7 +78,7 @@ function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: () =
 }
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<'org' | 'team' | 'roles' | 'guardapp'>('org')
+  const [tab, setTab] = useState<'organisation' | 'operations' | 'team' | 'roles' | 'account' | 'system'>('organisation')
   const [team, setTeam] = useState<TeamData | null>(null); const [matrix, setMatrix] = useState<Matrix | null>(null); const [problem, setProblem] = useState('')
   const [editing, setEditing] = useState<Member | 'new' | null>(null); const [viewing, setViewing] = useState<Member | null>(null)
   const refreshTeam = useCallback(async () => { try { const [t, m] = await Promise.all([api<TeamData>('/api/team'), api<Matrix>('/api/permissions')]); setTeam(t); setMatrix(m); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to load your team.') } }, [])
@@ -87,15 +89,17 @@ export function SettingsPage() {
     setMatrix({ ...matrix, matrix: { ...matrix.matrix, [role]: { ...matrix.matrix[role], [permission]: next } } })
     try { await api('/api/permissions', { method: 'PATCH', json: { role, permission, allowed: next } }); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to save.'); void refreshTeam() }
   }
-  const tabs = [['org', 'Organisation & defaults'], ['team', 'Team members'], ['roles', 'Roles & permissions'], ['guardapp', 'Guard app & patrol shift']] as const
+  const tabs = [['organisation', 'Organisation'], ['operations', 'Operations'], ['team', 'Team'], ['roles', 'Roles & permissions'], ['account', 'Account'], ['system', 'System']] as const
   return <>
-    <PageHeader title="Settings" subtitle="Your organisation, the defaults new records start with, your team and what each role can do.">{tab === 'team' && team?.canManage && <button className={btnPrimary} onClick={() => setEditing('new')}><Plus className="size-4" />Add user</button>}</PageHeader>
+    <PageHeader title="Settings" subtitle="Company details, operational defaults, team access and system status.">{tab === 'team' && team?.canManage && <button className={btnPrimary} onClick={() => setEditing('new')}><Plus className="size-4" />Add user</button>}</PageHeader>
     <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
-    <nav className="grid grid-cols-2 gap-1 sm:flex sm:overflow-x-auto lg:flex-col">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`min-h-[44px] min-w-0 rounded-[10px] px-3 py-2 text-left text-[12px] leading-tight sm:whitespace-nowrap lg:px-4 lg:text-[13px] ${tab === key ? 'bg-white font-semibold shadow-sm' : 'text-[#52525B] hover:bg-white/60'}`}>{label}</button>)}</nav>
+    <nav className="grid grid-cols-2 gap-1 sm:flex sm:overflow-x-auto lg:sticky lg:top-[84px] lg:flex-col lg:self-start">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`min-h-[44px] min-w-0 rounded-[10px] px-3 py-2 text-left text-[12px] leading-tight sm:whitespace-nowrap lg:px-4 lg:text-[13px] ${tab === key ? 'bg-white font-semibold shadow-sm' : 'text-[#52525B] hover:bg-white/60'}`}>{label}</button>)}</nav>
     <div className="min-w-0">
     <ErrorBanner message={problem} retry={() => void refreshTeam()} />
-    {tab === 'org' && <OrgSettings />}
-    {tab === 'guardapp' && <GuardAppSettings />}
+    {tab === 'organisation' && <OrgSettings />}
+    {tab === 'operations' && <GuardAppSettings />}
+    {tab === 'account' && <AccountSettings />}
+    {tab === 'system' && <SystemStatus />}
     {tab === 'team' && <section className="overflow-hidden ws-card">
       {!team ? <Spinner /> : <ul className="divide-y divide-[#EFEFF1]">{team.members.map((m) => <li key={m.id} className="flex flex-wrap items-center gap-3 p-4 text-xs"><button onClick={() => setViewing(m)} aria-label={`Open ${m.name}'s profile`} className="flex min-w-0 flex-1 items-center gap-3 text-left"><Avatar name={m.name} src={m.image} size={36} /><span className="min-w-0 flex-1"><b className="block truncate text-[13px] font-semibold">{m.name}{m.userId === team.me && <span className="ml-1.5 font-normal text-[#6B6B72]">(you)</span>}</b><span className="block truncate text-[#6B6B72]">{m.email}</span></span></button><Badge value={ROLE_LABELS[m.role] ?? m.role} />{team.canManage && <button className={smallBtn} onClick={() => setEditing(m)}>Edit</button>}</li>)}</ul>}
       {team && !team.canManage && <p className="border-t border-[#EBEFE7] p-4 text-[11px] text-[#6B6B72]">Only the owner or an administrator can add or edit people.</p>}
@@ -112,21 +116,46 @@ export function SettingsPage() {
 }
 
 
+function SettingRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return <div className="grid gap-2 px-5 py-4 sm:grid-cols-[1fr_280px] sm:items-center sm:gap-6">
+    <div><p className="text-[12.5px] font-medium text-[#18181B]">{label}</p>{hint && <p className="mt-0.5 text-[11px] leading-relaxed text-[#6B6B72]">{hint}</p>}</div>
+    <div>{children}</div>
+  </div>
+}
+
 function OrgSettings() {
   const [d, setD] = useState<{ name: string; settings: { phone: string; address: string; defaultGeofence: number; defaultSalary: number }; canEdit: boolean } | null>(null)
   const [v, setV] = useState({ name: '', phone: '', address: '', defaultGeofence: '100', defaultSalary: '150000' }); const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
   useEffect(() => { api<NonNullable<typeof d>>('/api/settings').then((r) => { setD(r); setV({ name: r.name, phone: r.settings.phone, address: r.settings.address, defaultGeofence: String(r.settings.defaultGeofence), defaultSalary: String(r.settings.defaultSalary) }) }).catch((e) => setErr(e instanceof Error ? e.message : 'Unable to load settings.')) }, [])
-  async function save(e: FormEvent) { e.preventDefault(); setBusy(true); setErr(''); setMsg(''); try { await api('/api/settings', { method: 'PATCH', json: v }); setMsg('Saved. The company name updates in the sidebar next time the page loads.') } catch (x) { setErr(x instanceof Error ? x.message : 'Unable to save.') } finally { setBusy(false) } }
+  async function save(e: FormEvent) { e.preventDefault(); setBusy(true); setErr(''); setMsg(''); try { await api('/api/settings', { method: 'PATCH', json: v }); setMsg('Saved. The company name updates in the sidebar the next time the page loads.') } catch (x) { setErr(x instanceof Error ? x.message : 'Unable to save.') } finally { setBusy(false) } }
   if (!d && !err) return <section className="ws-card"><Spinner /></section>
   const off = !d?.canEdit
+
   return <form onSubmit={save} className="grid gap-4">
     <ErrorBanner message={err} />
-    <section className="ws-card p-5"><h2 className="text-[15px] font-semibold">Organisation</h2><p className="mt-0.5 text-xs text-[#6B6B72]">How your company appears in BastionOS and on exports.</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="Company name"><input required minLength={2} disabled={off} className={inputClass} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></Field><Field label="Phone"><input disabled={off} className={inputClass} value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} /></Field><div className="sm:col-span-2"><Field label="Office address"><input disabled={off} className={inputClass} value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} /></Field></div></div></section>
-    <section className="ws-card p-5"><h2 className="text-[15px] font-semibold">Defaults for new records</h2><p className="mt-0.5 text-xs text-[#6B6B72]">These pre-fill the forms and drive payroll. Existing records are not changed.</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2"><Field label="New site geofence (m)" hint="Check-ins beyond this are flagged"><input type="number" min={10} max={5000} disabled={off} className={inputClass} value={v.defaultGeofence} onChange={(e) => setV({ ...v, defaultGeofence: e.target.value })} /></Field><Field label="New guard salary (₦)"><input type="number" min={0} disabled={off} className={inputClass} value={v.defaultSalary} onChange={(e) => setV({ ...v, defaultSalary: e.target.value })} /></Field></div>
-      <p className="mt-3 text-[11px] text-[#6B6B72]">Patrol checkpoints follow the shift set under Patrol shift below.</p></section>
-    <div className="flex items-center gap-3"><button className={btnPrimary} disabled={busy || off}>{busy ? 'Saving…' : 'Save settings'}</button>{off && <span className="text-[11px] text-[#6B6B72]">Only the owner or an administrator can change these.</span>}{msg && <span role="status" className="text-xs text-[#16794A]">{msg}</span>}</div>
+
+    <section className="ws-card">
+      <header className="border-b border-[#E4E4E7] px-5 py-4"><h2 className="text-[14px] font-semibold tracking-[-0.01em]">Company profile</h2><p className="mt-0.5 text-xs text-[#6B6B72]">How your company appears in the sidebar, on exports and in emails.</p></header>
+      <div className="divide-y divide-[#EFEFF1]">
+        <SettingRow label="Company name" hint="Shown to your team and on every export."><input required minLength={2} disabled={off} className={inputClass} value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} /></SettingRow>
+        <SettingRow label="Phone" hint="A number your team can reach operations on."><input disabled={off} className={inputClass} value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} /></SettingRow>
+        <SettingRow label="Office address" hint="Used on reports and client records."><input disabled={off} className={inputClass} value={v.address} onChange={(e) => setV({ ...v, address: e.target.value })} /></SettingRow>
+      </div>
+    </section>
+
+    <section className="ws-card">
+      <header className="border-b border-[#E4E4E7] px-5 py-4"><h2 className="text-[14px] font-semibold tracking-[-0.01em]">Defaults for new records</h2><p className="mt-0.5 text-xs text-[#6B6B72]">These pre-fill new guards and sites. Existing records stay as they are.</p></header>
+      <div className="divide-y divide-[#EFEFF1]">
+        <SettingRow label="Site geofence" hint="Check-ins outside this radius are flagged for review."><div className="flex items-center gap-2"><input type="number" min={10} max={5000} disabled={off} className={inputClass} value={v.defaultGeofence} onChange={(e) => setV({ ...v, defaultGeofence: e.target.value })} /><span className="text-xs text-[#6B6B72]">metres</span></div></SettingRow>
+        <SettingRow label="Guard salary" hint="Monthly base pay used when a guard is registered."><div className="flex items-center gap-2"><span className="text-xs text-[#6B6B72]">₦</span><input type="number" min={0} disabled={off} className={inputClass} value={v.defaultSalary} onChange={(e) => setV({ ...v, defaultSalary: e.target.value })} /></div></SettingRow>
+      </div>
+    </section>
+
+    <div className="flex flex-wrap items-center gap-3">
+      <button className={btnPrimary} disabled={busy || off}>{busy ? 'Saving…' : 'Save changes'}</button>
+      {off && <span className="text-[11px] text-[#6B6B72]">Only the owner or an administrator can change these.</span>}
+      {msg && <span role="status" className="text-xs text-[#16794A]">{msg}</span>}
+    </div>
   </form>
 }
 

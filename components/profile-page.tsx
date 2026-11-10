@@ -76,7 +76,7 @@ export function ProfilePage() {
       </form>
     </section>
 
-    <section className="mt-4 max-w-xl ws-card p-5 sm:p-6">
+    <section id="password" className="mt-4 max-w-xl ws-card p-5 sm:p-6">
       <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Change password</h2>
       <p className="mt-1 text-xs leading-relaxed text-[#6B6B72]">Use this after signing in with a temporary password from your administrator.</p>
       <ErrorBanner message={pwError} />
