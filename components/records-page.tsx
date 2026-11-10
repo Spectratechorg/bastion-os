@@ -239,6 +239,7 @@ export function RecordsPage({ section }: { section: Section }) {
   const [filter, setFilter] = useState('all'); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
   const [currentPage, setCurrentPage] = useState(1); const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0); const [serverStats, setServerStats] = useState<Record<string, number> | null>(null)
+  const [mapGuards, setMapGuards] = useState<Row[]>([])
   const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'guard-detail' | 'incident' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
 
   const load = useCallback(async () => {
@@ -259,6 +260,12 @@ export function RecordsPage({ section }: { section: Section }) {
   useEffect(() => { const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
   useEffect(() => { const q = new URLSearchParams(window.location.search).get('q'); if (q) setQuery(q) }, [])
   useEffect(() => { const timer = window.setTimeout(() => { setTerm(query.trim()); setCurrentPage(1) }, 300); return () => window.clearTimeout(timer) }, [query])
+  useEffect(() => {
+    if (section !== 'guards') return
+    let live = true
+    api<Row[]>('/api/operations?section=guards').then((rows) => { if (live) setMapGuards(rows) }).catch(() => undefined)
+    return () => { live = false }
+  }, [section])
 
   const ctx: Ctx = useMemo(() => ({
     guards, sites,
@@ -315,6 +322,13 @@ export function RecordsPage({ section }: { section: Section }) {
       <button onClick={() => { setLoading(true); void load() }} className={btn}><RefreshCw className="size-3.5" />Refresh</button>
     </div>
     <ErrorBanner message={error} retry={() => void load()} />
+    {section === 'guards' && <section className="mb-4 overflow-hidden ws-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E4E4E7] px-4 py-3">
+        <div><h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Guard locations</h2><p className="mt-0.5 text-xs text-[#6B6B72]">Every registered guard — hollow markers have not scanned yet, so they sit at their assigned site.</p></div>
+        <span className="text-[11px] text-[#6B6B72]">{mapGuards.filter((guard) => guard.lastCheckIn && guard.lastLatitude != null && guard.lastLongitude != null).length} scanned · {mapGuards.filter((guard) => guard.status === 'active').length} active</span>
+      </div>
+      <LiveMap sites={sites as never} guards={mapGuards as never} height="h-64 sm:h-80" />
+    </section>}
     <div className="overflow-hidden ws-card">
       {loading && records.length === 0 ? <Spinner label="Loading live records…" /> : rows.length === 0 ? <Empty title={total ? 'No records match your search' : `No ${page.title.toLowerCase()} yet`} text={total ? undefined : section === 'guards' ? 'Register your first guard to get started.' : section === 'sites' ? 'Add a site to start tracking coverage.' : 'Records appear here as they are created.'} /> : <>
         <div className="hidden overflow-x-auto md:block"><table className="w-full text-left text-xs"><thead className="border-b border-[#E4E4E7] text-[10.5px] font-medium text-[#8A938B]"><tr>{head.map((c) => <th key={c.head} className="whitespace-nowrap px-4 py-2.5">{c.head}</th>)}<th /></tr></thead>

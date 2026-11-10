@@ -308,7 +308,7 @@ export function OverviewPage() {
             <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Attendance by Site Today</h2>
-                <Link href="/attendance" className="text-xs font-semibold text-zinc-900 underline">
+                <Link href="/attendance" className="text-xs font-semibold text-[#18181B] underline">
                   Attendance
                 </Link>
               </div>
@@ -336,14 +336,14 @@ export function OverviewPage() {
             <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Latest activity</h2>
-                <Link href="/reports" className="text-xs font-semibold text-zinc-900 underline">
+                <Link href="/reports" className="text-xs font-semibold text-[#18181B] underline">
                   Reports
                 </Link>
               </div>
               <ul className="mt-2 divide-y divide-[#EFEFF1]">
                 {d?.activity.slice(0, 5).map((a) => (
                   <li key={a.id} className="py-2 text-xs">
-                    <b className="block truncate text-[12px] font-semibold text-zinc-900">{a.title}</b>
+                    <b className="block truncate text-[12px] font-semibold text-[#18181B]">{a.title}</b>
                     <span className="mt-0.5 block truncate text-[11px] text-[#6B6B72]">
                       {a.body} · {when(a.createdAt)}
                     </span>
@@ -362,7 +362,7 @@ export function OverviewPage() {
           <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Open Incidents by Severity</h2>
-              <Link href="/incidents" className="text-xs font-semibold text-zinc-900 underline">
+              <Link href="/incidents" className="text-xs font-semibold text-[#18181B] underline">
                 Incidents
               </Link>
             </div>
@@ -371,7 +371,7 @@ export function OverviewPage() {
                 const n = openIncidents.filter((i) => i.severity === sev).length
                 return (
                   <div key={sev} className="bg-white px-2 py-2">
-                    <dd className="font-mono text-base font-semibold tabular-nums text-zinc-900">{n}</dd>
+                    <dd className="font-mono text-base font-semibold tabular-nums text-[#18181B]">{n}</dd>
                     <dt className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.06em] text-[#6B6B72]">{sev}</dt>
                   </div>
                 )

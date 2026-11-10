@@ -38,8 +38,8 @@ export function OnboardingForm() {
     }
   }
 
-  return <main className="flex min-h-screen items-center justify-center bg-[#F5F5F6] px-5 text-zinc-900">
-    <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-[#E4E4E7] bg-white p-6">
+  return <main className="flex min-h-screen items-center justify-center bg-[#F5F5F6] px-5 text-[#18181B]">
+    <form onSubmit={submit} className="w-full max-w-md rounded-[12px] border border-[#E4E4E7] bg-white p-6">
       <h1 className="text-xl font-semibold">Set up your organization</h1>
       <p className="mt-2 text-sm text-[#52525B]">Choose the company name for your BastionOS workspace.</p>
       <label className="mt-6 block text-sm font-medium">Organization name

@@ -505,7 +505,7 @@ export function GuardMobilePage() {
   }
 
   const big =
-    'flex min-h-[58px] w-full items-center justify-center gap-2 rounded-2xl px-4 text-base font-semibold shadow-sm transition active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none'
+    'flex min-h-[58px] w-full items-center justify-center gap-2 rounded-[12px] px-4 text-base font-semibold shadow-sm transition active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none'
 
   const slots = today?.slots ?? []
   const signed = today?.signed ?? {}
@@ -514,7 +514,8 @@ export function GuardMobilePage() {
   const hour = today?.hour ?? 0
   const shift = today?.shift
   const windowOpen = shift ? (shift.endHour > shift.startHour ? hour >= shift.startHour && hour < shift.endHour : hour >= shift.startHour || hour < shift.endHour) : false
-  const nextSlot = slots.find((slot) => !signed[slot])
+
+  const nextSlot = slots.find((slot) => !signed[slot])
   const currentSlot = shift && windowOpen ? hourLabel(hour) : null
   const isCurrentSlotSigned = currentSlot ? Boolean(signed[currentSlot]) : false
 
@@ -555,7 +556,7 @@ export function GuardMobilePage() {
           <Logo size={28} />
           <div className="flex flex-col">
             <span className="text-sm font-bold tracking-tight">BastionOS</span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400">Guard Mobile</span>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-[#9A9AA1]">Guard Mobile</span>
           </div>
         </div>
 
@@ -581,7 +582,7 @@ export function GuardMobilePage() {
             Loading guard profile…
           </div>
         ) : !ready ? (
-          <form onSubmit={saveCode} className="grid gap-3 rounded-2xl border border-[#E4E4E7] bg-white p-5 shadow-sm">
+          <form onSubmit={saveCode} className="grid gap-3 rounded-[12px] border border-[#E4E4E7] bg-white p-5 shadow-sm">
             <h1 className="text-lg font-semibold">Set up this phone</h1>
             <p className="text-xs leading-5 text-[#52525B]">
               Enter the company guard app code your supervisor provided. You only do this once. Or{' '}
@@ -609,7 +610,7 @@ export function GuardMobilePage() {
             {!signedIn && code && (
               <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[#E4E4E7] bg-white px-3 py-2 text-[11px] text-[#52525B]">
                 <span>
-                  Company code <b className="font-mono text-zinc-900">{code}</b>
+                  Company code <b className="font-mono text-[#18181B]">{code}</b>
                   {company ? ` · ${company}` : ''}
                 </span>
                 <button onClick={forgetCode} className="font-semibold text-emerald-700 underline">
@@ -620,11 +621,11 @@ export function GuardMobilePage() {
 
             {/* Guard Identity Profile Card */}
             {identity ? (
-              <section className="mb-4 flex items-center gap-3 rounded-2xl border border-[#E4E4E7] bg-white p-3.5 shadow-sm">
+              <section className="mb-4 flex items-center gap-3 rounded-[12px] border border-[#E4E4E7] bg-white p-3.5 shadow-sm">
                 <Avatar name={identity.name} src={identity.photoUrl} size={54} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-medium text-[#6B6B72]">On Duty Guard</p>
-                  <p className="truncate text-lg font-semibold leading-tight text-zinc-900">{identity.name}</p>
+                  <p className="truncate text-lg font-semibold leading-tight text-[#18181B]">{identity.name}</p>
                   <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[#52525B]">
                     <MapPin className="size-3.5 shrink-0 text-emerald-700" />
                     <span className="truncate">{assignedSite ? assignedSite.name : identity.site ?? 'No site assigned yet'}</span>
@@ -645,7 +646,7 @@ export function GuardMobilePage() {
 
             {/* LIVE GPS SITE PROXIMITY CARD */}
             {assignedSite && (
-              <section className="mb-4 rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-sm">
+              <section className="mb-4 rounded-[12px] border border-[#E4E4E7] bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
@@ -653,20 +654,20 @@ export function GuardMobilePage() {
                     </span>
                     <div>
                       <h2 className="text-xs font-semibold tracking-wide text-[#6B6B72] uppercase">Assigned Site</h2>
-                      <p className="text-sm font-bold text-zinc-900">{assignedSite.name}</p>
+                      <p className="text-sm font-bold text-[#18181B]">{assignedSite.name}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => void refreshGps()}
                     disabled={isLocatingNow}
                     title="Refresh GPS"
-                    className="flex size-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+                    className="flex size-8 items-center justify-center rounded-lg border border-[#E4E4E7] text-zinc-600 hover:bg-[#F5F5F6]"
                   >
                     <RefreshCw className={`size-3.5 ${isLocatingNow ? 'animate-spin text-emerald-700' : ''}`} />
                   </button>
                 </div>
 
-                <div className="mt-3 grid gap-2 rounded-xl border border-zinc-100 bg-zinc-50/70 p-3 text-xs">
+                <div className="mt-3 grid gap-2 rounded-xl border border-zinc-100 bg-[#F5F5F6]/70 p-3 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-[#6B6B72]">Geofence Radius:</span>
                     <span className="font-medium text-zinc-800">{assignedSite.geofenceRadius} meters perimeter</span>
@@ -680,7 +681,7 @@ export function GuardMobilePage() {
                   </div>
 
                   {/* Proximity Status Pill */}
-                  <div className="mt-1 flex items-center justify-between border-t border-zinc-200/80 pt-2">
+                  <div className="mt-1 flex items-center justify-between border-t border-[#E4E4E7]/80 pt-2">
                     <span className="text-[11px] font-medium text-[#6B6B72]">Site Location Check:</span>
                     {isInsideSite === true ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
@@ -693,7 +694,7 @@ export function GuardMobilePage() {
                         Off-Site ({distanceToSite !== null ? `${Math.max(0, distanceToSite - assignedSite.geofenceRadius)}m outside` : 'outside perimeter'})
                       </span>
                     ) : (
-                      <span className="text-[11px] text-zinc-500">Acquiring GPS fix…</span>
+                      <span className="text-[11px] text-[#6B6B72]">Acquiring GPS fix…</span>
                     )}
                   </div>
                 </div>
@@ -709,7 +710,7 @@ export function GuardMobilePage() {
             {/* LIVE SHIFT RADAR & TELEMETRY (WHEN CHECKED IN) */}
             {checkedIn && (
               <section
-                className={`mb-4 rounded-2xl border p-4 shadow-sm transition-all ${
+                className={`mb-4 rounded-[12px] border p-4 shadow-sm transition-all ${
                   telemetryStatus?.withinBounds === false
                     ? 'border-red-300 bg-red-50 text-red-950'
                     : 'border-emerald-200 bg-emerald-50/60 text-emerald-950'
@@ -736,7 +737,7 @@ export function GuardMobilePage() {
                     </span>
                   </div>
                   {telemetryStatus?.lastSyncedAt && (
-                    <span className="text-[10px] text-zinc-500">Synced {telemetryStatus.lastSyncedAt}</span>
+                    <span className="text-[10px] text-[#6B6B72]">Synced {telemetryStatus.lastSyncedAt}</span>
                   )}
                 </div>
 
@@ -758,7 +759,7 @@ export function GuardMobilePage() {
             )}
 
             {/* TODAY'S SHIFT OVERVIEW */}
-            <section className="rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-sm">
+            <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4 shadow-sm">
               <h2 className="text-xs font-semibold tracking-wide text-[#6B6B72] uppercase">Today&apos;s Shift</h2>
               <ol className="mt-3 grid gap-3">
                 {step(
@@ -798,7 +799,7 @@ export function GuardMobilePage() {
                       className={`flex min-h-[46px] flex-col items-center justify-center rounded-xl border text-xs ${
                         signed[slot]
                           ? 'border-emerald-600 bg-emerald-600 text-white font-semibold'
-                          : slot === currentSlot ? 'border-amber-400 bg-amber-50 text-amber-950 font-bold ring-2 ring-amber-400/60' : 'border-[#E4E4E7] text-[#6B6B72] bg-zinc-50'
+                          : slot === currentSlot ? 'border-amber-400 bg-amber-50 text-amber-950 font-bold ring-2 ring-amber-400/60' : 'border-[#E4E4E7] text-[#6B6B72] bg-[#F5F5F6]'
                       }`}
                     >
                       <b className="font-mono text-[11px]">{slot}</b>
@@ -870,7 +871,7 @@ export function GuardMobilePage() {
                           Verify Location &amp; Sign {currentSlot} Hourly Patrol
                         </button>
                       ) : (
-                        <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-3.5 text-center text-sm font-semibold text-emerald-900 shadow-sm">
+                        <div className="flex items-center justify-center gap-2 rounded-[12px] border border-emerald-300 bg-emerald-50 px-4 py-3.5 text-center text-sm font-semibold text-emerald-900 shadow-sm">
                           <CheckCircle2 className="size-5 text-emerald-700 shrink-0" />
                           <span>{currentSlot} Hourly Patrol Signed (Awake Verified)</span>
                         </div>
@@ -884,7 +885,7 @@ export function GuardMobilePage() {
                   )}
 
                   {!windowOpen && shift && (
-                    <p className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-center text-xs text-zinc-600">
+                    <p className="rounded-xl border border-[#E4E4E7] bg-[#F5F5F6] p-3 text-center text-xs text-zinc-600">
                       Hourly patrol check-ins open during active shift hours ({hourLabel(shift.startHour)} – {hourLabel(shift.endHour)}).
                     </p>
                   )}
@@ -892,11 +893,11 @@ export function GuardMobilePage() {
 
                   {/* CHECK OUT ACTION */}
                   <button
-                    className={`${big} border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50`}
+                    className={`${big} border border-zinc-300 bg-white text-zinc-800 hover:bg-[#F5F5F6]`}
                     disabled={busy || scanning !== null}
                     onClick={() => void submit('attendance', '')}
                   >
-                    <LogOut className="size-5 text-zinc-500" />
+                    <LogOut className="size-5 text-[#6B6B72]" />
                     Check out of Shift
                   </button>
                 </>
@@ -973,7 +974,7 @@ export function GuardMobilePage() {
               <div
                 ref={alertRef}
                 role="alert"
-                className="mt-3 rounded-2xl border border-red-200 bg-[#FDECEA] p-4 text-sm text-[#B42318] shadow-sm"
+                className="mt-3 rounded-[12px] border border-red-200 bg-[#FDECEA] p-4 text-sm text-[#B42318] shadow-sm"
               >
                 <div className="flex items-start gap-2.5">
                   <AlertCircle className="size-5 shrink-0 text-[#B42318]" />
@@ -1017,7 +1018,7 @@ export function GuardMobilePage() {
                     e.preventDefault()
                     if (token.trim()) void submit(manualAction, token.trim())
                   }}
-                  className="mt-3 grid gap-2.5 rounded-2xl border border-[#E4E4E7] bg-white p-4 shadow-sm"
+                  className="mt-3 grid gap-2.5 rounded-[12px] border border-[#E4E4E7] bg-white p-4 shadow-sm"
                 >
                   <label className="text-xs font-semibold">
                     Action

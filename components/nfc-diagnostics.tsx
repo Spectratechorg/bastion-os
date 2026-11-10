@@ -89,7 +89,7 @@ export function NfcDiagnostics() {
 
   const stop = () => { abort.current?.abort(); setListening(false); push('scan() cancelled') }
 
-  return <section className="mt-4 rounded-2xl border border-zinc-300 bg-white p-4">
+  return <section className="mt-4 rounded-[12px] border border-zinc-300 bg-white p-4">
     <button type="button" onClick={() => { setOpen((value) => !value); if (!open) environment() }} className="flex min-h-[44px] w-full items-center justify-between gap-2 text-xs font-semibold text-[#3F3F46]">
       <span>NFC diagnostics</span>
       <span className="text-[#9A9AA1]">{open ? 'Hide' : 'Show'}</span>
