@@ -3,7 +3,7 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { Check, Download, LocateFixed, MessageSquare, Plus, RefreshCw, Search, ShieldAlert, UserPlus } from 'lucide-react'
+import { Check, Download, LocateFixed, MapPin, MessageSquare, Plus, RefreshCw, Search, ShieldAlert, UserPlus, X } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { api, naira, when } from '@/lib/client'
@@ -14,7 +14,7 @@ import { ALERT_RULES } from '@/lib/alerts-client'
 
 export type Section = 'guards' | 'sites' | 'attendance' | 'incidents' | 'alerts'
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
-type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void; open: (row: Row) => void }
+type Ctx = { guards: Row[]; sites: Row[]; act: (row: Row, action: string, extra?: Record<string, unknown>) => Promise<void>; edit: (row: Row) => void; comment: (row: Row) => void; assign: (row: Row) => void; metrics: (row: Row) => void; remove: (row: Row) => void; reissue: (row: Row) => void; open: (row: Row) => void; openMap: (guardId?: string) => void }
 type Column = { head: string; cell: (row: Row, ctx: Ctx) => ReactNode }
 type Paged = { rows: Row[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: Record<string, number> }
 
@@ -208,6 +208,7 @@ function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void })
   return <Sheet title={row.name} kicker="GUARD PROFILE" onClose={close} footer={
     <>
       <button className={btn} onClick={() => { close(); c.metrics(row) }}>Performance</button>
+      <button className={btn} onClick={() => { close(); c.openMap(row.id) }}>Location</button>
       <button className={btn} onClick={() => { close(); c.reissue(row) }}>Replace tag</button>
       <button className={btn} onClick={() => { close(); c.edit(row) }}>Edit</button>
       <button className={btnPrimary} onClick={async () => { await c.act(row, suspended ? 'reactivate' : 'suspend'); close() }}>{suspended ? 'Reactivate' : 'Suspend'}</button>
@@ -240,6 +241,7 @@ export function RecordsPage({ section }: { section: Section }) {
   const [currentPage, setCurrentPage] = useState(1); const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0); const [serverStats, setServerStats] = useState<Record<string, number> | null>(null)
   const [mapGuards, setMapGuards] = useState<Row[]>([])
+  const [mapOpen, setMapOpen] = useState(false); const [mapGuardId, setMapGuardId] = useState('')
   const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'guard-detail' | 'incident' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
 
   const load = useCallback(async () => {
@@ -261,17 +263,23 @@ export function RecordsPage({ section }: { section: Section }) {
   useEffect(() => { const q = new URLSearchParams(window.location.search).get('q'); if (q) setQuery(q) }, [])
   useEffect(() => { const timer = window.setTimeout(() => { setTerm(query.trim()); setCurrentPage(1) }, 300); return () => window.clearTimeout(timer) }, [query])
   useEffect(() => {
-    if (section !== 'guards') return
+    if (section !== 'guards' || !mapOpen) return
     let live = true
     api<Row[]>('/api/operations?section=guards').then((rows) => { if (live) setMapGuards(rows) }).catch(() => undefined)
     return () => { live = false }
-  }, [section])
+  }, [section, mapOpen])
+  useEffect(() => {
+    if (!mapOpen) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMapOpen(false); setMapGuardId('') } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mapOpen])
 
   const ctx: Ctx = useMemo(() => ({
     guards, sites,
     act: async (row, action, extra = {}) => { try { const updated = await api<Row>('/api/operations', { method: 'PATCH', json: { section, id: row.id, action, ...extra } }); setRecords((items) => items.map((item) => item.id === row.id ? updated : item)); setDialog((d) => d?.row?.id === row.id ? { ...d, row: updated } : d); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update.') } },
     edit: (row) => setDialog({ kind: section === 'guards' ? 'guard' : 'site', row }), comment: (row) => setDialog({ kind: 'detail', row }), assign: (row) => setDialog({ kind: 'assign', row }),
-    metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }), open: (row) => setDialog({ kind: 'guard-detail', row }),
+    metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }), open: (row) => setDialog({ kind: 'guard-detail', row }), openMap: (guardId = '') => { setMapGuardId(guardId); setMapOpen(true) },
     remove: async (row) => {
       const what = section === 'guards' ? `Delete ${row.name} permanently? Their attendance, patrol and payroll history is deleted with them. To keep the history, suspend the guard instead.` : `Delete ${row.name} permanently? Guards assigned here become unassigned. To keep the record, deactivate the site instead.`
       if (!window.confirm(what)) return
@@ -301,6 +309,7 @@ export function RecordsPage({ section }: { section: Section }) {
 
   return <>
     <PageHeader title={page.title} subtitle={page.subtitle || undefined}>
+      {section === 'guards' && <button className={btn} onClick={() => ctx.openMap()}><MapPin className="size-3.5" />Live locations</button>}
       {section === 'guards' && <Link href="/guards/new" className={btnPrimary}><UserPlus className="size-4" />Register guard</Link>}
       {section === 'sites' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'site' })}><Plus className="size-4" />Add site</button>}
       {section === 'incidents' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'incident' })}><Plus className="size-4" />Report incident</button>}
@@ -322,13 +331,6 @@ export function RecordsPage({ section }: { section: Section }) {
       <button onClick={() => { setLoading(true); void load() }} className={btn}><RefreshCw className="size-3.5" />Refresh</button>
     </div>
     <ErrorBanner message={error} retry={() => void load()} />
-    {section === 'guards' && <section className="mb-4 overflow-hidden ws-card">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E4E4E7] px-4 py-3">
-        <div><h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Guard locations</h2><p className="mt-0.5 text-xs text-[#6B6B72]">Every registered guard — hollow markers have not scanned yet, so they sit at their assigned site.</p></div>
-        <span className="text-[11px] text-[#6B6B72]">{mapGuards.filter((guard) => guard.lastCheckIn && guard.lastLatitude != null && guard.lastLongitude != null).length} scanned · {mapGuards.filter((guard) => guard.status === 'active').length} active</span>
-      </div>
-      <LiveMap sites={sites as never} guards={mapGuards as never} height="h-64 sm:h-80" />
-    </section>}
     <div className="overflow-hidden ws-card">
       {loading && records.length === 0 ? <Spinner label="Loading live records…" /> : rows.length === 0 ? <Empty title={total ? 'No records match your search' : `No ${page.title.toLowerCase()} yet`} text={total ? undefined : section === 'guards' ? 'Register your first guard to get started.' : section === 'sites' ? 'Add a site to start tracking coverage.' : 'Records appear here as they are created.'} /> : <>
         <div className="hidden overflow-x-auto md:block"><table className="w-full text-left text-xs"><thead className="border-b border-[#E4E4E7] text-[10.5px] font-medium text-[#8A938B]"><tr>{head.map((c) => <th key={c.head} className="whitespace-nowrap px-4 py-2.5">{c.head}</th>)}<th /></tr></thead>
@@ -342,6 +344,15 @@ export function RecordsPage({ section }: { section: Section }) {
     {dialog?.kind === 'incident' && <IncidentDialog sites={sites} close={() => setDialog(null)} done={() => void load()} />}
     {dialog?.kind === 'detail' && dialog.row && <IncidentDetail row={records.find((r) => r.id === dialog.row?.id) ?? dialog.row} close={() => setDialog(null)} act={ctx.act} />}
     {dialog?.kind === 'guard-detail' && dialog.row && <GuardDetail row={dialog.row} c={ctx} close={() => setDialog(null)} />}
+    {mapOpen && <div role="dialog" aria-modal="true" aria-label="Guard locations" className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3 sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setMapOpen(false); setMapGuardId('') } }}>
+      <div className="w-full max-w-5xl overflow-hidden rounded-[12px] border border-[#E4E4E7] bg-white shadow-[0_20px_60px_-20px_rgba(11,18,15,0.45)]">
+        <div className="flex items-start justify-between gap-3 border-b border-[#E4E4E7] px-4 py-3">
+          <div><h2 className="text-[14px] font-semibold">Guard locations</h2><p className="mt-0.5 text-xs text-[#6B6B72]">Solid markers are real scans; dashed markers sit at the assigned site until a guard scans.</p></div>
+          <button aria-label="Close map" onClick={() => { setMapOpen(false); setMapGuardId('') }} className="flex size-9 shrink-0 items-center justify-center rounded-[7px] text-[#6B6B72] transition-colors hover:bg-[#F0F0F1]"><X className="size-4" /></button>
+        </div>
+        <LiveMap sites={sites as never} guards={mapGuards as never} selectedGuardId={mapGuardId || undefined} height="h-[60vh] sm:h-[68vh]" />
+      </div>
+    </div>}
     {dialog?.kind === 'metrics' && dialog.row && <GuardMetrics guard={dialog.row as never} photoUrl={dialog.row.photoUrl} close={() => setDialog(null)} />}
     {dialog?.kind === 'reissue' && dialog.row && <ReissueDialog row={dialog.row} close={() => setDialog(null)} done={(tag) => { setDialog({ kind: 'tag', row: dialog.row, tag }); void load() }} />}
     {dialog?.kind === 'tag' && dialog.row && <Sheet title="New tag code" kicker={dialog.row.name} onClose={() => setDialog(null)} footer={<button className={btnPrimary} onClick={() => setDialog(null)}>Done</button>}><p className="text-sm">The old tag no longer works. Write this code to the replacement tag, or give it to {dialog.row.name} to type in the guard app:</p><p className="mt-4 break-all rounded-xl bg-[#EFEFF1] p-4 text-center font-mono text-sm font-semibold tracking-wide">{dialog.tag}</p>{dialog.tag && <WriteTagButton token={dialog.tag} owner={dialog.row.name} />}</Sheet>}
