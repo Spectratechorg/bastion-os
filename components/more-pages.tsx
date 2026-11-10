@@ -8,7 +8,6 @@ import { ASSIGNABLE_ROLES, EDITABLE_ROLES, PERMISSIONS, ROLE_LABELS } from '@/li
 import { api, when } from '@/lib/client'
 import { GuardAppSettings } from '@/components/guard-app-settings'
 import { AccountSettings } from '@/components/account-settings'
-import { SystemStatus } from '@/components/system-status'
 import { FINANCE_ENABLED } from '@/lib/features'
 
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -78,7 +77,7 @@ function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: () =
 }
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<'organisation' | 'operations' | 'team' | 'roles' | 'account' | 'system'>('organisation')
+  const [tab, setTab] = useState<'organisation' | 'operations' | 'team' | 'roles' | 'account'>('organisation')
   const [team, setTeam] = useState<TeamData | null>(null); const [matrix, setMatrix] = useState<Matrix | null>(null); const [problem, setProblem] = useState('')
   const [editing, setEditing] = useState<Member | 'new' | null>(null); const [viewing, setViewing] = useState<Member | null>(null)
   const refreshTeam = useCallback(async () => { try { const [t, m] = await Promise.all([api<TeamData>('/api/team'), api<Matrix>('/api/permissions')]); setTeam(t); setMatrix(m); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to load your team.') } }, [])
@@ -89,9 +88,9 @@ export function SettingsPage() {
     setMatrix({ ...matrix, matrix: { ...matrix.matrix, [role]: { ...matrix.matrix[role], [permission]: next } } })
     try { await api('/api/permissions', { method: 'PATCH', json: { role, permission, allowed: next } }); setProblem('') } catch (e) { setProblem(e instanceof Error ? e.message : 'Unable to save.'); void refreshTeam() }
   }
-  const tabs = [['organisation', 'Organisation'], ['operations', 'Operations'], ['team', 'Team'], ['roles', 'Roles & permissions'], ['account', 'Account'], ['system', 'System']] as const
+  const tabs = [['organisation', 'Organisation'], ['operations', 'Operations'], ['team', 'Team'], ['roles', 'Roles & permissions'], ['account', 'Account']] as const
   return <>
-    <PageHeader title="Settings" subtitle="Company details, operational defaults, team access and system status.">{tab === 'team' && team?.canManage && <button className={btnPrimary} onClick={() => setEditing('new')}><Plus className="size-4" />Add user</button>}</PageHeader>
+    <PageHeader title="Settings" subtitle="Company details, operational defaults and team access.">{tab === 'team' && team?.canManage && <button className={btnPrimary} onClick={() => setEditing('new')}><Plus className="size-4" />Add user</button>}</PageHeader>
     <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
     <nav className="grid grid-cols-2 gap-1 sm:flex sm:overflow-x-auto lg:sticky lg:top-[84px] lg:flex-col lg:self-start">{tabs.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`min-h-[44px] min-w-0 rounded-[10px] px-3 py-2 text-left text-[12px] leading-tight sm:whitespace-nowrap lg:px-4 lg:text-[13px] ${tab === key ? 'bg-white font-semibold shadow-sm' : 'text-[#52525B] hover:bg-white/60'}`}>{label}</button>)}</nav>
     <div className="min-w-0">
@@ -99,7 +98,6 @@ export function SettingsPage() {
     {tab === 'organisation' && <OrgSettings />}
     {tab === 'operations' && <GuardAppSettings />}
     {tab === 'account' && <AccountSettings />}
-    {tab === 'system' && <SystemStatus />}
     {tab === 'team' && <section className="overflow-hidden ws-card">
       {!team ? <Spinner /> : <ul className="divide-y divide-[#EFEFF1]">{team.members.map((m) => <li key={m.id} className="flex flex-wrap items-center gap-3 p-4 text-xs"><button onClick={() => setViewing(m)} aria-label={`Open ${m.name}'s profile`} className="flex min-w-0 flex-1 items-center gap-3 text-left"><Avatar name={m.name} src={m.image} size={36} /><span className="min-w-0 flex-1"><b className="block truncate text-[13px] font-semibold">{m.name}{m.userId === team.me && <span className="ml-1.5 font-normal text-[#6B6B72]">(you)</span>}</b><span className="block truncate text-[#6B6B72]">{m.email}</span></span></button><Badge value={ROLE_LABELS[m.role] ?? m.role} />{team.canManage && <button className={smallBtn} onClick={() => setEditing(m)}>Edit</button>}</li>)}</ul>}
       {team && !team.canManage && <p className="border-t border-[#EBEFE7] p-4 text-[11px] text-[#6B6B72]">Only the owner or an administrator can add or edit people.</p>}
