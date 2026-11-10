@@ -7,6 +7,7 @@ import {
   Activity,
   AlertOctagon,
   Clock,
+  MapPin,
   RefreshCw,
   ShieldAlert,
   Users,
@@ -170,6 +171,7 @@ export function OverviewPage() {
     : new Set<string>()
   const activeGuards = d?.guards.filter((g) => g.status === 'active') ?? []
   const activeSites = admin?.coverage.activeSitesCount ?? d?.sites.filter((site) => site.status !== 'inactive').length ?? 0
+  const totalSites = d?.sites.length ?? 0
   const rate = activeGuards.length ? Math.round((checkedToday.size / activeGuards.length) * 100) : 0
   const openAlerts = d?.alerts.filter((a) => !a.acknowledged) ?? []
   const openIncidents = d?.incidents.filter((i) => i.status !== 'resolved') ?? []
@@ -225,10 +227,10 @@ export function OverviewPage() {
         </article>
 
         <article className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
-          <div className="flex items-start justify-between gap-2"><p className="text-[11px] font-medium text-[#6B6B72]">Critical exceptions</p><ShieldAlert className="size-4 shrink-0 text-[#9A9AA1]" strokeWidth={1.75} /></div>
-          <p className={`mt-2 text-[24px] font-semibold leading-none tracking-[-0.02em] ${(admin?.exceptions.length ?? openAlerts.length) > 0 ? 'text-[#B42318]' : 'text-[#18181B]'}`}>{admin ? admin.exceptions.length : openAlerts.length}</p>
-          <p className="mt-1.5 text-[10.5px] text-[#8A938B]">{(admin?.exceptions.length ?? openAlerts.length) === 0 ? 'All clear' : 'Requires action'}</p>
-          <div className="mt-3 flex items-center gap-2 text-[10.5px] text-[#6B6B72]"><span className={`size-1.5 rounded-full ${(admin?.exceptions.length ?? openAlerts.length) > 0 ? 'bg-[#B42318]' : 'bg-[#16794A]'}`} />{(admin?.exceptions.length ?? openAlerts.length) === 0 ? 'No open breaches' : 'Review the exception feed'}</div>
+          <div className="flex items-start justify-between gap-2"><p className="text-[11px] font-medium text-[#6B6B72]">Total sites</p><MapPin className="size-4 shrink-0 text-[#9A9AA1]" strokeWidth={1.75} /></div>
+          <p className="mt-2 text-[24px] font-semibold leading-none tracking-[-0.02em] text-[#18181B]">{totalSites}</p>
+          <p className="mt-1.5 text-[10.5px] text-[#8A938B]">{activeSites} active</p>
+          <div className="mt-3 flex items-center gap-2 text-[10.5px] text-[#6B6B72]"><span className={`size-1.5 rounded-full ${totalSites === 0 ? 'bg-[#9A9AA1]' : 'bg-[#16794A]'}`} />{totalSites === 0 ? 'No sites registered' : `${totalSites} site${totalSites === 1 ? '' : 's'} registered`}</div>
         </article>
       </section>
 
