@@ -171,6 +171,8 @@ export function OverviewPage() {
     : new Set<string>()
   const activeGuards = d?.guards.filter((g) => g.status === 'active') ?? []
   const activeSites = admin?.coverage.activeSitesCount ?? d?.sites.filter((site) => site.status !== 'inactive').length ?? 0
+  const totalGuards = d?.guards.length ?? 0
+  const suspendedGuards = d?.guards.filter((guard) => guard.status === 'suspended').length ?? 0
   const totalSites = d?.sites.length ?? 0
   const rate = activeGuards.length ? Math.round((checkedToday.size / activeGuards.length) * 100) : 0
   const openAlerts = d?.alerts.filter((a) => !a.acknowledged) ?? []
@@ -208,8 +210,8 @@ export function OverviewPage() {
         <article className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
           <div className="flex items-start justify-between gap-2"><p className="text-[11px] font-medium text-[#6B6B72]">Active guards</p><Users className="size-4 shrink-0 text-[#9A9AA1]" strokeWidth={1.75} /></div>
           <p className="mt-2 text-[24px] font-semibold leading-none tracking-[-0.02em] text-[#18181B]">{activeGuards.length}</p>
-          <p className="mt-1.5 text-[10.5px] text-[#8A938B]">{activeSites} active site{activeSites === 1 ? '' : 's'}</p>
-          <div className="mt-3 flex items-center gap-2 text-[10.5px] text-[#6B6B72]"><span className="size-1.5 rounded-full bg-[#16794A]" />{activeSites === 0 ? 'No active sites' : `${activeSites} site${activeSites === 1 ? '' : 's'} in service`}</div>
+          <p className="mt-1.5 text-[10.5px] text-[#8A938B]">{totalGuards} registered</p>
+          <div className="mt-3 flex items-center gap-2 text-[10.5px] text-[#6B6B72]"><span className={`size-1.5 rounded-full ${suspendedGuards > 0 ? 'bg-[#B7791F]' : 'bg-[#16794A]'}`} />{suspendedGuards > 0 ? `${suspendedGuards} suspended` : 'All active'}</div>
         </article>
 
         <article className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
