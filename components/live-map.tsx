@@ -116,7 +116,7 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
     return !hasGps && (!guard.site || !activeSiteNames.has(guard.site.trim().toLowerCase()))
   }).length
 
-  return <div className={`relative w-full ${height}`}>
+  return <div className={`relative w-full overflow-hidden ${height}`}>
     <div ref={box} role="application" aria-label="Map of sites and every registered guard" className="absolute inset-0 z-0" />
     <div className="pointer-events-none absolute left-3 top-3 z-[500] flex items-center gap-2 rounded-[6px] border border-[#E4E4E7] bg-white/95 px-2.5 py-1.5 text-[10.5px] text-[#3F3F46] shadow-sm">
       <span className="size-1.5 rounded-full bg-[#2A2B2E]" />{plotted} registered guards

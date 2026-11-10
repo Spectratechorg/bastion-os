@@ -233,7 +233,7 @@ export function OverviewPage() {
       </section>
 
       {/* 2. PRIMARY OPERATIONS GRID */}
-      <div className="grid items-start gap-4 xl:grid-cols-[1.55fr_1fr]">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[1.55fr_1fr]">
         {/* LEFT COLUMN: LIVE MAP & SITE COVERAGE MATRIX */}
         <div className="space-y-4 min-w-0">
           {/* Live Map */}
@@ -304,7 +304,7 @@ export function OverviewPage() {
           </section>
 
           {/* Attendance by Site Today & Latest Activity Stream */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Attendance by Site Today</h2>
