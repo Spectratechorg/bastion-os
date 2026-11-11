@@ -104,11 +104,12 @@ export function WorkspaceShell({ active, children }: { active: string; children:
     const page = navigation.find((item) => item.label.toLowerCase().startsWith(normalized))
     if (page) { setSearchMessage(''); router.push(page.href); return }
     setSearchMessage('Searching workspace…')
-    const sources = ['guards', 'sites', 'attendance', 'patrols', 'incidents', 'alerts']
     try {
-      const results = await Promise.all(sources.map(async (section) => ({ section, rows: await fetch(`/api/operations?section=${section}`, { cache: 'no-store' }).then((response) => response.ok ? response.json() : []) as Record<string, unknown>[] })))
-      const hit = results.find(({ rows }) => rows.some((row) => Object.values(row).some((value) => String(value ?? '').toLowerCase().includes(normalized))))
-      if (hit) { setSearchMessage(''); router.push(`/${hit.section}?q=${encodeURIComponent(query)}`) } else setSearchMessage(`No workspace record matched “${query}”.`)
+      const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { cache: 'no-store', signal: AbortSignal.timeout(10_000) })
+      const result = await response.json() as { hit?: { section: string; label: string } | null; error?: string }
+      if (!response.ok) throw new Error(result.error ?? 'Search failed.')
+      if (result.hit) { setSearchMessage(''); router.push(`/${result.hit.section}?q=${encodeURIComponent(query)}`) }
+      else setSearchMessage(`No workspace record matched “${query}”.`)
     } catch { setSearchMessage('Search is temporarily unavailable.') }
   }
   async function signOut() { await authClient.signOut(); router.push('/sign-in'); router.refresh() }

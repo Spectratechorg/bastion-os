@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Download, RefreshCw } from 'lucide-react'
+import { Download } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, inputClass } from '@/components/ui-bits'
 import { api, naira } from '@/lib/client'
@@ -28,7 +28,7 @@ type Tab = 'contracts' | 'payroll'
 
 
 function Toolbar({ period, setPeriod, refresh, extra }: { period: string; setPeriod: (value: string) => void; refresh: () => void; extra?: React.ReactNode }) {
-  return <div className="mb-3 flex flex-wrap items-center gap-2"><input type="month" aria-label="Pay period" value={period} max={new Date().toLocaleDateString('en-CA').slice(0, 7)} onChange={(e) => e.target.value && setPeriod(e.target.value)} className={`${inputClass.replace("w-full", "w-auto")}`} /><button className={btn} onClick={refresh}><RefreshCw className="size-3.5" />Recalculate</button><a className={btn} href="/api/export?section=payroll"><Download className="size-3.5" />Export CSV</a>{extra}</div>
+  return <div className="mb-3 flex flex-wrap items-center gap-2"><input type="month" aria-label="Pay period" value={period} max={new Date().toLocaleDateString('en-CA').slice(0, 7)} onChange={(e) => e.target.value && setPeriod(e.target.value)} className={`${inputClass.replace("w-full", "w-auto")}`} /><a className={btn} href="/api/export?section=payroll"><Download className="size-3.5" />Export CSV</a>{extra}</div>
 }
 
 export function FinancePage({ tab }: { tab: Tab }) {

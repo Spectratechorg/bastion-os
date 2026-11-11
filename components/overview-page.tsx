@@ -10,7 +10,6 @@ import {
   BriefcaseBusiness,
   Clock,
   MapPin,
-  RefreshCw,
   ShieldAlert,
   Users,
 } from 'lucide-react'
@@ -168,14 +167,10 @@ export function OverviewPage() {
         subtitle={`${dayLabel} · Live activity, coverage and alerts across all sites.`}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <span className="hidden h-9 items-center gap-2 rounded-full border border-[#E4E4E7] bg-white px-3 text-[10.5px] text-[#52525B] sm:inline-flex">
+            <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[#E4E4E7] bg-white px-3 text-[10.5px] text-[#52525B]">
               <span className="size-1.5 rounded-full bg-[#16794A]" />
               Live{lastUpdated ? ` · updated ${lastUpdated}` : ''}
             </span>
-            <button onClick={() => { clearClientCache(); void loadAll() }} className={btn}>
-              <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
           </div>
         }
       />

@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { PageHeader } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, smallBtn } from '@/components/ui-bits'
-import { api, clearClientCache } from '@/lib/client'
+import { api } from '@/lib/client'
 
 type Patrol = {
   id: string; date: string; guardId: string; guardName: string; photoUrl: string | null; site: string
@@ -77,7 +77,6 @@ export function PatrolsPage() {
           <input type="date" aria-label="Patrol date" value={shownDate} max={data?.today} onChange={(e) => setDate(e.target.value)} className="h-8 w-[128px] border-0 bg-transparent px-1 text-xs text-[#3F3F46] outline-none" />
           <button type="button" aria-label="Next day" className={smallBtn} onClick={() => shiftDate(1)} disabled={shownDate >= (data?.today ?? '')}><ChevronRight className="size-4" /></button>
         </div>
-        <button className={`${btn} flex-1 justify-center sm:flex-none`} onClick={() => { clearClientCache(); void load() }}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
         <a href="/api/export?section=patrols" className={`${btn} flex-1 justify-center sm:flex-none`}><Download className="size-3.5" />Export CSV</a>
       </div>}
     />

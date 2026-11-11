@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { Download, Plus, RefreshCw, Search } from 'lucide-react'
+import { Download, Plus, Search } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { photoToDataUrl } from '@/lib/client'
 import { FinanceTabs, InventoryTab } from '@/components/finance-extra'
@@ -277,7 +277,7 @@ export function FinanceDataPage({ tab }: { tab: string }) {
       <label className="flex flex-col gap-1.5 text-xs font-medium sm:col-span-2">Receipt photo<input type="file" accept="image/*" onChange={attachReceipt} className="text-xs" />{form.receiptUrl ? <span className="flex items-center gap-2 text-[11px] text-emerald-700">Receipt attached<button type="button" onClick={() => setForm({ ...form, receiptUrl: '' })} className="underline">remove</button></span> : <span className="text-[10px] font-normal text-[#6B6B72]">Optional — snap the paper receipt.</span>}</label>
       <div className="flex items-end gap-2"><button disabled={saving} className="h-10 rounded-lg bg-[#2A2B2E] px-4 text-xs font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : editingId ? 'Update record' : 'Save record'}</button><button type="button" onClick={() => { setOpen(false); setEditingId(null) }} className="h-10 rounded-[8px] border border-[#E4E4E7] px-4 text-xs">Cancel</button></div>
     </form>}
-    <div className="mb-3 flex items-center gap-2"><label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3"><Search className="size-4 text-[#9A9AA1]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}…`} className="w-full text-xs outline-none" /></label><button onClick={() => void load()} aria-label="Refresh finance records" className="rounded-[8px] border border-[#E4E4E7] bg-white p-3"><RefreshCw className="size-3.5" /></button></div>
+    <div className="mb-3 flex items-center gap-2"><label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3"><Search className="size-4 text-[#9A9AA1]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${title.toLowerCase()}…`} className="w-full text-xs outline-none" /></label></div>
     <div className="overflow-x-auto ws-card"><table className="w-full min-w-[820px] text-left text-xs"><thead className="bg-[#F5F5F6] text-[10px] tracking-wide text-[#6B6B72]"><tr>{['TYPE', 'DESCRIPTION', 'AMOUNT', 'STATUS', 'DUE DATE', 'NOTES', ''].map((name, index) => <th key={`${name}-${index}`} className="px-4 py-3">{name}</th>)}</tr></thead><tbody>{loading ? <EmptyState colSpan={7}>Loading finance records…</EmptyState> : filtered.length === 0 ? <EmptyState colSpan={7}>{search ? 'No records match your search.' : 'No finance records in this category yet.'}</EmptyState> : filtered.map((row) => {
       const settled = settledStatuses.includes(row.status.toLowerCase())
       return <tr key={row.id} className="border-t border-[#EBEFE7]"><td className="px-4 py-3.5 capitalize">{row.kind.replaceAll('_', ' ')}</td><td className="px-4 py-3.5"><span className="block font-semibold">{row.label}</span><span className="mt-0.5 block text-[10px] text-[#6B6B72]">{clientName(row.clientId) ?? 'No client'}{row.category ? ` · ${row.category}` : ''}{siteName(row.siteId) ? ` · ${siteName(row.siteId)}` : ''}</span>{row.receiptUrl && <a href={row.receiptUrl} target="_blank" rel="noreferrer" className="mt-0.5 inline-block text-[10px] font-semibold text-[#3F3F46] underline">View receipt</a>}</td><td className="px-4 py-3.5 font-mono">{money(Number(row.amount))}</td><td className="px-4 py-3.5 capitalize">{row.status}</td><td className="px-4 py-3.5">{row.dueDate ? new Date(row.dueDate).toLocaleDateString() : '—'}</td><td className="max-w-[220px] px-4 py-3.5">{row.notes ?? '—'}</td><td className="px-4 py-3.5"><span className="flex flex-wrap justify-end gap-1.5"><button disabled={busyId === row.id} onClick={() => void patch(row, settled ? 'reopen' : 'settle')} className="rounded border border-[#E4E4E7] px-2 py-1 text-[10px] font-semibold disabled:opacity-50">{settled ? 'Reopen' : 'Mark paid'}</button><button onClick={() => edit(row)} className="rounded border border-[#E4E4E7] px-2 py-1 text-[10px] font-semibold">Edit</button><button disabled={busyId === row.id} onClick={() => void patch(row, 'delete')} className="rounded border border-red-200 px-2 py-1 text-[10px] font-semibold text-[#B42318] disabled:opacity-50">Delete</button></span></td></tr>
@@ -314,7 +314,6 @@ export function ReportsDataPage() {
 
   return <>
     <PageHeader title="Reports" subtitle="Live organization summaries and exports from persisted records.">
-      <button onClick={() => void load()} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#E4E4E7] bg-white px-3 text-xs font-semibold"><RefreshCw className="size-3.5" />Refresh reports</button>
     </PageHeader>
     {error && <ErrorNotice>{error}</ErrorNotice>}
     <StatStrip stats={[[String(summary?.guards.total ?? (loading ? '…' : 0)), 'Registered guards'], [String(summary?.sites ?? (loading ? '…' : 0)), 'Sites'], [String(summary?.incidents.open ?? (loading ? '…' : 0)), 'Open incidents'], [money(summary?.finance.pending ?? 0), 'Unsettled finance']]} />
@@ -379,7 +378,6 @@ export function SettingsDataPage() {
 
   return <>
     <PageHeader title="Settings" subtitle="Organization, team access, and recorded workspace activity.">
-      <button onClick={() => void load()} className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-[#E4E4E7] bg-white px-3 text-xs font-semibold"><RefreshCw className="size-3.5" />Refresh</button>
     </PageHeader>
     {error && <ErrorNotice>{error}</ErrorNotice>}
     {loading && !data ? <p className="rounded-xl border border-[#E4E4E7] bg-white p-6 text-xs text-[#6B6B72]">Loading your organization settings…</p> : data && <>
