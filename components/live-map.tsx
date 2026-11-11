@@ -103,26 +103,7 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
     else if (!s.fitted && points.length) { s.map.fitBounds(L.latLngBounds(points).pad(0.3), { maxZoom: 16 }); s.fitted = true }
   }
 
-  const plotted = guards.length
-  const activeSiteNames = new Set(sites.filter((site) => site.status !== 'inactive').map((site) => site.name.trim().toLowerCase()))
-  const waiting = guards.filter((guard) => {
-    const latitude = Number(guard.lastLatitude); const longitude = Number(guard.lastLongitude)
-    const hasGps = Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180 && Boolean(guard.lastCheckIn)
-    return !hasGps && Boolean(guard.site) && activeSiteNames.has(guard.site!.trim().toLowerCase())
-  }).length
-  const unplaced = guards.filter((guard) => {
-    const latitude = Number(guard.lastLatitude); const longitude = Number(guard.lastLongitude)
-    const hasGps = Number.isFinite(latitude) && Number.isFinite(longitude) && latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180 && Boolean(guard.lastCheckIn)
-    return !hasGps && (!guard.site || !activeSiteNames.has(guard.site.trim().toLowerCase()))
-  }).length
-
   return <div className={`relative w-full overflow-hidden ${height}`}>
     <div ref={box} role="application" aria-label="Map of sites and every registered guard" className="absolute inset-0 z-0" />
-    <div className="pointer-events-none absolute left-3 top-3 z-[500] flex items-center gap-2 rounded-[6px] border border-[#E4E4E7] bg-white/95 px-2.5 py-1.5 text-[10.5px] text-[#3F3F46] shadow-sm">
-      <span className="size-1.5 rounded-full bg-[#2A2B2E]" />{plotted} registered guards
-      <span aria-hidden className="text-[#D4D4D8]">·</span>
-      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full border border-dashed border-[#71717A]" />{waiting} waiting for a scan</span>
-      {unplaced > 0 && <><span aria-hidden className="text-[#D4D4D8]">·</span><span>{unplaced} unassigned</span></>}
-    </div>
   </div>
 }

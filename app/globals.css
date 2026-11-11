@@ -106,7 +106,13 @@
 
 .workspace-theme {
   color: var(--ws-text);
-  background: var(--ws-page);
+  background-color: var(--ws-page);
+  background-image:
+    linear-gradient(to right, rgba(42, 43, 46, 0.035) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(42, 43, 46, 0.035) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% -20%, rgba(255, 255, 255, 0.85), transparent 62%);
+  background-size: 32px 32px, 32px 32px, 100% 100%;
+  background-attachment: fixed;
   font-family: var(--font-sans);
   font-feature-settings: 'ss01' 1, 'cv05' 1;
   -webkit-font-smoothing: antialiased;

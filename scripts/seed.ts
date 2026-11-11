@@ -73,8 +73,8 @@ async function seed() {
   }
 
   const clientRows = await db.insert(clients).values([
-    { userId: adminUserId, organizationId, name: 'Eko Atlantic Facilities', contactName: 'Ada Obi', email: 'ada@ekoatlantic.example', phone: '0803 000 1100', status: 'active', monthlyValue: 2400000, slaScore: 96, renewalDate: day(-40), createdAt: now },
-    { userId: adminUserId, organizationId, name: 'Lekki Residences Ltd.', contactName: 'Femi Ade', email: 'femi@lekki.example', phone: '0803 000 2200', status: 'active', monthlyValue: 1850000, slaScore: 91, renewalDate: day(-70), createdAt: now },
+    { userId: adminUserId, organizationId, name: 'Eko Atlantic Facilities', contactName: 'Ada Obi', email: 'ada@ekoatlantic.example', phone: '0803 000 1100', status: 'active', contractValue: 2400000, slaScore: 96, renewalDate: day(-40), createdAt: now },
+    { userId: adminUserId, organizationId, name: 'Lekki Residences Ltd.', contactName: 'Femi Ade', email: 'femi@lekki.example', phone: '0803 000 2200', status: 'active', contractValue: 1850000, slaScore: 91, renewalDate: day(-70), createdAt: now },
   ]).returning()
 
   const siteRows = await db.insert(sites).values(siteSpecs.map((site, index) => ({

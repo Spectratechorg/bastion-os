@@ -29,7 +29,7 @@ type Status = 'idle' | 'writing' | 'written' | 'checking' | 'verified' | 'mismat
  * Writes a guard's tag code onto a physical NFC tag, then optionally reads it back to prove the write landed.
  * Renders nothing actionable on devices without Web NFC, so the page still works by typing the code.
  */
-export function WriteTagButton({ token, owner }: { token: string; owner?: string }) {
+export function WriteTagButton({ token, owner, writeLabel = 'Write tag' }: { token: string; owner?: string; writeLabel?: string }) {
   const [supported, setSupported] = useState<boolean | null>(null)
   const [status, setStatus] = useState<Status>('idle')
   const [detail, setDetail] = useState('')
@@ -111,7 +111,7 @@ export function WriteTagButton({ token, owner }: { token: string; owner?: string
         ? <button type="button" onClick={cancelWrite} className={btn}>Cancel</button>
         : <button type="button" onClick={() => void write()} disabled={status === 'checking'} className={btn}>
           {showSuccess ? <RotateCcw className="size-3.5" /> : <Nfc className="size-3.5" />}
-          {showSuccess ? 'Write again' : 'Write tag'}
+          {showSuccess ? 'Write again' : writeLabel}
         </button>}
       {canVerify && <button type="button" onClick={() => void verify()} disabled={status === 'checking'} className={smallBtn}>{status === 'checking' ? 'Reading…' : 'Verify tag'}</button>}
     </div>

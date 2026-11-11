@@ -86,6 +86,8 @@ export const guards = pgTable('guards', {
   ...owner,
   ...orgScoped,
   name: text('name').notNull(),
+  /** Short 3-digit guard ID used on the guard app and NFC tag (e.g. 001). */
+  guardCode: text('guard_code'),
   nin: text('nin').notNull(),
   phone: text('phone').notNull(),
   initials: text('initials').notNull(),
@@ -95,6 +97,9 @@ export const guards = pgTable('guards', {
   nfcToken: text('nfc_token').unique(),
   photoUrl: text('photo_url'),
   monthlySalary: integer('monthly_salary').notNull().default(0),
+  /** Per-guard patrol shift. Null means use the company default. */
+  shiftStartHour: integer('shift_start_hour'),
+  shiftEndHour: integer('shift_end_hour'),
   lastCheckIn: timestamp('last_check_in', { withTimezone: true }),
   lastLatitude: doublePrecision('last_latitude'),
   lastLongitude: doublePrecision('last_longitude'),
@@ -239,7 +244,8 @@ export const clients = pgTable('clients', {
   email: text('email'),
   phone: text('phone'),
   status: text('status').notNull().default('active'),
-  monthlyValue: doublePrecision('monthly_value').notNull().default(0),
+  /** Total value of the contract, not a monthly payment. */
+  contractValue: doublePrecision('contract_value').notNull().default(0),
   slaScore: doublePrecision('sla_score'),
   renewalDate: timestamp('renewal_date', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull(),

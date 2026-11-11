@@ -14,7 +14,7 @@ const clientSchema = z.object({
   email: z.union([z.string().trim().email().max(320), z.literal('')]).optional(),
   phone: z.string().trim().max(50).optional(),
   status: z.enum(['active', 'inactive']).default('active'),
-  monthlyValue: z.coerce.number().finite().nonnegative().max(1_000_000_000),
+  contractValue: z.coerce.number().finite().nonnegative().max(1_000_000_000),
   slaScore: z.union([z.literal(''), z.coerce.number().finite().min(0).max(100)]).optional(),
   renewalDate: z.union([z.string().datetime(), z.literal('')]).optional(),
 })
@@ -58,7 +58,7 @@ export async function GET(request: Request) {
     paginated ? db.select({
       total: sql<number>`count(*)`,
       active: sql<number>`count(*) filter (where status = 'active')`,
-      monthlyValue: sql<number>`coalesce(sum(monthly_value) filter (where status = 'active'), 0)`,
+      contractValue: sql<number>`coalesce(sum(contract_value) filter (where status = 'active'), 0)`,
     }).from(clients).where(eq(clients.organizationId, user.organizationId)) : Promise.resolve(null),
   ])
   // Each client can own several sites; guards are counted through the sites they are assigned to.
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
     return { ...client, sites: owned.map((site) => ({ id: site.id, name: site.name, status: site.status })), guardCount: guardRows.filter((guard) => guard.site && names.has(guard.site)).length }
   })
   if (!paginated) return NextResponse.json(enriched)
-  return NextResponse.json(pageResponse(enriched, Number(totals?.[0]?.total ?? enriched.length), page, stats ? { total: Number(stats[0].total), active: Number(stats[0].active), monthlyValue: Number(stats[0].monthlyValue) } : undefined))
+  return NextResponse.json(pageResponse(enriched, Number(totals?.[0]?.total ?? enriched.length), page, stats ? { total: Number(stats[0].total), active: Number(stats[0].active), contractValue: Number(stats[0].contractValue) } : undefined))
   })
 }
 
@@ -124,7 +124,7 @@ export async function PATCH(request: Request) {
     email: input.email === undefined ? undefined : input.email || null,
     phone: input.phone,
     status: input.status,
-    monthlyValue: input.monthlyValue,
+    contractValue: input.contractValue,
     slaScore: input.slaScore === undefined ? undefined : input.slaScore === '' ? null : input.slaScore,
     renewalDate: input.renewalDate === undefined ? undefined : input.renewalDate ? new Date(input.renewalDate) : null,
   }

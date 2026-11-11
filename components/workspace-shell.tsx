@@ -190,7 +190,7 @@ export function WorkspaceShell({ active, children }: { active: string; children:
 }
 
 export function PageHeader({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: React.ReactNode; children?: React.ReactNode }) {
-  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h1 className="text-[25px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#18181B] sm:text-[29px]">{title}</h1>{subtitle && <p className="mt-1 max-w-[68ch] text-[12.5px] leading-relaxed text-[#6B6B72]">{subtitle}</p>}</div><div className="flex flex-wrap items-center gap-2">{children}{action}</div></header>
+  return <header className="mb-5 flex flex-wrap items-end justify-between gap-3"><div className="min-w-0"><h1 className="text-[25px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#18181B] sm:text-[29px]">{title}</h1>{subtitle && <p className="mt-1 max-w-[68ch] text-[12.5px] leading-relaxed text-[#6B6B72]">{subtitle}</p>}</div><div className="flex flex-wrap items-center gap-2 max-sm:w-full">{children}{action}</div></header>
 }
 
 export function PageAction({ children, primary = false, href, onClick }: { children: React.ReactNode; primary?: boolean; href?: string; onClick?: () => void }) {
@@ -199,7 +199,7 @@ export function PageAction({ children, primary = false, href, onClick }: { child
 }
 
 export function StatStrip({ stats }: { stats: [string, string][] }) {
-  return <section className="mb-5 flex flex-wrap items-baseline gap-x-8 gap-y-2.5 border-b border-[#E4E4E7] pb-4">
+  return <section className="mb-5 grid grid-cols-2 gap-x-5 gap-y-3 border-b border-[#E4E4E7] pb-4 sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-8 sm:gap-y-2.5">
     {stats.map(([value, label]) => (
       <div key={label} className="flex items-baseline gap-2">
         <span className="ws-num text-[17px] font-semibold leading-none text-[#18181B]">{value}</span>

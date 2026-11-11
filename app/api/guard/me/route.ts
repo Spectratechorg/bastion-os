@@ -22,8 +22,8 @@ export async function GET() {
     .where(and(eq(guards.organizationId, current.organizationId), eq(guards.loginUserId, current.userId))).limit(1)
 
   if (!guard) {
-    const { slots, shift, today, hour } = await todayStatus(current.organizationId, '00000000-0000-0000-0000-000000000000')
-    return NextResponse.json({ linked: false, role: current.role, today, hour, slots, shift })
+    const status = await todayStatus(current.organizationId, '00000000-0000-0000-0000-000000000000')
+    return NextResponse.json({ linked: false, role: current.role, ...status })
   }
 
   let assignedSite: { id: string; name: string; latitude: number; longitude: number; geofenceRadius: number } | null = null

@@ -21,8 +21,9 @@ import {
 } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { Logo } from '@/components/brand'
-import { Avatar } from '@/components/ui-bits'
+import { Avatar, Badge } from '@/components/ui-bits'
 import { NfcDiagnostics } from '@/components/nfc-diagnostics'
+import { WriteTagButton } from '@/components/write-tag-button'
 import { decodeTagText as decodeRecord, tagHex } from '@/lib/nfc-decode'
 
 interface NfcReader extends EventTarget {
@@ -46,7 +47,15 @@ type Today = {
   checkedInAt: string | null
   checkedOutAt: string | null
   insideGeofence: boolean | null
+  morning?: { deadline: string; signedAt: string | null; late: boolean; missed: boolean }
+  closed?: boolean
+  missedSlots?: string[]
   signed: Record<string, string>
+}
+
+type Schedule = Today & {
+  guard: { id: string; name: string; guardCode: string | null; nin: string; site: string | null; photoUrl: string | null; status: string }
+  assignedSite?: AssignedSite | null
 }
 
 type Identity = {
@@ -160,6 +169,12 @@ export function GuardMobilePage() {
   const [manual, setManual] = useState(false)
   const [token, setToken] = useState('')
   const [manualAction, setManualAction] = useState<Action>('attendance')
+  const [schedule, setSchedule] = useState<Schedule | null>(null)
+  const [scheduleId, setScheduleId] = useState('')
+  const [scheduleBusy, setScheduleBusy] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
+  const [selectedSlot, setSelectedSlot] = useState('')
+  const [morningId, setMorningId] = useState('')
   const [receipt, setReceipt] = useState<{
     action: Action
     guardName: string
@@ -204,6 +219,11 @@ export function GuardMobilePage() {
     }, 60000)
     return () => window.clearInterval(t)
   }, [loadMe])
+
+  useEffect(() => {
+    if (signedIn && me?.linked) void loadSchedule()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedIn, me?.linked])
 
   useEffect(() => {
     setNfc(Boolean(window.NDEFReader && window.isSecureContext))
@@ -269,8 +289,8 @@ export function GuardMobilePage() {
   }, [me?.assignedSite, currentFix])
 
   const isGuard = me?.role === 'guard'
-  const identity: Identity | null = me?.guard ?? local?.who ?? null
-  const today: Today | null = me?.slots ? (me as Today) : local?.today ?? null
+  const identity: Identity | null = me?.guard ?? local?.who ?? (schedule ? { id: schedule.guard.id, name: schedule.guard.name, site: schedule.guard.site, photoUrl: schedule.guard.photoUrl } : null)
+  const today: Today | null = schedule ?? (me?.slots ? (me as Today) : local?.today ?? null)
   const ready = signedIn === true || Boolean(code)
   const checkedIn = Boolean(today?.checkedInAt) && !today?.checkedOutAt
   const checkedOut = Boolean(today?.checkedOutAt)
@@ -373,7 +393,26 @@ export function GuardMobilePage() {
     setMessage('')
   }
 
-  async function submit(action: Action, tag: string) {
+  async function loadSchedule(id = '') {
+    setScheduleBusy(true); setScheduleError('')
+    try {
+      const response = id
+        ? await fetch('/api/guard/schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, ...(signedIn ? {} : { code }) }) })
+        : await fetch('/api/guard/schedule', { cache: 'no-store' })
+      const body = await response.json()
+      if (!response.ok || body.error) throw new Error(body.error ?? 'Unable to load the patrol schedule.')
+      setSchedule(body as Schedule)
+      setMorningId((current) => current || body.guard?.id || '')
+      const currentSlot = body.slots?.find((slot: string) => Number(slot.slice(0, 2)) === body.hour)
+      const currentIndex = currentSlot ? body.slots.indexOf(currentSlot) : -1
+      const next = currentIndex >= 0 ? (body.slots as string[]).find((slot, index) => !body.signed?.[slot] && index <= currentIndex) : undefined
+      setSelectedSlot(next ?? '')
+    } catch (cause) {
+      setScheduleError(cause instanceof Error ? cause.message : 'Unable to load the patrol schedule.')
+    } finally { setScheduleBusy(false) }
+  }
+
+  async function submit(action: Action, tag: string, options: { guardId?: string; slot?: string } = {}) {
     setBusy(true)
     setError('')
     setMessage('')
@@ -399,6 +438,8 @@ export function GuardMobilePage() {
           token: tag,
           ...located.fix,
           ...(signedIn ? {} : { code }),
+          ...(options.guardId ? { guardId: options.guardId } : {}),
+          ...(options.slot ? { slot: options.slot } : {}),
         }),
       })
       const body = await response.json()
@@ -432,6 +473,7 @@ export function GuardMobilePage() {
           },
           today: body.status,
         })
+        setSchedule((current) => current && current.guard.id === body.guardId ? { ...current, ...body.status } : current)
       }
       if (signedIn) void loadMe()
     } catch (e) {
@@ -519,7 +561,8 @@ export function GuardMobilePage() {
   const currentSlot = shift && windowOpen ? hourLabel(hour) : null
   const isCurrentSlotSigned = currentSlot ? Boolean(signed[currentSlot]) : false
 
-  const assignedSite = me?.assignedSite
+  const assignedSite = me?.assignedSite ?? schedule?.assignedSite ?? undefined
+  const morning = today?.morning ?? schedule?.morning
 
   const step = (done: boolean, title: string, detail: string) => (
     <li className="flex items-start gap-3">
@@ -582,7 +625,7 @@ export function GuardMobilePage() {
             Loading guard profile…
           </div>
         ) : !ready ? (
-          <form onSubmit={saveCode} className="grid gap-3 rounded-[12px] border border-[#E4E4E7] bg-white p-5 shadow-sm">
+          <form onSubmit={saveCode} className="grid gap-3 ws-card p-5 shadow-sm">
             <h1 className="text-lg font-semibold">Set up this phone</h1>
             <p className="text-xs leading-5 text-[#52525B]">
               Enter the company guard app code your supervisor provided. You only do this once. Or{' '}
@@ -621,7 +664,7 @@ export function GuardMobilePage() {
 
             {/* Guard Identity Profile Card */}
             {identity ? (
-              <section className="mb-4 flex items-center gap-3 rounded-[12px] border border-[#E4E4E7] bg-white p-3.5 shadow-sm">
+              <section className="mb-4 flex items-center gap-3 ws-card p-3.5 shadow-sm">
                 <Avatar name={identity.name} src={identity.photoUrl} size={54} />
                 <div className="min-w-0 flex-1">
                   <p className="text-[11px] font-medium text-[#6B6B72]">On Duty Guard</p>
@@ -646,7 +689,7 @@ export function GuardMobilePage() {
 
             {/* LIVE GPS SITE PROXIMITY CARD */}
             {assignedSite && (
-              <section className="mb-4 rounded-[12px] border border-[#E4E4E7] bg-white p-4 shadow-sm">
+              <section className="mb-4 ws-card p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
@@ -758,150 +801,131 @@ export function GuardMobilePage() {
               </section>
             )}
 
-            {/* TODAY'S SHIFT OVERVIEW */}
-            <section className="rounded-[12px] border border-[#E4E4E7] bg-white p-4 shadow-sm">
-              <h2 className="text-xs font-semibold tracking-wide text-[#6B6B72] uppercase">Today&apos;s Shift</h2>
-              <ol className="mt-3 grid gap-3">
-                {step(
-                  checkedIn,
-                  checkedIn
-                    ? `Checked in at ${clock(today?.checkedInAt)}`
-                    : checkedOut
-                      ? `Checked out at ${clock(today?.checkedOutAt)}`
-                      : 'Shift Check In',
-                  checkedIn
-                    ? 'You are active on duty. GPS tracking is live.'
-                    : checkedOut
-                      ? 'Your shift is completed for today.'
-                      : 'Tap Verify Location & Check In when at your post.',
-                )}
-                {step(
-                  patrolDone,
-                  `Hourly Patrol Check-in: ${signedCount} of ${slots.length || '–'} signed`,
-                  shift
-                    ? `Hourly stay-awake patrol checks from ${hourLabel(shift.startHour)} to ${hourLabel(shift.endHour)}. You must be at your post every hour.`
-                    : 'Checkpoints open during shift hours.',
-                )}
-              </ol>
-
-              <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200/80 bg-amber-50 p-2.5 text-xs text-amber-900">
-                <Radio className="mt-0.5 size-4 shrink-0 text-amber-700" />
+            {/* MORNING SIGN-IN */}
+            <section className="ws-card p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <span className="font-semibold">Stay-Awake Vigilance Verification:</span> Guards must check in every hour during shift while physically at post. Off-post signing is strictly blocked.
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-[#6B6B72]">Morning Sign-in</h2>
+                  <p className="mt-1 text-sm font-semibold text-[#18181B]">Attendance for today</p>
                 </div>
+                <Badge value={morning?.signedAt ? (morning.late ? 'Late' : 'Signed') : morning?.missed ? 'Missed' : 'Pending'} />
               </div>
+              <p className="mt-2 text-xs leading-5 text-[#52525B]">
+                Sign in by <b>08:00</b> (Lagos time). If you have not signed in by then, supervisors get an alert.
+              </p>
+              <p className={`mt-3 rounded-lg p-3 text-xs font-medium ${morning?.late ? 'bg-amber-50 text-amber-900' : morning?.missed ? 'bg-red-50 text-red-900' : 'bg-[#F5F5F6] text-[#52525B]'}`}>
+                {morning?.signedAt
+                  ? `Signed at ${clock(morning.signedAt)}${morning.late ? ' — after the 08:00 deadline (alert raised)' : ' — on time'}`
+                  : morning?.missed
+                    ? 'Not signed by 08:00 — an alert has been raised. Sign now.'
+                    : 'Not signed yet. You are on time before 08:00.'}
+              </p>
 
-              {slots.length > 0 && (
-                <div className="mt-3 grid grid-cols-3 sm:grid-cols-5 gap-2">
-                  {slots.map((slot) => (
-                    <span
-                      key={slot}
-                      className={`flex min-h-[46px] flex-col items-center justify-center rounded-xl border text-xs ${
-                        signed[slot]
-                          ? 'border-emerald-600 bg-emerald-600 text-white font-semibold'
-                          : slot === currentSlot ? 'border-amber-400 bg-amber-50 text-amber-950 font-bold ring-2 ring-amber-400/60' : 'border-[#E4E4E7] text-[#6B6B72] bg-[#F5F5F6]'
-                      }`}
-                    >
-                      <b className="font-mono text-[11px]">{slot}</b>
-                      <span className="text-[10px]">{signed[slot] ? clock(signed[slot]) : slot === currentSlot ? 'Due Now' : 'Upcoming'}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* PRIMARY ACTIONS: CARDLESS CHECK-IN / CHECK-OUT / PATROL */}
-            <section className="mt-4 grid gap-2.5">
-              {!checkedIn && !checkedOut && (
-                <div>
-                  <button
-                    className={`${big} bg-[#16794A] text-white hover:bg-emerald-700`}
-                    disabled={busy || scanning !== null}
-                    onClick={() => void submit('attendance', '')}
-                  >
-                    <Navigation className="size-5" />
-                    Verify Location &amp; Check In for Shift
-                  </button>
-                  <p className="mt-1.5 text-center text-xs text-[#6B6B72]">
-                    Uses your phone&apos;s GPS to verify you are physically at your site. Independent of NFC tags.
-                  </p>
-                  {windowOpen && currentSlot && (
-                    <button
-                      className={`${big} mt-2.5 border-2 border-emerald-700 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 shadow-sm`}
-                      disabled={busy || scanning !== null}
-                      onClick={() => void submit('patrol', '')}
-                    >
-                      <CheckCircle2 className="size-5 text-emerald-700" />
-                      Verify Location &amp; Sign {currentSlot} Hourly Patrol
-                    </button>
+              {!checkedIn && (
+                <div className="mt-3 grid gap-2">
+                  {!identity && (
+                    <label className="text-[11px] font-medium text-[#52525B]">
+                      Guard ID number
+                      <input value={morningId} onChange={(event) => setMorningId(event.target.value)} placeholder="e.g. 001" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm" />
+                    </label>
                   )}
-                  <p className="hidden">
-                  </p>
-                </div>
-              )}
-
-              {checkedOut && (
-                <div>
                   <button
                     className={`${big} bg-[#16794A] text-white hover:bg-emerald-700`}
                     disabled={busy || scanning !== null}
-                    onClick={() => void submit('attendance', '')}
+                    onClick={() => {
+                      const id = identity?.id ?? morningId.trim()
+                      if (!id) return setError('Enter your guard ID number to sign in.')
+                      void submit('attendance', '', { guardId: id })
+                    }}
                   >
                     <Navigation className="size-5" />
-                    Check in again
+                    Sign morning attendance
                   </button>
-                  <p className="mt-1.5 text-center text-xs text-[#6B6B72]">
-                    You checked out at {clock(today?.checkedOutAt)}. Tap to start another shift check-in.
-                  </p>
+                  <p className="text-center text-[11px] text-[#6B6B72]">GPS confirms you are inside your site geofence.</p>
                 </div>
               )}
 
               {checkedIn && (
-                <>
-                  {/* HOURLY PATROL (STAY-AWAKE) PRIMARY ACTION */}
-                  {windowOpen && currentSlot && (
-                    <div className="grid gap-1.5">
-                      {!isCurrentSlotSigned ? (
-                        <button
-                          className={`${big} bg-[#16794A] text-white hover:bg-emerald-700 shadow-md`}
-                          disabled={busy || scanning !== null}
-                          onClick={() => void submit('patrol', '')}
-                        >
-                          <CheckCircle2 className="size-5" />
-                          Verify Location &amp; Sign {currentSlot} Hourly Patrol
-                        </button>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2 rounded-[12px] border border-emerald-300 bg-emerald-50 px-4 py-3.5 text-center text-sm font-semibold text-emerald-900 shadow-sm">
-                          <CheckCircle2 className="size-5 text-emerald-700 shrink-0" />
-                          <span>{currentSlot} Hourly Patrol Signed (Awake Verified)</span>
-                        </div>
-                      )}
-                      <p className="text-center text-xs text-[#6B6B72]">
-                        {!isCurrentSlotSigned
-                          ? `Hourly vigilance check for ${currentSlot}. Must be physically at ${assignedSite?.name ?? 'your post'} to sign.`
-                          : `Next stay-awake check will open at ${String((hour + 1) % 24).padStart(2, '0')}:00.`}
-                      </p>
-                    </div>
-                  )}
-
-                  {!windowOpen && shift && (
-                    <p className="rounded-xl border border-[#E4E4E7] bg-[#F5F5F6] p-3 text-center text-xs text-zinc-600">
-                      Hourly patrol check-ins open during active shift hours ({hourLabel(shift.startHour)} – {hourLabel(shift.endHour)}).
-                    </p>
-                  )}
-
-
-                  {/* CHECK OUT ACTION */}
+                <div className="mt-3 grid gap-2">
+                  <p className="rounded-lg bg-emerald-50 p-3 text-xs font-medium text-emerald-900">On duty since {clock(today?.checkedInAt)}.</p>
                   <button
                     className={`${big} border border-zinc-300 bg-white text-zinc-800 hover:bg-[#F5F5F6]`}
                     disabled={busy || scanning !== null}
-                    onClick={() => void submit('attendance', '')}
+                    onClick={() => void submit('attendance', '', { guardId: identity?.id ?? (morningId.trim() || undefined) })}
                   >
                     <LogOut className="size-5 text-[#6B6B72]" />
-                    Check out of Shift
+                    Check out of shift
                   </button>
-                </>
+                </div>
               )}
+            </section>
+
+            {/* DAILY PATROL SIGN-IN */}
+            <section className="mt-4 ws-card p-4 shadow-sm">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-[#6B6B72]">Daily Patrol Sign-in</h2>
+              <p className="mt-1 text-sm font-semibold text-[#18181B]">Hourly checkpoints from your shift</p>
+              <p className="mt-2 text-xs leading-5 text-[#52525B]">Enter your guard ID number to load your assigned shift and scheduled patrol check-in times.</p>
+
+              <form onSubmit={(event) => { event.preventDefault(); void loadSchedule(scheduleId.trim() || identity?.id || '') }} className="mt-3 flex flex-wrap gap-2">
+                <input value={scheduleId} onChange={(event) => setScheduleId(event.target.value)} placeholder={schedule?.guard.guardCode ? `Guard ID ${schedule.guard.guardCode}` : 'Guard ID e.g. 001'} aria-label="Guard ID for patrol schedule" className="h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 text-sm" />
+                <button disabled={scheduleBusy} className={`${big} min-h-[44px] w-auto px-4 bg-[#1E1F22] text-white hover:bg-zinc-800`}>{scheduleBusy ? 'Loading…' : 'Load schedule'}</button>
+              </form>
+              {scheduleError && <p role="alert" className="mt-2 text-xs font-medium text-[#B42318]">{scheduleError}</p>}
+
+              {schedule && (() => {
+                const currentSlot = schedule.slots.find((slot) => Number(slot.slice(0, 2)) === schedule.hour)
+                const currentIndex = currentSlot ? schedule.slots.indexOf(currentSlot) : -1
+                const missed = schedule.missedSlots ?? schedule.slots.filter((slot, index) => !schedule.signed[slot] && currentIndex >= 0 && index < currentIndex)
+                const selectable = (slot: string, index: number) => !schedule.closed && !schedule.signed[slot] && currentIndex >= 0 && index <= currentIndex
+                return <div className="mt-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+                    <p><b className="text-sm font-semibold">{schedule.guard.name}</b><span className="ml-2 font-mono text-[#6B6B72]">{schedule.guard.guardCode ?? ''}</span><span className="ml-2 text-[#6B6B72]">{schedule.guard.site ?? 'No site'}</span></p>
+                    <p className="font-mono text-[#52525B]">Shift {hourLabel(schedule.shift.startHour)}–{hourLabel(schedule.shift.endHour)}</p>
+                  </div>
+                  <p className="mt-1 text-[11px] text-[#6B6B72]">{schedule.slots.length} scheduled checkpoint{schedule.slots.length === 1 ? '' : 's'}. {Object.keys(schedule.signed).length} signed.</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                    {schedule.slots.map((slot, index) => {
+                      const signed = schedule.signed[slot]
+                      const canSelect = selectable(slot, index)
+                      const isMissed = missed.includes(slot)
+                      return <button
+                        type="button"
+                        key={slot}
+                        disabled={!canSelect || busy}
+                        onClick={() => setSelectedSlot(slot)}
+                        className={`flex min-h-[50px] flex-col items-center justify-center rounded-xl border text-xs disabled:cursor-not-allowed ${
+                          signed ? 'border-emerald-600 bg-emerald-600 font-semibold text-white'
+                            : selectedSlot === slot ? 'border-amber-500 bg-amber-50 font-bold text-amber-950 ring-2 ring-amber-400/60'
+                              : isMissed ? 'border-[#F0C7C1] bg-[#FDECEA] text-[#B42318]'
+                                : canSelect ? 'border-amber-400 bg-amber-50 text-amber-950'
+                                  : 'border-[#E4E4E7] bg-[#F5F5F6] text-[#9A9AA1]'
+                        }`}
+                      >
+                        <b className="font-mono text-[11px]">{slot}</b>
+                        <span className="text-[10px]">{signed ? clock(signed) : isMissed ? 'Missed' : index === currentIndex ? 'Due now' : canSelect ? 'Select' : 'Upcoming'}</span>
+                      </button>
+                    })}
+                  </div>
+                  {missed.length > 0 && <p className="mt-2 text-[11px] font-medium text-[#B42318]">Missed check-in{missed.length === 1 ? '' : 's'}: {missed.join(', ')}</p>}
+                  {schedule.closed
+                    ? <p className="mt-2 rounded-lg bg-[#F5F5F6] p-2.5 text-[11px] text-[#52525B]">This shift has ended. Missed checkpoints stay on record and supervisors have been alerted.</p>
+                    : currentIndex < 0 && <p className="mt-2 rounded-lg bg-[#F5F5F6] p-2.5 text-[11px] text-[#52525B]">Patrol check-ins open during the shift ({hourLabel(schedule.shift.startHour)}–{hourLabel(schedule.shift.endHour)}).</p>}
+                  <button
+                    className={`${big} mt-3 bg-[#16794A] text-white hover:bg-emerald-700`}
+                    disabled={busy || schedule.closed || !selectedSlot || Boolean(schedule.signed[selectedSlot])}
+                    onClick={() => schedule && selectedSlot ? void submit('patrol', '', { guardId: schedule.guard.id, slot: selectedSlot }) : undefined}
+                  >
+                    <CheckCircle2 className="size-5" />
+                    {selectedSlot ? `Sign ${selectedSlot} patrol check-in` : 'Select a scheduled checkpoint'}
+                  </button>
+                  <p className="mt-1.5 text-center text-[11px] text-[#6B6B72]">Only your configured checkpoint times can be signed.</p>
+                  <div className="mt-3 rounded-lg border border-[#E4E4E7] bg-[#FAFAFB] p-3">
+                    <p className="text-[11px] font-semibold text-[#52525B]">Link your guard ID to an NFC tag</p>
+                    <p className="mt-0.5 text-[10.5px] leading-4 text-[#6B6B72]">Write this guard’s ID number onto their tag. From then on, tapping the tag identifies them without typing the ID.</p>
+                    <WriteTagButton token={schedule.guard.guardCode || schedule.guard.nin} owner={schedule.guard.name} writeLabel="Write ID to NFC tag" />
+                  </div>
+                </div>
+              })()}
             </section>
 
             {/* STATUS / STAGE / RECEIPT / ERROR FEEDBACK */}
@@ -1018,7 +1042,7 @@ export function GuardMobilePage() {
                     e.preventDefault()
                     if (token.trim()) void submit(manualAction, token.trim())
                   }}
-                  className="mt-3 grid gap-2.5 rounded-[12px] border border-[#E4E4E7] bg-white p-4 shadow-sm"
+                  className="mt-3 grid gap-2.5 ws-card p-4 shadow-sm"
                 >
                   <label className="text-xs font-semibold">
                     Action

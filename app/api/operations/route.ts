@@ -153,7 +153,7 @@ export async function GET(request: Request) {
     case 'guards': {
       const where = and(
         eq(guards.organizationId, organizationId),
-        textMatch(sql`concat_ws(' ', ${guards.name}, ${guards.phone}, coalesce(${guards.site}, ''))`),
+        textMatch(sql`concat_ws(' ', ${guards.name}, ${guards.phone}, coalesce(${guards.site}, ''), coalesce(${guards.guardCode}, ''), ${guards.nin})`),
         filter === 'active' ? eq(guards.status, 'active') : filter === 'suspended' ? eq(guards.status, 'suspended') : undefined,
       )
       const [rows, stats, filtered] = await Promise.all([
@@ -195,11 +195,8 @@ export async function GET(request: Request) {
       const where = and(
         eq(attendance.organizationId, organizationId),
         term ? sql`(exists (select 1 from guards g where g.id = ${attendance.guardId} and g.name ilike ${like})
-          or exists (select 1 from sites s where s.id = ${attendance.siteId} and s.name ilike ${like})
-          or concat_ws(' ', ${attendance.method}, ${attendance.reviewStatus}) ilike ${like})` : undefined,
-        filter === 'flagged' ? eq(attendance.reviewStatus, 'flagged')
-          : filter === 'approved' ? eq(attendance.reviewStatus, 'approved')
-            : filter === 'outside geofence' ? eq(attendance.withinGeofence, false) : undefined,
+          or exists (select 1 from sites s where s.id = ${attendance.siteId} and s.name ilike ${like}))` : undefined,
+        filter === 'outside geofence' ? eq(attendance.withinGeofence, false) : undefined,
       )
       const [rows, stats, filtered] = await Promise.all([
         db.select().from(attendance).where(where).orderBy(desc(attendance.createdAt)).limit(page.pageSize).offset(page.offset),
@@ -207,12 +204,11 @@ export async function GET(request: Request) {
           total: sql<number>`count(*)`,
           inside: sql<number>`count(*) filter (where within_geofence)`,
           outside: sql<number>`count(*) filter (where not within_geofence)`,
-          flagged: sql<number>`count(*) filter (where review_status = 'flagged')`,
         }).from(attendance).where(eq(attendance.organizationId, organizationId)),
         db.select({ n: sql<number>`count(*)` }).from(attendance).where(where),
       ])
       return NextResponse.json(pageResponse(rows, Number(filtered[0].n), page, {
-        total: Number(stats[0].total), inside: Number(stats[0].inside), outside: Number(stats[0].outside), flagged: Number(stats[0].flagged),
+        total: Number(stats[0].total), inside: Number(stats[0].inside), outside: Number(stats[0].outside),
       }))
     }
     case 'incidents': {
@@ -321,9 +317,13 @@ export async function POST(request: Request) {
       )).limit(1)
       if (!site) return fail('Select an active site in this organization.', 400)
     }
+    const [sequence] = await db.select({ next: sql<number>`coalesce(max(${guards.guardCode}::int), 0) + 1` })
+      .from(guards).where(eq(guards.organizationId, current.organizationId))
+    const guardCode = String(sequence?.next ?? 1).padStart(3, '0')
     const [row] = await db.insert(guards).values({
       ...current,
       ...parsed.data,
+      guardCode,
       site: siteName,
       initials: parsed.data.name.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase(),
       status: 'active',
@@ -404,10 +404,13 @@ const updateSchema = z.object({
   id: z.string().uuid(),
   action: z.enum(['update', 'suspend', 'reactivate', 'reissue-nfc', 'deactivate', 'approve', 'flag', 'assign', 'comment', 'escalate', 'resolve', 'acknowledge', 'complete', 'settle', 'reopen', 'delete']).default('update'),
   name: z.string().trim().min(2).max(200).optional(),
+  guardCode: z.string().trim().regex(/^\d{3}$/, 'Guard ID must be exactly 3 digits, e.g. 001.').optional(),
   nin: z.string().trim().min(4).max(100).optional(),
   phone: z.string().trim().min(7).max(50).optional(),
   site: z.string().trim().max(200).nullable().optional(),
   monthlySalary: z.coerce.number().int().nonnegative().max(100_000_000).optional(),
+  shiftStartHour: z.union([z.null(), z.coerce.number().int().min(0).max(23)]).optional(),
+  shiftEndHour: z.union([z.null(), z.coerce.number().int().min(0).max(24)]).optional(),
   photoUrl: z.string().max(1_500_000).nullable().optional(),
   address: z.string().trim().min(4).max(500).optional(),
   latitude: z.coerce.number().finite().min(-90).max(90).optional(),
@@ -434,7 +437,7 @@ export async function PATCH(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
-  invalidate(`ops:${current.organizationId}:`); invalidate('clients:')
+  invalidate(`ops:${current.organizationId}:`); invalidate('clients:'); invalidate('patrols:')
 
   const parsed = updateSchema.safeParse(await readJson(request))
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid update.')
@@ -453,15 +456,29 @@ export async function PATCH(request: Request) {
     else if (action === 'reissue-nfc') changes = { nfcToken: crypto.randomUUID() }
     else if (action === 'update') changes = {
       name: parsed.data.name,
+      guardCode: parsed.data.guardCode,
       nin: parsed.data.nin,
       phone: parsed.data.phone,
       site: parsed.data.site,
       monthlySalary: parsed.data.monthlySalary,
+      shiftStartHour: parsed.data.shiftStartHour,
+      shiftEndHour: parsed.data.shiftEndHour,
       photoUrl: parsed.data.photoUrl,
     }
     else return fail('Unsupported guard action.')
     if (parsed.data.monthlySalary !== undefined && !(await isModerator(current))) {
       return fail('Only an owner, administrator, or moderator can change guard salary.', 403)
+    }
+    if (parsed.data.shiftStartHour != null && parsed.data.shiftEndHour != null && parsed.data.shiftStartHour === parsed.data.shiftEndHour) {
+      return fail('The shift start and end hours must be different.')
+    }
+    if (parsed.data.guardCode) {
+      const [clash] = await db.select({ id: guards.id }).from(guards).where(and(
+        eq(guards.organizationId, current.organizationId),
+        eq(guards.guardCode, parsed.data.guardCode),
+        ne(guards.id, id),
+      )).limit(1)
+      if (clash) return fail(`Guard ID ${parsed.data.guardCode} is already used by another guard in this company.`)
     }
 
     if (changes.site) {
@@ -499,12 +516,7 @@ export async function PATCH(request: Request) {
     row = updated
     eventTitle = `Site updated: ${updated.name}`
   } else if (section === 'attendance') {
-    if (!['approve', 'flag'].includes(action)) return fail('Unsupported attendance action.')
-    const [updated] = await db.update(attendance).set({ reviewStatus: action === 'approve' ? 'approved' : 'flagged' })
-      .where(and(eq(attendance.id, id), eq(attendance.organizationId, current.organizationId))).returning()
-    if (!updated) return fail('Attendance record not found in this organization.', 404)
-    row = updated
-    eventTitle = 'Attendance reviewed'
+    return fail('Attendance records are read-only.', 405)
   } else if (section === 'patrols' || section === 'live-map') {
     if (action !== 'complete') return fail('Patrol records are read-only except for marking a patrol complete.', 405)
     const [updated] = await db.update(patrols).set({ status: 'completed', progress: 100 })
@@ -602,7 +614,7 @@ export async function DELETE(request: Request) {
   if (!process.env.DATABASE_URL) return databaseUnavailable()
   const { current, response } = await getCurrentUser()
   if (response) return response
-  invalidate(`ops:${current.organizationId}:`); invalidate('clients:')
+  invalidate(`ops:${current.organizationId}:`); invalidate('clients:'); invalidate('patrols:')
   if (!(await isModerator(current))) return fail('Only an owner, admin or moderator can delete records.', 403)
   const url = new URL(request.url)
   const section = url.searchParams.get('section')

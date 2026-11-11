@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, count, desc, eq, gte, isNull } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNull, lt, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { getActiveOrganization } from '@/lib/auth/organization'
@@ -8,7 +8,7 @@ import { attendance, guards, organizations, patrolCheckpoints, patrols, sites } 
 import { raiseAlert } from '@/lib/alerts'
 import { organizationForGuardAppCode, ownerUserId } from '@/lib/guard-access'
 import { todayStatus } from '@/lib/guard-today'
-import { currentShiftDate, lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
+import { currentShiftDate, guardShift, lagosParts, memberRole, normalizeShift, patrolSlots, slotForHour } from '@/lib/server'
 import { invalidate } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
@@ -21,6 +21,10 @@ const scanSchema = z.object({
   longitude: z.number().finite().min(-180).max(180),
   /** Shared guard-app code, used by phones that are not signed in. */
   code: z.string().trim().max(64).optional(),
+  /** Guard ID number (NIN or guard UUID) for shared phones without an NFC tag. */
+  guardId: z.string().trim().max(100).optional(),
+  /** The scheduled checkpoint the guard selected in the patrol section. */
+  slot: z.string().trim().max(5).optional(),
 })
 
 function calculateDistanceMeters(latitude: number, longitude: number, siteLatitude: number, siteLongitude: number): number {
@@ -108,8 +112,8 @@ export async function POST(request: Request) {
   if (linked) effectiveGuardId = linked.id
   }
 
-  if (!token && !effectiveGuardId) {
-    return NextResponse.json({ error: 'Please sign in with your guard account or tap your NFC tag.' }, { status: 400 })
+  if (!token && !effectiveGuardId && !parsed.data.guardId) {
+    return NextResponse.json({ error: 'Enter your guard ID, sign in with your guard account, or tap your NFC tag.' }, { status: 400 })
   }
 
   const [guard] = await db
@@ -117,13 +121,18 @@ export async function POST(request: Request) {
     .from(guards)
     .where(and(
       eq(guards.organizationId, currentUser.organizationId),
-      effectiveGuardId && !token ? eq(guards.id, effectiveGuardId) : eq(guards.nfcToken, token),
+      effectiveGuardId && !token
+        ? eq(guards.id, effectiveGuardId)
+        : token
+          ? or(eq(guards.nfcToken, token), eq(guards.nin, token), eq(guards.guardCode, token))
+          : sql`(${guards.id}::text = ${parsed.data.guardId ?? ''} or ${guards.nin} = ${parsed.data.guardId ?? ''} or ${guards.guardCode} = ${parsed.data.guardId ?? ''})`,
     ))
     .limit(1)
 
   if (!guard) {
-    if (!token) return NextResponse.json({ error: 'Your account is not linked to an active guard profile. Ask your supervisor to link it in Settings -> Team.' }, { status: 400 })
-    const [elsewhere] = await db.select({ id: guards.id }).from(guards).where(eq(guards.nfcToken, token)).limit(1)
+    if (!token && !parsed.data.guardId) return NextResponse.json({ error: 'Your account is not linked to an active guard profile. Ask your supervisor to link it in Settings -> Team.' }, { status: 400 })
+    if (parsed.data.guardId) return NextResponse.json({ error: 'No guard in this company matches that ID number.' }, { status: 404 })
+    const [elsewhere] = await db.select({ id: guards.id }).from(guards).where(or(eq(guards.nfcToken, token), eq(guards.nin, token), eq(guards.guardCode, token))).limit(1)
     if (elsewhere) {
       return NextResponse.json({
         error: `This tag is registered to a guard in a different organization (code ${token}). Sign in, or enter the guard app code, for the organization that registered this guard.`,
@@ -240,6 +249,28 @@ export async function POST(request: Request) {
       .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude, status: 'active' })
       .where(eq(guards.id, guard.id))
 
+    const lagosNow = lagosParts(now)
+    if (lagosNow.hour >= 8) {
+      const dayStart = new Date(`${lagosNow.date}T00:00:00+01:00`)
+      const dayEnd = new Date(dayStart.getTime() + 86400000)
+      const [earlier] = await db.select({ id: attendance.id }).from(attendance).where(and(
+        eq(attendance.organizationId, currentUser.organizationId),
+        eq(attendance.guardId, guard.id),
+        gte(attendance.checkedInAt, dayStart),
+        lt(attendance.checkedInAt, dayEnd),
+        lt(attendance.checkedInAt, now),
+      )).limit(1)
+      if (!earlier) await raiseAlert({
+        userId: currentUser.userId,
+        organizationId: currentUser.organizationId,
+        type: 'attendance',
+        title: 'Late morning sign-in',
+        body: `${guard.name} signed in after the 08:00 deadline${site ? ` at ${site.name}` : ''}`,
+        severity: 'high',
+        key: `morning-late:${guard.id}:${lagosNow.date}`,
+      })
+    }
+
     return NextResponse.json({
       ok: true,
       status: await todayStatus(currentUser.organizationId, guard.id),
@@ -273,10 +304,12 @@ export async function POST(request: Request) {
   const lagos = lagosParts(now)
   const [organization] = await db.select({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour })
     .from(organizations).where(eq(organizations.id, currentUser.organizationId)).limit(1)
-  const shift = normalizeShift(organization?.startHour, organization?.endHour)
+  const shift = guardShift(guard, normalizeShift(organization?.startHour, organization?.endHour))
   const slots = patrolSlots(shift)
-  const slot = slotForHour(lagos.hour, shift)
-  if (!slot) {
+  const currentSlot = slotForHour(lagos.hour, shift)
+  const requestedSlot = parsed.data.slot?.trim()
+  const slot = requestedSlot || currentSlot
+  if (!currentSlot || !slot) {
     const shiftStart = `${String(shift.startHour).padStart(2, '0')}:00`
     const shiftEnd = `${String(shift.endHour).padStart(2, '0')}:00`
     return NextResponse.json({
@@ -284,41 +317,20 @@ export async function POST(request: Request) {
     }, { status: 409 })
   }
 
+  if (!slots.includes(slot)) {
+    return NextResponse.json({ error: `${slot} is not one of this guard's scheduled patrol checkpoints (${slots[0]}–${slots[slots.length - 1]}).` }, { status: 409 })
+  }
+  if (slots.indexOf(slot) > slots.indexOf(currentSlot)) {
+    return NextResponse.json({ error: `${slot} has not started yet. The current checkpoint is ${currentSlot}.` }, { status: 409 })
+  }
+
   // Active shift date (overnight shifts crossing midnight attach to the shift date)
   const shiftDate = currentShiftDate(lagos, shift)
 
-  // Ensure guard's active shift attendance is confirmed on-duty
-  const [activeAttendance] = await db
-    .select({ id: attendance.id })
-    .from(attendance)
-    .where(and(
-      eq(attendance.organizationId, currentUser.organizationId),
-      eq(attendance.guardId, guard.id),
-      isNull(attendance.checkedOutAt),
-    ))
-    .limit(1)
-
-  if (!activeAttendance) {
-    await db.insert(attendance).values({
-      userId: currentUser.userId,
-      organizationId: currentUser.organizationId,
-      guardId: guard.id,
-      siteId,
-      checkedInAt: now,
-      latitude,
-      longitude,
-      method: token ? 'nfc' : 'gps',
-      withinGeofence: true,
-      createdAt: now,
-    })
-    await db.update(guards)
-      .set({ lastCheckIn: now, lastLatitude: latitude, lastLongitude: longitude, status: 'active' })
-      .where(eq(guards.id, guard.id))
-  } else {
-    await db.update(guards)
-      .set({ lastLatitude: latitude, lastLongitude: longitude })
-      .where(eq(guards.id, guard.id))
-  }
+  // Morning attendance and hourly patrol are separate activities: do not create attendance here.
+  await db.update(guards)
+    .set({ lastLatitude: latitude, lastLongitude: longitude })
+    .where(eq(guards.id, guard.id))
 
   let [patrol] = await db.select().from(patrols).where(and(
     eq(patrols.organizationId, currentUser.organizationId),

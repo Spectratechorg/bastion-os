@@ -5,7 +5,7 @@ import { LoaderCircle, X } from 'lucide-react'
 
 export function Badge({ value }: { value: unknown }) {
   const text = String(value ?? '—').replace(/_/g, ' ')
-  const tone = /critical|high|suspended|flagged|outside|escalated|missed|unacknowledged|overdue/i.test(text)
+  const tone = /critical|high|suspended|flagged|outside|escalated|missed|unacknowledged|overdue|not completed/i.test(text)
     ? { dot: 'bg-[#B42318]', text: 'text-[#8C2B1E]' }
     : /medium|pending|open|inactive|in progress|investigating|restock|due soon/i.test(text)
       ? { dot: 'bg-[#B7791F]', text: 'text-[#8A5A12]' }

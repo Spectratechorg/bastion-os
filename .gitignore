@@ -28,3 +28,6 @@ tsconfig.tsbuildinfo
 # Playwright MCP artifacts
 .playwright-mcp/
 .vercel
+
+# Logical database backups
+backups/

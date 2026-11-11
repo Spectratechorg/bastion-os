@@ -70,6 +70,7 @@ export function lagosParts(date = new Date()) {
 
 export {
   patrolSlots,
+  guardShift,
   DEFAULT_SHIFT,
   normalizeShift,
   slotForHour,

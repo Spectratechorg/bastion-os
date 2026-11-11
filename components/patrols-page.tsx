@@ -2,17 +2,54 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react'
-import { PageHeader, StatStrip } from '@/components/workspace-shell'
-import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, inputClass, smallBtn } from '@/components/ui-bits'
+import { PageHeader } from '@/components/workspace-shell'
+import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, smallBtn } from '@/components/ui-bits'
 import { api, clearClientCache } from '@/lib/client'
 
-type Patrol = { id: string; date: string; guardName: string; photoUrl: string | null; site: string; checkpoints: Record<string, string>; signedCount: number; status: string }
-type Data = { date: string; today: string; slots: string[]; shift: { startHour: number; endHour: number }; rows: Patrol[]; notStarted: { guardId: string; guardName: string; site: string }[]; summary: { completedToday: number; inProgressToday: number; missedToday: number; completedThisMonth: number } }
+type Patrol = {
+  id: string; date: string; guardId: string; guardName: string; photoUrl: string | null; site: string
+  checkpoints: Record<string, string>; signedCount: number; status: string; missedSlots: string[]
+  shift: { startHour: number; endHour: number }; slots: string[]
+}
+type Data = {
+  date: string; today: string; rows: Patrol[]
+  summary: { completed: number; inProgress: number; missed: number; total: number; completedThisMonth: number }
+}
 
 const time = (iso?: string) => iso ? new Date(iso).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }) : null
+const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
+const dayLabel = (value: string) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Today'
 
-function Slots({ patrol, slots }: { patrol: Patrol; slots: string[] }) {
-  return <div className="flex w-full gap-1.5 overflow-x-auto pb-1 sm:w-auto sm:pb-0">{slots.map((slot) => { const signed = patrol.checkpoints[slot]; return <span key={slot} title={signed ? `Signed ${time(signed)}` : 'Not signed'} className={`flex min-h-[36px] min-w-[64px] flex-col items-center justify-center rounded-lg border px-2 text-[10px] ${signed ? 'border-[#2A2B2E] bg-[#2A2B2E] text-white' : 'border-[#E4E4E7] bg-white text-[#6B6B72]'}`}><b className="font-mono text-[11px]">{slot}</b><span>{signed ? time(signed) : '—'}</span></span> })}</div>
+function Summary({ value, label, tone }: { value: string; label: string; tone: 'green' | 'amber' | 'red' | 'neutral' }) {
+  const dot = tone === 'green' ? 'bg-[#16794A]' : tone === 'amber' ? 'bg-[#B7791F]' : tone === 'red' ? 'bg-[#B42318]' : 'bg-[#9A9AA1]'
+  return <div className="rounded-[12px] border border-[#E4E4E7] bg-white p-3.5">
+    <div className="flex items-center gap-2 text-[10.5px] text-[#6B6B72]"><span className={`size-1.5 rounded-full ${dot}`} />{label}</div>
+    <p className="mt-1.5 text-[23px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{value}</p>
+  </div>
+}
+
+function Slots({ patrol }: { patrol: Patrol }) {
+  return <div className="grid grid-cols-5 gap-1.5 sm:flex sm:overflow-x-auto sm:pb-1">
+    {patrol.slots.map((slot) => {
+      const signed = patrol.checkpoints[slot]
+      const missed = !signed && patrol.missedSlots.includes(slot)
+      const state = signed ? 'signed' : missed ? 'missed' : 'pending'
+      const tone = state === 'signed' ? 'border-[#CFE3D3] bg-[#EFF7F0] text-[#2F6B49]' : state === 'missed' ? 'border-[#F0C7C1] bg-[#FDECEA] text-[#B42318]' : 'border-[#E4E4E7] bg-[#FAFAFA] text-[#8A938B]'
+      const bar = state === 'signed' ? 'bg-[#16794A]' : state === 'missed' ? 'bg-[#D14343]' : 'bg-[#D4D4D8]'
+      return <div key={slot} title={signed ? `${slot} · signed ${time(signed)}` : missed ? `${slot} · missed` : `${slot} · pending`} className={`flex min-w-0 flex-1 flex-col items-center rounded-[8px] border px-1 py-2 sm:min-w-[46px] ${tone}`}>
+        <span className="font-mono text-[9.5px] font-semibold">{slot}</span>
+        <span className={`mt-1.5 h-1 w-full rounded-full ${bar}`} />
+        <span className="mt-1 whitespace-nowrap text-[8.5px]">{signed ? time(signed) : missed ? 'Missed' : 'Pending'}</span>
+      </div>
+    })}
+  </div>
+}
+
+function overall(status: string) {
+  if (status === 'completed') return 'Patrol Completed'
+  if (status === 'missed') return 'Not Completed'
+  if (status === 'suspended') return 'Suspended'
+  return 'In progress'
 }
 
 export function PatrolsPage() {
@@ -27,31 +64,69 @@ export function PatrolsPage() {
     setDate(base.toISOString().slice(0, 10))
   }
   const s = data?.summary
+  const shownDate = date || data?.today || ''
   return <>
-    <PageHeader title="Patrols" subtitle={data ? `Every hour from ${data.slots[0] ?? '08:00'} to ${data.slots[data.slots.length - 1] ?? '17:00'} (Lagos time). ${data.slots.length} signatures complete a patrol.` : 'Hourly checkpoints inside your shift.'} />
-    <StatStrip stats={[[String(s?.completedToday ?? '—'), 'Completed today'], [String(s?.inProgressToday ?? '—'), 'In progress'], [String(s?.missedToday ?? '—'), 'Missed today'], [String(s?.completedThisMonth ?? '—'), 'Completed this month']]} />
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      <div className="flex items-center gap-1">
-        <button type="button" aria-label="Previous day" className={smallBtn} onClick={() => shiftDate(-1)}><ChevronLeft className="size-4" /></button>
-        <input type="date" aria-label="Patrol date" value={date || data?.today || ''} max={data?.today} onChange={(e) => setDate(e.target.value)} className={`${inputClass.replace("w-full", "w-auto")}`} />
-        <button type="button" aria-label="Next day" className={smallBtn} onClick={() => shiftDate(1)} disabled={(date || data?.today || '') >= (data?.today ?? '')}><ChevronRight className="size-4" /></button>
-      </div>
-      <button className={btn} onClick={() => { clearClientCache(); setLoading(true); void load() }}><RefreshCw className="size-3.5" />Refresh</button>
-      <a href="/api/export?section=patrols" className={btn}><Download className="size-3.5" />Export CSV</a>
-    </div>
+    <PageHeader
+      title="Patrols"
+      subtitle={`${dayLabel(shownDate)} · Every guard, their own shift, and every scheduled checkpoint for the day.`}
+      action={<div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+        <div className="flex h-10 w-full items-center rounded-[8px] border border-[#E4E4E7] bg-white px-1 sm:w-auto">
+          <button type="button" aria-label="Previous day" className={smallBtn} onClick={() => shiftDate(-1)}><ChevronLeft className="size-4" /></button>
+          <input type="date" aria-label="Patrol date" value={shownDate} max={data?.today} onChange={(e) => setDate(e.target.value)} className="h-8 w-[128px] border-0 bg-transparent px-1 text-xs text-[#3F3F46] outline-none" />
+          <button type="button" aria-label="Next day" className={smallBtn} onClick={() => shiftDate(1)} disabled={shownDate >= (data?.today ?? '')}><ChevronRight className="size-4" /></button>
+        </div>
+        <button className={`${btn} flex-1 justify-center sm:flex-none`} onClick={() => { clearClientCache(); setLoading(true); void load() }}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+        <a href="/api/export?section=patrols" className={`${btn} flex-1 justify-center sm:flex-none`}><Download className="size-3.5" />Export CSV</a>
+      </div>}
+    />
+
+    <section className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <Summary value={String(s?.completed ?? '—')} label="Completed" tone="green" />
+      <Summary value={String(s?.inProgress ?? '—')} label="In progress" tone="amber" />
+      <Summary value={String(s?.missed ?? '—')} label="Not completed" tone="red" />
+      <Summary value={String(s?.total ?? '—')} label="Guards on date" tone="neutral" />
+    </section>
+
     <ErrorBanner message={error} retry={() => void load()} />
-    <div className="overflow-hidden ws-card">
-      {loading && !data ? <Spinner label="Loading patrols…" /> : !data || (data.rows.length === 0 && data.notStarted.length === 0) ? <Empty title="No patrols on this date" text="Patrols appear when a guard signs a checkpoint in the guard app." /> : <ul className="divide-y divide-[#EFEFF1]">
-        {data.rows.map((p) => <li key={p.id} className="flex flex-wrap items-center gap-3 p-4">
-          <div className="flex min-w-[180px] flex-1 items-center gap-3"><Avatar name={p.guardName} src={p.photoUrl} /><span className="text-xs"><b className="block text-sm font-semibold">{p.guardName}</b><span className="text-[#6B6B72]">{p.site}</span></span></div>
-          <Slots patrol={p} slots={data.slots} />
-          <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:min-w-[170px] sm:justify-end">
-            <div className="w-24"><div className="flex justify-between text-[10px] text-[#6B6B72]"><span className="font-mono tabular-nums">{p.signedCount}/{data.slots.length}</span><span className="font-mono tabular-nums">{Math.round((p.signedCount / Math.max(data.slots.length, 1)) * 100)}%</span></div><div className="mt-1 h-1.5 rounded-full bg-[#EFEFF1]"><div className="h-1.5 rounded-full bg-[#2A2B2E]" style={{ width: `${Math.round((p.signedCount / Math.max(data.slots.length, 1)) * 100)}%` }} /></div></div>
-            <Badge value={p.status === 'completed' ? 'completed' : p.status} />
+
+    {loading && !data ? <div className="ws-card"><Spinner label="Loading patrols…" /></div> : !data || data.rows.length === 0 ? <div className="ws-card"><Empty title="No guards on this date" text="Register guards to build the daily patrol board." /></div> : <>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10.5px] text-[#8A938B]">{data.rows.length} guard{data.rows.length === 1 ? '' : 's'} · checkpoints update as guards sign in</p>
+        <div className="flex items-center gap-3 text-[10px] text-[#8A938B]">
+          <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#16794A]" />Signed</span>
+          <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#D14343]" />Missed</span>
+          <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-[#D4D4D8]" />Pending</span>
+        </div>
+      </div>
+      <ul className="space-y-3">
+      {data.rows.map((p) => {
+        const pct = Math.round((p.signedCount / Math.max(p.slots.length, 1)) * 100)
+        return <li key={p.id} className="ws-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <Avatar name={p.guardName} src={p.photoUrl} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[#18181B]">{p.guardName}</p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[#6B6B72]">
+                  <span className="truncate">{p.site}</span>
+                  <span className="rounded-full bg-[#F5F5F6] px-1.5 py-0.5 text-[9.5px]">Shift {hourLabel(p.shift.startHour)}–{hourLabel(p.shift.endHour)}</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="text-right"><p className="text-[13px] font-semibold tabular-nums text-[#18181B]">{p.signedCount}<span className="text-[#8A938B]">/{p.slots.length}</span></p><p className="text-[10px] text-[#8A938B]">{pct}% signed</p></div>
+              <Badge value={overall(p.status)} />
+            </div>
           </div>
-        </li>)}
-        {data.notStarted.map((g) => <li key={g.guardId} className="flex flex-wrap items-center gap-3 p-4 text-xs"><div className="flex min-w-[180px] flex-1 items-center gap-3"><Avatar name={g.guardName} /><span><b className="block text-sm font-semibold">{g.guardName}</b><span className="text-[#6B6B72]">{g.site}</span></span></div><span className="text-[#6B6B72]">No checkpoint signed yet today</span><Badge value="pending" /></li>)}
-      </ul>}
-    </div>
+
+          <div className="mt-4">
+            <p className="mb-2 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#8A938B]">Checkpoint timeline</p>
+            <Slots patrol={p} />
+          </div>
+
+        </li>
+      })}
+      </ul>
+    </>}
   </>
 }

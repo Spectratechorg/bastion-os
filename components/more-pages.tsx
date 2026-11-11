@@ -1,8 +1,10 @@
 'use client'
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, Plus } from 'lucide-react'
-import { PageHeader, StatStrip } from '@/components/workspace-shell'
+import { FormEvent, useCallback, useEffect, useState } from 'react'
+import {
+  Activity, Bell, BriefcaseBusiness, Clock3, Download, FileText, MapPin, Plus, Route, ShieldAlert, Users, Wallet,
+} from 'lucide-react'
+import { PageHeader } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { ASSIGNABLE_ROLES, EDITABLE_ROLES, PERMISSIONS, ROLE_LABELS } from '@/lib/permissions'
 import { api, when } from '@/lib/client'
@@ -12,57 +14,152 @@ import { FINANCE_ENABLED } from '@/lib/features'
 
 type Row = Record<string, any> & { id: string } // eslint-disable-line @typescript-eslint/no-explicit-any
 
-function useSections(names: string[]) {
-  const [data, setData] = useState<Record<string, Row[]> | null>(null); const [error, setError] = useState('')
-  const load = useCallback(async () => { try { const out = await Promise.all(names.map((n) => api<Row[]>(`/api/operations?section=${n}`))); setData(Object.fromEntries(names.map((n, i) => [n, out[i]]))); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load.') } }, [names.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { void load() }, [load])
-  return { data, error, load }
-}
 type Summary = { summary?: { clients: number; finance: { revenue: number; costs: number; pending: number } | null }; attendance: { total: number; outside: number; guards: number }; incidents: { total: number; resolved: number; serious: number }; alerts: { total: number; acknowledged: number }; patrols: { total: number; completed: number }; guards: { total: number }; sites: { total: number }; payroll: { total: number | null; net: string | number | null } }
 const lagosDay = (offset = 0) => new Date(Date.now() + offset * 86400000).toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' })
 
+function plural(count: number, singular: string, pluralForm = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : pluralForm}`
+}
+
+function periodLabel(from: string, to: string) {
+  if (!from && !to) return 'all time'
+  return `${from || 'the beginning'} to ${to || 'today'}`
+}
+
+function reportLines(sum: Summary): string[] {
+  const openAlerts = Math.max(0, sum.alerts.total - sum.alerts.acknowledged)
+  const unresolved = Math.max(0, sum.incidents.total - sum.incidents.resolved)
+  const missedPatrols = Math.max(0, sum.patrols.total - sum.patrols.completed)
+  return [
+    `Attendance: ${plural(sum.attendance.total, 'check-in')} from ${plural(sum.attendance.guards, 'guard')}; ${plural(sum.attendance.outside, 'check-in')} outside the geofence.`,
+    `Patrols: ${sum.patrols.completed} of ${sum.patrols.total} completed${missedPatrols ? `; ${missedPatrols} not completed` : ''}.`,
+    `Incidents: ${plural(sum.incidents.total, 'incident')}, ${sum.incidents.resolved} resolved, ${unresolved} open; ${sum.incidents.serious} high or critical.`,
+    `Alerts: ${plural(sum.alerts.total, 'alert')}, ${sum.alerts.acknowledged} acknowledged, ${openAlerts} open.`,
+    `Roster: ${plural(sum.guards.total, 'guard')} · ${plural(sum.sites.total, 'site')} · ${plural(sum.summary?.clients ?? 0, 'client')}.`,
+  ]
+}
+
+function saveTextFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
+
+function ReportGlyph({ section }: { section: string }) {
+  const Icon = section === 'attendance' ? Clock3 : section === 'patrols' ? Route : section === 'incidents' ? ShieldAlert : section === 'alerts' ? Bell : section === 'payroll' ? Wallet : section === 'guards' ? Users : section === 'sites' ? MapPin : section === 'clients' ? BriefcaseBusiness : FileText
+  return <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[#F0F2EC] text-[#3F3F46]"><Icon className="size-4" strokeWidth={1.75} /></span>
+}
+
+function VolumeChart({ summary }: { summary: Summary | null }) {
+  const bars = summary ? [
+    { label: 'Check-ins', value: summary.attendance.total, tone: 'bg-[#2A2B2E]' },
+    { label: 'Patrols', value: summary.patrols.total, tone: 'bg-[#4C6352]' },
+    { label: 'Incidents', value: summary.incidents.total, tone: 'bg-[#B7791F]' },
+    { label: 'Alerts', value: summary.alerts.total, tone: 'bg-[#B42318]' },
+  ] : []
+  const max = Math.max(1, ...bars.map((bar) => bar.value))
+  return <section className="ws-card p-4">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Report volume</h2>
+        <p className="mt-0.5 text-[11px] text-[#6B6B72]">Operational records captured in this period</p>
+      </div>
+      <span className="flex size-8 items-center justify-center rounded-[9px] bg-[#F0F2EC] text-[#3F3F46]"><Activity className="size-4" strokeWidth={1.75} /></span>
+    </div>
+    {!summary ? <div className="mt-4 h-[180px] animate-pulse rounded-[8px] bg-[#F5F5F6]" /> : <div className="mt-4 flex h-[180px] items-end gap-3 border-b border-[#E4E4E7] px-1 sm:gap-6">
+      {bars.map((bar) => <div key={bar.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-2">
+        <span className="text-[10px] font-semibold tabular-nums text-[#52525B]">{bar.value}</span>
+        <div className={`w-full max-w-[84px] rounded-t-[5px] ${bar.tone}`} style={{ height: `${Math.max(4, (bar.value / max) * 100)}%` }} />
+        <span className="pb-2 text-[10px] text-[#6B6B72]">{bar.label}</span>
+      </div>)}
+    </div>}
+  </section>
+}
+
+function Breakdown({ section, title, total, leftLabel, left, rightLabel, right, rightTone = 'bg-[#B42318]', note }: {
+  section: string; title: string; total: number; leftLabel: string; left: number; rightLabel: string; right: number; rightTone?: string; note?: string
+}) {
+  const leftPct = total ? Math.round((left / total) * 100) : 0
+  return <section className="ws-card p-4">
+    <div className="flex items-start justify-between gap-3"><ReportGlyph section={section} /><span className="text-[18px] font-semibold tabular-nums text-[#18181B]">{total}</span></div>
+    <h2 className="mt-3 text-[12.5px] font-semibold text-[#18181B]">{title}</h2>
+    <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-[#F0F0F0]"><div className="bg-[#16794A]" style={{ width: `${leftPct}%` }} /><div className={`flex-1 ${rightTone}`} /></div>
+    <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#6B6B72]">
+      <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-[#16794A]" />{leftLabel} <b className="font-semibold tabular-nums text-[#3F3F46]">{left}</b></span>
+      <span className="flex items-center gap-1.5"><span className={`size-1.5 rounded-full ${rightTone}`} />{rightLabel} <b className="font-semibold tabular-nums text-[#3F3F46]">{right}</b></span>
+    </div>
+    {note && <p className="mt-2 text-[10px] leading-4 text-[#8A938B]">{note}</p>}
+  </section>
+}
+
 export function ReportsPage() {
-  const { data, error, load } = useSections(['activity'])
   const monthStart = lagosDay().slice(0, 8) + '01'
   const [from, setFrom] = useState(monthStart); const [to, setTo] = useState(lagosDay()); const [sum, setSum] = useState<Summary | null>(null); const [problem, setProblem] = useState('')
-  useEffect(() => { setSum(null); const q = new URLSearchParams(); if (from) q.set('from', from); if (to) q.set('to', to); api<Summary>(`/api/reports?${q}`).then((d) => { setSum(d); setProblem('') }).catch((e) => setProblem(e instanceof Error ? e.message : 'Unable to load the summary.')) }, [from, to])
+  const loadSummary = useCallback(async () => {
+    setSum(null)
+    try {
+      const q = new URLSearchParams(); if (from) q.set('from', from); if (to) q.set('to', to)
+      setSum(await api<Summary>(`/api/reports?${q}`)); setProblem('')
+    } catch (issue) { setProblem(issue instanceof Error ? issue.message : 'Unable to load the summary.') }
+  }, [from, to])
+  useEffect(() => { void loadSummary() }, [loadSummary])
   const presets: [string, () => void][] = [['Today', () => { setFrom(lagosDay()); setTo(lagosDay()) }], ['Last 7 days', () => { setFrom(lagosDay(-6)); setTo(lagosDay()) }], ['This month', () => { setFrom(monthStart); setTo(lagosDay()) }], ['Last month', () => { const d = new Date(`${monthStart}T00:00:00Z`); const prevEnd = new Date(d.getTime() - 86400000); setFrom(prevEnd.toISOString().slice(0, 8) + '01'); setTo(prevEnd.toISOString().slice(0, 10)) }], ['All time', () => { setFrom(''); setTo('') }]]
   const qs = `${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`
-  const [activityQuery, setActivityQuery] = useState(''); const [activityType, setActivityType] = useState('all'); const [activitySort, setActivitySort] = useState<'newest' | 'oldest'>('newest'); const [activityPage, setActivityPage] = useState(1)
-  const activity = useMemo(() => {
-    const filtered = (data?.activity ?? []).filter((event) => {
-      const haystack = `${event.title} ${event.body} ${event.type}`.toLowerCase()
-      const inDates = (!from || event.createdAt.slice(0, 10) >= from) && (!to || event.createdAt.slice(0, 10) <= to)
-      return inDates && (activityType === 'all' || event.type === activityType) && haystack.includes(activityQuery.toLowerCase())
-    }).sort((a, b) => activitySort === 'newest' ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt))
-    return filtered
-  }, [data, from, to, activityQuery, activityType, activitySort])
-  const activityTypes = [...new Set((data?.activity ?? []).map((event) => event.type))]
-  const activityPages = Math.max(1, Math.ceil(activity.length / 10)); const activityRows = activity.slice((activityPage - 1) * 10, activityPage * 10)
   const cards: [string, string, string, string][] = [
-    ['attendance', 'Attendance log', 'Every check-in with guard, site, time, method, geofence result and review status.', sum ? `${sum.attendance.total} check-ins` : '…'],
-    ['patrols', 'Patrol log', 'Each daily patrol with the guard, site and how many hourly checkpoints were signed.', sum ? `${sum.patrols.total} patrols` : '…'],
-    ['incidents', 'Incident register', 'Title, site, severity, status, assignee and the full timeline.', sum ? `${sum.incidents.total} incidents` : '…'],
-    ['alerts', 'Alerts', 'Every alert raised, its severity and whether it was acknowledged.', sum ? `${sum.alerts.total} alerts` : '…'],
-    ['payroll', 'Payroll', 'Base pay, days present and absent, deductions, net pay and paid status.', sum && sum.payroll.total !== null ? `${sum.payroll.total} records` : '…'],
-    ['guards', 'Guard roster', 'Guards registered in the period, with site, salary and NFC tag.', sum ? `${sum.guards.total} guards` : '…'],
-    ['sites', 'Sites', 'Sites added in the period with geofence and client.', sum ? `${sum.sites.total} sites` : '…'],
-    ['clients', 'Clients', 'Client accounts with contract value, SLA score and renewal date.', sum ? `${sum.summary?.clients ?? 0} clients` : '…'],
-    ...(FINANCE_ENABLED ? [['finances', 'Finance ledger', 'Invoices, expenses, budgets and inventory costs with client and site.', sum ? (sum.summary?.finance ? 'Revenue and costs' : 'Not available for your role') : '…'] as [string, string, string, string]] : []),
+    ['attendance', 'Attendance log', 'Guard, site, time, geofence result and review status.', sum ? plural(sum.attendance.total, 'check-in') : '…'],
+    ['patrols', 'Patrol log', 'Each daily patrol with the guard, site and signed checkpoints.', sum ? plural(sum.patrols.total, 'patrol') : '…'],
+    ['incidents', 'Incident register', 'Title, site, severity, status, assignee and timeline.', sum ? plural(sum.incidents.total, 'incident') : '…'],
+    ['alerts', 'Alerts', 'Every alert raised, its severity and acknowledgement.', sum ? plural(sum.alerts.total, 'alert') : '…'],
+    ['payroll', 'Payroll', 'Base pay, attendance days, deductions, net pay and status.', sum && sum.payroll.total !== null ? plural(sum.payroll.total, 'record') : '…'],
+    ['guards', 'Guard roster', 'Guards in the period, with site, salary and NFC tag.', sum ? plural(sum.guards.total, 'guard') : '…'],
+    ['sites', 'Sites', 'Sites in the period with geofence and client.', sum ? plural(sum.sites.total, 'site') : '…'],
+    ['clients', 'Clients', 'Client accounts with contract value and renewal date.', sum ? plural(sum.summary?.clients ?? 0, 'client') : '…'],
+    ...(FINANCE_ENABLED ? [['finances', 'Finance ledger', 'Invoices, expenses, budgets and inventory with client and site.', sum ? (sum.summary?.finance ? 'Revenue and costs' : 'Not available for your role') : '…'] as [string, string, string, string]] : []),
   ]
+  function downloadSummary() {
+    if (!sum) return
+    const lines = [
+      'BastionOS — Report',
+      `Period: ${periodLabel(from, to)}`,
+      `Generated: ${new Date().toLocaleString('en-NG', { timeZone: 'Africa/Lagos' })}`,
+      '',
+      ...reportLines(sum).map((line) => `• ${line}`),
+    ]
+    saveTextFile(`bastion-report-${from || 'all'}-${to || 'now'}.txt`, lines.join('\n'))
+  }
   return <>
-    <PageHeader title="Reports" subtitle="Pick a time frame, see the headline numbers, then download any report as a CSV.">
-      <button onClick={() => window.print()} className={btn}><Download className="size-3.5" />Print summary</button>
+    <PageHeader title="Reports" subtitle="See the period at a glance, inspect the charts and download the records behind them.">
+      <button onClick={downloadSummary} disabled={!sum} className={btnPrimary}><Download className="size-3.5" />Download report</button>
     </PageHeader>
-    <ErrorBanner message={problem || error} retry={() => void load()} />
+    <ErrorBanner message={problem} retry={() => void loadSummary()} />
     <section className="mb-4 ws-card p-4">
-      <div className="flex flex-wrap items-end gap-3"><Field label="From"><input type="date" className={`${inputClass.replace('w-full', 'w-auto')}`} value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></Field><Field label="To"><input type="date" className={`${inputClass.replace('w-full', 'w-auto')}`} value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></Field>
-        <div className="flex flex-wrap gap-1.5">{presets.map(([label, fn]) => <button key={label} className={smallBtn} onClick={fn}>{label}</button>)}</div></div>
-      <p className="mt-2 text-[11px] text-[#6B6B72]">{from || to ? `Showing ${from ? from : 'the beginning'} to ${to ? to : 'today'} (Lagos dates).` : 'Showing all time.'}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3"><Field label="From"><input type="date" className={`${inputClass.replace('w-full', 'w-auto')}`} value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></Field><Field label="To"><input type="date" className={`${inputClass.replace('w-full', 'w-auto')}`} value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></Field></div>
+        <div className="flex flex-wrap gap-1.5">{presets.map(([label, fn]) => <button key={label} className="rounded-full border border-[#E4E4E7] bg-white px-2.5 py-1.5 text-[10px] font-medium text-[#52525B] hover:border-[#D4D4D8]" onClick={fn}>{label}</button>)}</div>
+      </div>
+      <p className="mt-2 text-[11px] text-[#6B6B72]">{from || to ? `Showing ${from || 'the beginning'} to ${to || 'today'} (Lagos dates).` : 'Showing all time.'}</p>
     </section>
-    <StatStrip stats={[[sum ? String(sum.attendance.total) : '—', 'Check-ins'], [sum ? `${sum.attendance.outside}` : '—', 'Outside geofence'], [sum ? `${sum.patrols.completed}/${sum.patrols.total}` : '—', 'Patrols completed'], [sum ? `${sum.incidents.resolved}/${sum.incidents.total}` : '—', 'Incidents resolved']]} />
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([key, title, text, count]) => <section key={key} className="flex flex-col ws-card p-4"><div className="flex items-start justify-between"><h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">{title}</h2><span className="font-mono text-xs text-[#6B6B72]">{count}</span></div><p className="mt-1 flex-1 text-xs text-[#6B6B72]">{text}</p><a href={`/api/export?section=${key}${qs}`} className={`${btn} mt-4 self-start`}><Download className="size-3.5" />Download CSV</a></section>)}</div>
 
+    <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="col-span-2 xl:col-span-4"><VolumeChart summary={sum} /></div>
+      <Breakdown section="attendance" title="Attendance" total={sum?.attendance.total ?? 0} leftLabel="Inside geofence" left={sum ? sum.attendance.total - sum.attendance.outside : 0} rightLabel="Outside" right={sum?.attendance.outside ?? 0} />
+      <Breakdown section="patrols" title="Patrol completion" total={sum?.patrols.total ?? 0} leftLabel="Completed" left={sum?.patrols.completed ?? 0} rightLabel="Not completed" right={sum ? sum.patrols.total - sum.patrols.completed : 0} rightTone="bg-[#B7791F]" />
+      <Breakdown section="incidents" title="Incidents" total={sum?.incidents.total ?? 0} leftLabel="Resolved" left={sum?.incidents.resolved ?? 0} rightLabel="Open" right={sum ? sum.incidents.total - sum.incidents.resolved : 0} rightTone="bg-[#B7791F]" note={sum ? `${sum.incidents.serious} high or critical` : undefined} />
+      <Breakdown section="alerts" title="Alerts" total={sum?.alerts.total ?? 0} leftLabel="Acknowledged" left={sum?.alerts.acknowledged ?? 0} rightLabel="Open" right={sum ? sum.alerts.total - sum.alerts.acknowledged : 0} />
+    </div>
+
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([key, title, text, count]) => <section key={key} className="flex flex-col ws-card p-4">
+      <div className="flex items-start justify-between gap-3"><ReportGlyph section={key} /><span className="rounded-full bg-[#F5F5F6] px-2 py-0.5 text-[10px] font-medium text-[#52525B]">{count}</span></div>
+      <h2 className="mt-3 text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">{title}</h2>
+      <p className="mt-1 flex-1 text-[11px] leading-4 text-[#6B6B72]">{text}</p>
+      <a href={`/api/export?section=${key}${qs}`} className={`${smallBtn} mt-3 self-start`}><Download className="size-3" />Download CSV</a>
+    </section>)}</div>
   </>
 }
 

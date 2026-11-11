@@ -9,13 +9,13 @@ import { Pagination } from '@/components/pagination'
 
 type ClientRecord = {
   id: string; name: string; contactName: string | null; email: string | null; phone: string | null
-  status: string; monthlyValue: number; slaScore: number | null; renewalDate: string | null
+  status: string; contractValue: number; slaScore: number | null; renewalDate: string | null
 }
 type SiteRow = { id: string; name: string; status: string; clientId: string | null }
 type GuardRow = { id: string; name: string; site: string | null; status: string }
-type ClientPage = { rows: ClientRecord[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: { total: number; active: number; monthlyValue: number } }
+type ClientPage = { rows: ClientRecord[]; page: number; pageSize: number; total: number; hasMore: boolean; stats?: { total: number; active: number; contractValue: number } }
 
-const emptyForm = { name: '', contactName: '', email: '', phone: '', monthlyValue: '', slaScore: '', renewalDate: '', status: 'active' }
+const emptyForm = { name: '', contactName: '', email: '', phone: '', contractValue: '', slaScore: '', renewalDate: '', status: 'active' }
 
 export function ClientsPage() {
   const [clients, setClients] = useState<ClientRecord[]>([])
@@ -26,7 +26,7 @@ export function ClientsPage() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
   const [total, setTotal] = useState(0)
-  const [stats, setStats] = useState<{ total: number; active: number; monthlyValue: number }>({ total: 0, active: 0, monthlyValue: 0 })
+  const [stats, setStats] = useState<{ total: number; active: number; contractValue: number }>({ total: 0, active: 0, contractValue: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
@@ -46,7 +46,7 @@ export function ClientsPage() {
       ])
       setClients(clientPage.rows)
       setTotal(clientPage.total)
-      setStats(clientPage.stats ?? { total: clientPage.total, active: clientPage.rows.filter((client) => client.status === 'active').length, monthlyValue: 0 })
+      setStats(clientPage.stats ?? { total: clientPage.total, active: clientPage.rows.filter((client) => client.status === 'active').length, contractValue: 0 })
       setSites(siteRows)
       setGuards(guardRows)
       setError('')
@@ -65,7 +65,7 @@ export function ClientsPage() {
   }
 
   const rows = clients
-  const monthlyTotal = stats.monthlyValue
+  const contractTotal = stats.contractValue
   const unassignedSites = sites.filter((site) => !site.clientId)
 
   async function save(event: FormEvent) {
@@ -78,7 +78,7 @@ export function ClientsPage() {
         json: {
           ...(editing ? { id: editing.id } : {}),
           ...form,
-          monthlyValue: Number(form.monthlyValue || 0),
+          contractValue: Number(form.contractValue || 0),
           slaScore: form.slaScore === '' ? '' : Number(form.slaScore),
           renewalDate: form.renewalDate ? new Date(`${form.renewalDate}T00:00:00.000Z`).toISOString() : '',
           contactName: form.contactName || null,
@@ -109,7 +109,7 @@ export function ClientsPage() {
     setEditing(client)
     setForm({
       name: client.name, contactName: client.contactName ?? '', email: client.email ?? '', phone: client.phone ?? '',
-      monthlyValue: String(client.monthlyValue), slaScore: client.slaScore === null ? '' : String(client.slaScore),
+      contractValue: String(client.contractValue), slaScore: client.slaScore === null ? '' : String(client.slaScore),
       renewalDate: client.renewalDate ? new Date(client.renewalDate).toISOString().slice(0, 10) : '', status: client.status,
     })
     setFormOpen(true)
@@ -121,7 +121,7 @@ export function ClientsPage() {
       <button onClick={() => { setEditing(null); setForm(emptyForm); setFormOpen(true) }} className={btnPrimary}><Plus className="size-3.5" />Add client</button>
     </PageHeader>
 
-    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(monthlyTotal), 'Total contract size'], [String(unassignedSites.length), 'Unassigned sites']]} />
+    <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(contractTotal), 'Total contract size'], [String(unassignedSites.length), 'Unassigned sites']]} />
 
     {unassignedSites.length > 0 && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">{unassignedSites.length} site{unassignedSites.length === 1 ? ' is' : 's are'} not linked to a client yet: {unassignedSites.map((site) => site.name).join(', ')}. Use <b>Assign sites</b> on a client to link them.</p>}
     <ErrorBanner message={error} retry={() => void load()} />
@@ -141,7 +141,7 @@ export function ClientsPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2"><b className="text-sm font-semibold">{client.name}</b><Badge value={client.status} /></div>
                 <p className="mt-0.5 text-[11px] text-[#6B6B72]">{client.contactName ?? 'No contact'}{client.phone ? ` · ${client.phone}` : ''}{client.email ? ` · ${client.email}` : ''}</p>
-                <p className="mt-1 text-[11px] text-[#52525B]"><b>{naira(Number(client.monthlyValue))}</b>/month{client.renewalDate ? ` · renews ${new Date(client.renewalDate).toLocaleDateString()}` : ''}</p>
+                <p className="mt-1 text-[11px] text-[#52525B]"><b>{naira(Number(client.contractValue))}</b> contract value{client.renewalDate ? ` · renews ${new Date(client.renewalDate).toLocaleDateString()}` : ''}</p>
               </div>
               <div className="flex flex-wrap justify-end gap-1.5">
                 <button className={smallBtn} onClick={() => setAssigning(client)}><UserPlus className="size-3" />Assign sites</button>
@@ -172,7 +172,7 @@ export function ClientsPage() {
         <Field label="Contact person"><input className={inputClass} value={form.contactName} onChange={(event) => setForm({ ...form, contactName: event.target.value })} /></Field>
         <Field label="Phone"><input className={inputClass} value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></Field>
         <Field label="Email"><input type="email" className={inputClass} value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></Field>
-        <Field label="Monthly contract value (₦)"><input required type="number" min={0} step="any" className={inputClass} value={form.monthlyValue} onChange={(event) => setForm({ ...form, monthlyValue: event.target.value })} /></Field>
+        <Field label="Total contract size (₦)" hint="The full value of the contract, not a monthly payment."><input required type="number" min={0} step="any" className={inputClass} value={form.contractValue} onChange={(event) => setForm({ ...form, contractValue: event.target.value })} /></Field>
         <div className="grid grid-cols-2 gap-3">
 
           <Field label="Renewal date"><input type="date" className={inputClass} value={form.renewalDate} onChange={(event) => setForm({ ...form, renewalDate: event.target.value })} /></Field>

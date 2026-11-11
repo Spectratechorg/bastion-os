@@ -14,7 +14,10 @@
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "test": "tsx --test tests/*.test.ts",
     "worker:kafka": "tsx --env-file=.env.local scripts/kafka-worker.ts",
-    "sim:kafka": "tsx --env-file=.env.local scripts/kafka-simulate.ts"
+    "sim:kafka": "tsx --env-file=.env.local scripts/kafka-simulate.ts",
+    "test:e2e": "node tests/e2e.mjs",
+    "db:backup": "tsx --env-file=.env.local scripts/backup-db.ts",
+    "db:verify-backup": "tsx --env-file=.env.local scripts/verify-backup.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -48,6 +51,7 @@
     "postcss": "^8.5",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "playwright": "^1.65.0"
   }
 }

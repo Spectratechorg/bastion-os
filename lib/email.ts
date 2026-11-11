@@ -78,3 +78,24 @@ export function credentialsEmail(input: { name: string; email: string; password:
     ].join('\n'),
   }
 }
+
+
+/** Operational alert notification for owners, administrators and moderators. */
+export function alertEmail(input: { to: string; severity: string; title: string; body: string }): Mail {
+  const appUrl = (process.env.BETTER_AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  return {
+    to: input.to,
+    subject: `[${input.severity.toUpperCase()}] ${input.title} · BastionOS`,
+    text: [
+      input.title,
+      '',
+      input.body,
+      '',
+      `Severity: ${input.severity}`,
+      `Open BastionOS: ${appUrl}/alerts`,
+      '',
+      'You are receiving this because you are an owner, administrator or moderator for this organization.',
+      '— BastionOS',
+    ].join('\n'),
+  }
+}

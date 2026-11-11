@@ -80,3 +80,14 @@ export function isShiftClosed(shiftDate: string, now: { date: string; hour: numb
   if (now.date === nextDay && now.hour >= shift.endHour) return true
   return false
 }
+
+/** A guard's own shift, falling back to the company shift when they have no override. */
+export function guardShift(
+  guard: { shiftStartHour?: number | null; shiftEndHour?: number | null },
+  companyShift: Shift = DEFAULT_SHIFT,
+): Shift {
+  if (guard.shiftStartHour === null || guard.shiftStartHour === undefined) return companyShift
+  if (guard.shiftEndHour === null || guard.shiftEndHour === undefined) return companyShift
+  const shift = normalizeShift(guard.shiftStartHour, guard.shiftEndHour)
+  return shift.startHour === guard.shiftStartHour && shift.endHour === guard.shiftEndHour ? shift : companyShift
+}

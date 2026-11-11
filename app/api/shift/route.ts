@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { organizations } from '@/lib/db/schema'
 import { actor, fail, isModerator, normalizeShift } from '@/lib/server'
+import { invalidate } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,5 +38,6 @@ export async function POST(request: Request) {
     .where(eq(organizations.id, current.organizationId))
     .returning({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour })
   if (!updated) return fail('Organization not found.', 404)
+  invalidate('patrols:')
   return NextResponse.json(updated)
 }

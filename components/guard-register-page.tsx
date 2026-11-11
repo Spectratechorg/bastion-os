@@ -10,7 +10,7 @@ import { WriteTagButton } from '@/components/write-tag-button'
 import { NfcDiagnostics } from '@/components/nfc-diagnostics'
 
 type Site = { id: string; name: string; status: string }
-type Created = { id: string; name: string; nfcToken: string }
+type Created = { id: string; name: string; guardCode: string; nfcToken: string }
 
 export function GuardRegisterPage() {
   const [sites, setSites] = useState<Site[]>([]); const [photo, setPhoto] = useState<string | null>(null)
@@ -40,12 +40,13 @@ export function GuardRegisterPage() {
   }
 
   if (created) return <>
-    <PageHeader title="Guard registered" subtitle={`${created.name} is on the roster and ready to scan.`} />
+    <PageHeader title="Guard registered" subtitle={`${created.name} is on the roster with guard ID ${created.guardCode}.`} />
     <section className="max-w-xl ws-card p-6">
-      <div className="flex items-center gap-4"><Avatar name={created.name} src={photo} size={64} /><div><p className="text-lg font-medium">{created.name}</p><p className="text-xs text-[#6B6B72]">NFC tag to write onto the guard’s card</p></div></div>
-      <p className="mt-5 break-all rounded-lg bg-[#F5F5F6] p-4 text-center font-mono text-sm tracking-wide">{created.nfcToken}</p>
-      <p className="mt-2 text-xs text-[#6B6B72]">Write this code onto the guard’s NFC tag now, or copy it for a tag-writer app. Scans match it to this guard.</p>
-      <WriteTagButton token={created.nfcToken} owner={created.name} />
+      <div className="flex items-center gap-4"><Avatar name={created.name} src={photo} size={64} /><div><p className="text-lg font-medium">{created.name}</p><p className="text-xs text-[#6B6B72]">Guard ID to link to their NFC tag</p></div></div>
+      <p className="mt-5 rounded-lg bg-[#F5F5F6] p-4 text-center font-mono text-3xl font-semibold tracking-[0.2em]">{created.guardCode}</p>
+      <p className="mt-2 text-xs text-[#6B6B72]">Write guard ID {created.guardCode} onto their NFC tag now. Scanning the tag later identifies this guard in the guard app without typing.</p>
+      <WriteTagButton token={created.guardCode} owner={created.name} writeLabel="Write guard ID to tag" />
+      <p className="mt-4 text-[11px] text-[#6B6B72]">Issued tag code (optional fallback for tag-writer apps): <span className="break-all font-mono">{created.nfcToken}</span></p>
       <NfcDiagnostics />
       <div className="mt-6 flex flex-wrap gap-2"><Link href="/guards" className={btnPrimary}><Check className="size-4" />Go to guards</Link><button className={btn} onClick={() => { setCreated(null); setPhoto(null); setV({ name: '', nin: '', phone: '', site: '', monthlySalary: '150000' }) }}>Register another</button></div>
     </section>
