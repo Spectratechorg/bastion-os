@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
-import { eq, desc } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { auth } from '@/lib/auth'
-import { memberRole } from '@/lib/server'
+import { type Actor, memberRole } from '@/lib/server'
 import { db } from '@/lib/db'
-import { sites, guards, alerts, incidents, members } from '@/lib/db/schema'
+import { members } from '@/lib/db/schema'
+import { buildOperationalContext, executeNapoleonTool, NAPOLEON_TOOLS } from '@/lib/napoleon-context'
+
+export const dynamic = 'force-dynamic'
 
 function cleanEnv(val: string | undefined): string | undefined {
   if (!val) return undefined
@@ -12,7 +15,7 @@ function cleanEnv(val: string | undefined): string | undefined {
   return cleaned.length > 0 ? cleaned : undefined
 }
 
-async function getSessionInfo() {
+async function getSessionInfo(): Promise<{ userId: string; orgId: string; role: string } | null> {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) return null
   let orgId = (session.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId
@@ -31,7 +34,7 @@ async function getSessionInfo() {
   if (!orgId) return null
   const role = await memberRole(orgId, session.user.id)
   if (!role || role === 'guard') return null
-  return { user: session.user, orgId, role }
+  return { userId: session.user.id, orgId, role }
 }
 
 function getDeepSeekConfig() {
@@ -47,94 +50,37 @@ function getLegacyNapoleonConfig() {
   return baseUrl && apiKey ? { baseUrl, apiKey } : null
 }
 
-/**
- * Builds live operational intelligence from Supabase for this organization
- * to supply Napoleon (DeepSeek) with real operational context.
- */
-async function buildOperationalContext(orgId: string): Promise<string> {
+type ToolCallPayload = {
+  id: string
+  type?: string
+  function: { name: string; arguments: string }
+}
+
+type DeepSeekMessage = {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content: string | null
+  tool_calls?: ToolCallPayload[]
+  tool_call_id?: string
+  reasoning_content?: string | null
+}
+
+type DeepSeekResponse = {
+  choices?: Array<{
+    message?: {
+      role?: string
+      content?: string | null
+      tool_calls?: ToolCallPayload[]
+      reasoning_content?: string | null
+    }
+  }>
+}
+
+function safeParseArgs(raw: string): Record<string, unknown> {
   try {
-    const [orgSites, orgGuards, recentAlerts, recentIncidents] = await Promise.all([
-      db
-        .select({
-          name: sites.name,
-          dangerLevel: sites.dangerLevel,
-          status: sites.status,
-          geofenceRadius: sites.geofenceRadius,
-        })
-        .from(sites)
-        .where(eq(sites.organizationId, orgId))
-        .limit(15),
-      db
-        .select({
-          name: guards.name,
-          status: guards.status,
-          site: guards.site,
-          lastCheckIn: guards.lastCheckIn,
-        })
-        .from(guards)
-        .where(eq(guards.organizationId, orgId))
-        .limit(20),
-      db
-        .select({
-          title: alerts.title,
-          body: alerts.body,
-          type: alerts.type,
-        })
-        .from(alerts)
-        .where(eq(alerts.organizationId, orgId))
-        .orderBy(desc(alerts.createdAt))
-        .limit(5),
-      db
-        .select({
-          title: incidents.title,
-          severity: incidents.severity,
-          status: incidents.status,
-          site: incidents.site,
-        })
-        .from(incidents)
-        .where(eq(incidents.organizationId, orgId))
-        .orderBy(desc(incidents.reportedAt))
-        .limit(5),
-    ])
-
-    const sitesText =
-      orgSites.length > 0
-        ? orgSites.map((s) => `- ${s.name}: ${s.dangerLevel} risk, status: ${s.status}, geofence: ${s.geofenceRadius}m`).join('\n')
-        : 'No sites recorded yet.'
-
-    const guardsText =
-      orgGuards.length > 0
-        ? `Total guards: ${orgGuards.length}. Highlights:\n` +
-          orgGuards.map((g) => `- ${g.name}: ${g.status} at ${g.site ?? 'Unassigned'}`).join('\n')
-        : 'No guards registered yet.'
-
-    const alertsText =
-      recentAlerts.length > 0
-        ? recentAlerts.map((a) => `- [${a.type}] ${a.title}: ${a.body}`).join('\n')
-        : 'None (all clear).'
-
-    const incidentsText =
-      recentIncidents.length > 0
-        ? recentIncidents.map((i) => `- [${i.severity}] ${i.title} at ${i.site} (${i.status})`).join('\n')
-        : 'None recorded recently.'
-
-    return `
-LIVE BASTIONOS DATABASE CONTEXT:
-[Active Sites]
-${sitesText}
-
-[Personnel & Guards]
-${guardsText}
-
-[Recent Alerts]
-${alertsText}
-
-[Recent Incidents]
-${incidentsText}
-`.trim()
-  } catch (err) {
-    console.warn('[Napoleon API] Could not load operational context from DB:', err)
-    return 'Operational context currently unavailable.'
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
+  } catch {
+    return {}
   }
 }
 
@@ -177,7 +123,7 @@ export async function GET() {
 }
 
 /**
- * Chat completion: routed directly to DeepSeek when configured.
+ * Chat completion: routed directly to DeepSeek with full BastionOS operational & HR/payroll context and read-only DB query tools.
  */
 export async function POST(request: Request) {
   const session = await getSessionInfo()
@@ -210,49 +156,101 @@ export async function POST(request: Request) {
   // 1. Direct DeepSeek Execution (Preferred)
   if (deepseek) {
     try {
-      const liveContext = await buildOperationalContext(session.orgId)
+      const currentActor: Actor = {
+        userId: session.userId,
+        organizationId: session.orgId,
+        role: session.role,
+      }
+      const { context: liveContext, canViewFinance } = await buildOperationalContext(currentActor)
 
-      const systemPrompt = {
+      const systemPrompt: DeepSeekMessage = {
         role: 'system',
-        content: `You are Napoleon, an elite operational intelligence and tactical assistant embedded inside BastionOS.
-You assist security commanders, operations managers, and supervisors with site security, guard deployment, patrol oversight, and incident response.
+        content: `You are Napoleon, an elite operational intelligence, HR/payroll, and tactical assistant embedded inside BastionOS.
+You assist security commanders, operations managers, administrators, and supervisors with site security, guard deployment, guard salaries & payroll, finances, client contracts, patrol oversight, attendance, equipment inventory, and incident response.
 
 Instructions:
 - Tone: Concise, professional, tactical, and authoritative.
-- Answers: Be direct and practical. If referencing sites or guards, cite the real operational data provided below.
-- Analysis: When asked about coverage gaps or high risks, actively evaluate the live sites, danger levels, and guard assignments.
+- Grounding: Always base answers directly on the live BastionOS database context and read-only query tools provided. Never guess or claim tables are missing when data or tools exist below.
+- Exact Calculations & Filtering: Whenever answering questions that count, filter, sum, average, rank, or check salary thresholds (e.g., how many guards earn above ₦60,000), payroll totals, attendance breaches, or historical dates, invoke the appropriate query tool (query_guards, query_payroll, query_finances_and_contracts, query_attendance_and_patrols, query_alerts_incidents_inventory) to compute exact verified results from PostgreSQL.
+- Permissions: ${canViewFinance ? 'This user has viewFinance permission and is authorized to view guard salaries, office staff salaries, payroll totals, finances, and contract values.' : 'This user does NOT have viewFinance permission; explain clearly that salary, payroll, and finance figures require viewFinance permission.'}
+- Privacy & Formatting: Never display raw NINs or authentication tokens. Format Naira amounts with ₦ and thousands separators.
 
-${liveContext}
-`.trim(),
+${liveContext}`.trim(),
       }
 
-      const response = await fetch(`${deepseek.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${deepseek.apiKey}`,
-        },
-        body: JSON.stringify({
+      const conversation: DeepSeekMessage[] = [
+        systemPrompt,
+        ...cleanMessages.map((msg) => ({ role: msg!.role, content: msg!.content })),
+      ]
+
+      const MAX_TOOL_ROUNDS = 4
+      let useTools = true
+
+      for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+        const allowToolsThisTurn = useTools && round < MAX_TOOL_ROUNDS
+        const payload = {
           model: deepseek.model,
-          messages: [systemPrompt, ...cleanMessages],
-          temperature: 0.3,
+          messages: conversation,
+          ...(allowToolsThisTurn ? { tools: NAPOLEON_TOOLS, tool_choice: 'auto' } : {}),
+          temperature: 0.2,
           max_tokens: 1500,
-        }),
-        cache: 'no-store',
-        signal: AbortSignal.timeout(30000),
-      })
+        }
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('[Napoleon API - DeepSeek Error]', response.status, errorText)
-        return NextResponse.json(
-          { error: `Napoleon AI error (${response.status}): ${errorText}` },
-          { status: 502 }
+        const response = await fetch(`${deepseek.baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${deepseek.apiKey}`,
+          },
+          body: JSON.stringify(payload),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(25000),
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          if (allowToolsThisTurn && response.status === 400 && /tool/i.test(errorText)) {
+            useTools = false
+            continue
+          }
+          console.error('[Napoleon API - DeepSeek Error]', response.status, errorText)
+          return NextResponse.json(
+            { error: `Napoleon AI error (${response.status}): ${errorText}` },
+            { status: 502 },
+          )
+        }
+
+        const data = (await response.json()) as DeepSeekResponse
+        const assistantMsg = data.choices?.[0]?.message
+        const toolCalls = assistantMsg?.tool_calls
+
+        if (!allowToolsThisTurn || !Array.isArray(toolCalls) || toolCalls.length === 0) {
+          return NextResponse.json(data)
+        }
+
+        conversation.push({
+          role: 'assistant',
+          content: assistantMsg?.content ?? null,
+          tool_calls: toolCalls,
+          ...(assistantMsg?.reasoning_content !== undefined ? { reasoning_content: assistantMsg.reasoning_content } : {}),
+        })
+
+        const toolResults = await Promise.all(
+          toolCalls.map(async (tc) => {
+            const args = safeParseArgs(tc.function.arguments)
+            const result = await executeNapoleonTool(tc.function.name, args, currentActor, canViewFinance)
+            return {
+              role: 'tool' as const,
+              tool_call_id: tc.id,
+              content: JSON.stringify(result),
+            }
+          }),
         )
+
+        conversation.push(...toolResults)
       }
 
-      const data = await response.json()
-      return NextResponse.json(data)
+      return NextResponse.json({ error: 'Napoleon exceeded tool execution rounds without producing a response.' }, { status: 502 })
     } catch (err) {
       console.error('[Napoleon API] DeepSeek request failed:', err)
       return NextResponse.json({ error: 'DeepSeek service request failed' }, { status: 502 })
