@@ -155,3 +155,146 @@ export function filterAndSummarizeGuards(
     guards: items,
   }
 }
+
+export type SiteRecordForAi = {
+  id: string
+  name: string
+  address: string
+  status: string
+  clientId: string | null
+}
+
+export type ClientRecordForAi = {
+  id: string
+  name: string
+  status: string
+  contractValue: number
+  slaScore: number | null
+  renewalDate: Date | null
+}
+
+export type ContractRecordForAi = {
+  id: string
+  clientName: string
+  title: string
+  sites: string | null
+  monthlyFee: number
+  startDate: string
+  endDate: string
+  nextDueDate: string
+  paymentStatus: string
+}
+
+export type ClientFilterInput = {
+  location?: string
+  status?: string
+  search?: string
+}
+
+/** Normalizes Nigerian state/city filter phrases (e.g., "Lagos State" -> "lagos"). */
+export function normalizeLocationQuery(rawLocation: string): string {
+  const cleaned = rawLocation.trim().toLowerCase().replace(/\s+/g, ' ')
+  if (!cleaned) return ''
+  if (cleaned === 'federal capital territory') return 'fct'
+  return cleaned.replace(/\s+state$/i, '').trim()
+}
+
+export function siteMatchesLocation(site: Pick<SiteRecordForAi, 'name' | 'address'>, normalizedLocation: string): boolean {
+  if (!normalizedLocation) return true
+  const haystack = `${site.name} ${site.address}`.toLowerCase()
+  if (haystack.includes(normalizedLocation)) return true
+  const tokens = normalizedLocation
+    .split(/[\s,]+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2 && t !== 'state')
+  return tokens.length > 0 && tokens.every((token) => haystack.includes(token))
+}
+
+/** Filters clients and contracts by location/search/status, strictly excluding non-matching clients and sites. */
+export function filterClientsAndContracts(
+  allClients: ClientRecordForAi[],
+  allSites: SiteRecordForAi[],
+  allContracts: ContractRecordForAi[],
+  input: ClientFilterInput,
+  canViewFinance: boolean,
+) {
+  const normalizedLocation = typeof input.location === 'string' ? normalizeLocationQuery(input.location) : ''
+  const statusFilter = typeof input.status === 'string' ? input.status.trim().toLowerCase() : ''
+  const searchTerm = typeof input.search === 'string' ? input.search.trim().toLowerCase() : ''
+
+  const sitesByClientId = new Map<string, SiteRecordForAi[]>()
+  for (const site of allSites) {
+    if (!site.clientId) continue
+    const list = sitesByClientId.get(site.clientId) ?? []
+    list.push(site)
+    sitesByClientId.set(site.clientId, list)
+  }
+
+  const matchedClients = allClients
+    .map((client) => {
+      const clientSites = sitesByClientId.get(client.id) ?? []
+      const locationSites = normalizedLocation
+        ? clientSites.filter((site) => siteMatchesLocation(site, normalizedLocation))
+        : clientSites
+      return { client, locationSites }
+    })
+    .filter(({ client, locationSites }) => {
+      if (normalizedLocation && locationSites.length === 0) return false
+      if (statusFilter && statusFilter !== 'all' && client.status.toLowerCase() !== statusFilter) return false
+      if (searchTerm) {
+        const hay = `${client.name} ${locationSites.map((s) => `${s.name} ${s.address}`).join(' ')}`.toLowerCase()
+        if (!hay.includes(searchTerm)) return false
+      }
+      return true
+    })
+
+  const matchedClientNames = new Set(matchedClients.map(({ client }) => client.name.toLowerCase()))
+
+  const matchedContracts = canViewFinance
+    ? allContracts.filter((contract) => {
+        if (normalizedLocation && !matchedClientNames.has(contract.clientName.toLowerCase())) return false
+        if (statusFilter && statusFilter !== 'all' && contract.paymentStatus.toLowerCase() !== statusFilter) return false
+        if (searchTerm && !`${contract.clientName} ${contract.title} ${contract.sites ?? ''}`.toLowerCase().includes(searchTerm)) {
+          return false
+        }
+        return true
+      })
+    : []
+
+  const totalContractValue = matchedClients.reduce((sum, { client }) => sum + client.contractValue, 0)
+
+  return {
+    locationFilter: normalizedLocation || null,
+    matchedClientCount: matchedClients.length,
+    ...(canViewFinance
+      ? {
+          totalContractValue,
+          totalContractValueFormatted: naira(totalContractValue),
+        }
+      : { contractValueAccess: 'Restricted (missing viewFinance permission)' }),
+    clients: matchedClients.map(({ client, locationSites }) => ({
+      name: client.name,
+      status: client.status,
+      sites: locationSites.map((s) => s.name),
+      siteDetails: locationSites.map((s) => ({ name: s.name, address: s.address, status: s.status })),
+      slaScore: client.slaScore,
+      renewalDate: client.renewalDate?.toISOString().slice(0, 10) ?? null,
+      ...(canViewFinance
+        ? {
+            contractValue: client.contractValue,
+            contractValueFormatted: naira(client.contractValue),
+          }
+        : {}),
+    })),
+    ...(canViewFinance
+      ? {
+          contractsSummary: {
+            matchedCount: matchedContracts.length,
+            totalMonthlyFee: matchedContracts.reduce((s, c) => s + c.monthlyFee, 0),
+            contracts: matchedContracts.slice(0, 40),
+          },
+        }
+      : {}),
+  }
+}
+

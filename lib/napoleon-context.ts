@@ -20,6 +20,7 @@ import { type Actor, can, guardShift, lagosParts, normalizeShift, patrolSlots, t
 import {
   clockHour,
   filterAndSummarizeGuards,
+  filterClientsAndContracts,
   formatLagosDateTime,
   type GuardQueryInput,
   type GuardRecordForAi,
@@ -89,6 +90,7 @@ export async function buildOperationalContext(actor: Actor): Promise<{ context: 
           dangerLevel: sites.dangerLevel,
           status: sites.status,
           geofenceRadius: sites.geofenceRadius,
+          clientId: sites.clientId,
         })
         .from(sites)
         .where(eq(sites.organizationId, organizationId))
@@ -158,6 +160,7 @@ export async function buildOperationalContext(actor: Actor): Promise<{ context: 
         .limit(100),
       db
         .select({
+          id: clients.id,
           name: clients.name,
           status: clients.status,
           contractValue: clients.contractValue,
@@ -231,6 +234,14 @@ export async function buildOperationalContext(actor: Actor): Promise<{ context: 
     const companyShift = normalizeShift(org?.startHour, org?.endHour)
     const guardById = new Map(allGuards.map((g) => [g.id, g]))
     const siteById = new Map(allSites.map((s) => [s.id, s]))
+    const clientById = new Map(allClients.map((c) => [c.id, c]))
+    const sitesByClientId = new Map<string, typeof allSites>()
+    for (const site of allSites) {
+      if (!site.clientId) continue
+      const list = sitesByClientId.get(site.clientId) ?? []
+      list.push(site)
+      sitesByClientId.set(site.clientId, list)
+    }
 
     const activeGuardsPerSite = new Map<string, number>()
     for (const guard of allGuards) {
@@ -242,10 +253,10 @@ export async function buildOperationalContext(actor: Actor): Promise<{ context: 
     const sitesText =
       allSites.length > 0
         ? allSites
-            .map(
-              (s) =>
-                `- ${s.name} | ${s.status} | risk: ${s.dangerLevel} | geofence: ${s.geofenceRadius}m | assigned active guards: ${activeGuardsPerSite.get(s.name) ?? 0}`,
-            )
+            .map((s) => {
+              const clientName = s.clientId ? clientById.get(s.clientId)?.name ?? 'Unassigned client' : 'Unassigned client'
+              return `- ${s.name} | ${s.status} | address: ${s.address} | client: ${clientName} | risk: ${s.dangerLevel} | geofence: ${s.geofenceRadius}m | assigned active guards: ${activeGuardsPerSite.get(s.name) ?? 0}`
+            })
             .join('\n')
         : 'No sites recorded.'
 
@@ -346,7 +357,18 @@ ${guardsRosterText}
 ${financeSection}
 
 [Clients (${allClients.length})]
-${allClients.length > 0 ? allClients.map((c) => `- ${c.name} | ${c.status} | SLA: ${c.slaScore ?? '—'}%${canViewFinance ? ` | contract value: ${naira(c.contractValue)}` : ''}`).join('\n') : 'No clients recorded.'}
+${
+  allClients.length > 0
+    ? allClients
+        .map((c) => {
+          const linkedSites = sitesByClientId.get(c.id) ?? []
+          const siteSummary =
+            linkedSites.length > 0 ? linkedSites.map((s) => `${s.name} (${s.address})`).join('; ') : 'No linked sites'
+          return `- ${c.name} | ${c.status}${canViewFinance ? ` | total contractValue: ${naira(c.contractValue)}` : ''} | sites: ${siteSummary} | SLA: ${c.slaScore ?? '—'}%`
+        })
+        .join('\n')
+    : 'No clients recorded.'
+}
 
 [Attendance (last 24h) & Today Patrols (${now.date})]
 Check-ins (last 24h): ${recentAttendance.length} across ${checkedInGuards.size} distinct guards | Outside geofence: ${outsideAttendance.length}${outsideDetails ? ` (${outsideDetails})` : ''}
@@ -414,13 +436,18 @@ export const NAPOLEON_TOOLS = [
     type: 'function',
     function: {
       name: 'query_finances_and_contracts',
-      description: 'Query financial ledger entries (revenue, expenses, invoices), client accounts, SLA scores, and security contracts. Monetary amounts require viewFinance permission.',
+      description:
+        'Query client accounts (with their linked sites and site addresses), client contractValue, monthly contract fees, SLA scores, and financial ledger entries (revenue, expenses, invoices). Always pass location (e.g. "Lagos", "Lagos State", "Abuja") when filtering clients or contracts by city, state, or address. Monetary amounts require viewFinance permission.',
       parameters: {
         type: 'object',
         properties: {
+          location: {
+            type: 'string',
+            description: 'City, state, or address filter for clients/contracts via their linked sites (e.g. "Lagos", "Lagos State", "Abuja", "Port Harcourt")',
+          },
           kind: { type: 'string', description: 'Filter finances by kind (e.g. revenue, invoice, expense, salary)' },
-          status: { type: 'string', description: 'Filter by payment/settlement status (e.g. pending, paid)' },
-          search: { type: 'string', description: 'Search label, client name, category, or contract title' },
+          status: { type: 'string', description: 'Filter by payment/settlement/client status (e.g. pending, paid, active)' },
+          search: { type: 'string', description: 'Search label, client name, site name, category, or contract title' },
         },
       },
     },
@@ -560,15 +587,32 @@ export async function executeNapoleonTool(
     }
 
     case 'query_finances_and_contracts': {
+      const locationFilter = typeof rawArgs.location === 'string' ? rawArgs.location : undefined
       const kindFilter = typeof rawArgs.kind === 'string' ? rawArgs.kind.trim().toLowerCase() : ''
       const statusFilter = typeof rawArgs.status === 'string' ? rawArgs.status.trim().toLowerCase() : ''
       const search = typeof rawArgs.search === 'string' ? rawArgs.search.trim().toLowerCase() : ''
 
-      const [clientRows, financeRows, contractRows] = await Promise.all([
+      const [clientRows, siteRows, financeRows, contractRows] = await Promise.all([
         db.select().from(clients).where(eq(clients.organizationId, organizationId)),
+        db
+          .select({ id: sites.id, name: sites.name, address: sites.address, status: sites.status, clientId: sites.clientId })
+          .from(sites)
+          .where(eq(sites.organizationId, organizationId)),
         canViewFinance ? db.select().from(finances).where(eq(finances.organizationId, organizationId)).orderBy(desc(finances.createdAt)) : Promise.resolve([]),
         canViewFinance ? db.select().from(contracts).where(eq(contracts.organizationId, organizationId)) : Promise.resolve([]),
       ])
+
+      const clientAndContractSummary = filterClientsAndContracts(
+        clientRows,
+        siteRows,
+        contractRows,
+        {
+          location: locationFilter,
+          status: statusFilter || undefined,
+          search: search || undefined,
+        },
+        canViewFinance,
+      )
 
       const matchedFinances = financeRows.filter((f) => {
         if (kindFilter && f.kind.toLowerCase() !== kindFilter) return false
@@ -577,23 +621,9 @@ export async function executeNapoleonTool(
         return true
       })
 
-      const matchedContracts = contractRows.filter((c) => {
-        if (statusFilter && c.paymentStatus.toLowerCase() !== statusFilter) return false
-        if (search && !`${c.clientName} ${c.title} ${c.sites ?? ''}`.toLowerCase().includes(search)) return false
-        return true
-      })
-
       return {
         canViewFinance,
-        clients: clientRows
-          .filter((c) => !search || c.name.toLowerCase().includes(search))
-          .map((c) => ({
-            name: c.name,
-            status: c.status,
-            slaScore: c.slaScore,
-            renewalDate: c.renewalDate?.toISOString().slice(0, 10) ?? null,
-            ...(canViewFinance ? { contractValue: c.contractValue } : {}),
-          })),
+        ...clientAndContractSummary,
         ...(canViewFinance
           ? {
               financesSummary: {
@@ -607,11 +637,6 @@ export async function executeNapoleonTool(
                   category: f.category,
                   date: f.createdAt.toISOString().slice(0, 10),
                 })),
-              },
-              contractsSummary: {
-                matchedCount: matchedContracts.length,
-                totalMonthlyFee: matchedContracts.reduce((s, c) => s + c.monthlyFee, 0),
-                contracts: matchedContracts.slice(0, 40),
               },
             }
           : { financeAccess: 'Restricted (missing viewFinance permission)' }),

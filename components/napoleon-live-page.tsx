@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { Send } from 'lucide-react'
 import { PageHeader } from '@/components/workspace-shell'
 import { Logo } from '@/components/brand'
+import { NapoleonMarkdown } from '@/components/napoleon-markdown'
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
 type Connection = 'checking' | 'connected' | 'not-configured' | 'unavailable'
@@ -103,11 +104,17 @@ export function NapoleonLivePage() {
             <h2 className="mt-4 text-[22px] font-normal">How can I help your operation?</h2>
             <p className="mt-2 text-xs text-[#6B6B72]">Ask about guards, salaries, payroll, finances, attendance, patrols, sites or incidents.</p>
             <div className="mt-4 flex w-full max-w-2xl flex-col gap-3">
-              {messages.map((message, index) => (
-                <p key={`${message.role}-${index}`} className={`rounded-xl px-4 py-3 text-left text-xs leading-5 ${message.role === 'user' ? 'ml-auto max-w-[85%] bg-[#EFEFF1]' : 'mr-auto max-w-[95%] whitespace-pre-wrap bg-[#F5F5F6]'}`}>
-                  {message.content}
-                </p>
-              ))}
+              {messages.map((message, index) =>
+                message.role === 'user' ? (
+                  <p key={`${message.role}-${index}`} className="ml-auto max-w-[85%] rounded-xl bg-[#EFEFF1] px-4 py-3 text-left text-xs leading-5 whitespace-pre-wrap">
+                    {message.content}
+                  </p>
+                ) : (
+                  <div key={`${message.role}-${index}`} className="mr-auto max-w-[95%] rounded-xl bg-[#F5F5F6] px-4 py-3 text-left">
+                    <NapoleonMarkdown content={message.content} />
+                  </div>
+                ),
+              )}
             </div>
             {loading && <p className="mt-3 text-xs text-[#6B6B72]">Napoleon is analyzing…</p>}
             {error && <p role="alert" className="mt-3 max-w-lg rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-xs text-amber-900">{error}</p>}
