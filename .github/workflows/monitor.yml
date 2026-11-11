@@ -1,0 +1,23 @@
+name: BastionOS background monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: bastion-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Guard monitor and health check
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BASE_URL: https://www.bastionos-fortewings.cc
+        run: |
+          test -n "$CRON_SECRET"
+          curl --fail --silent --show-error -H "Authorization: Bearer $CRON_SECRET" "$BASE_URL/api/cron/monitor"
+          curl --fail --silent --show-error -H "Authorization: Bearer $CRON_SECRET" "$BASE_URL/api/cron/health"
