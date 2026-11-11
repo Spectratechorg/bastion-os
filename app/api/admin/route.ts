@@ -11,7 +11,7 @@ import {
   patrols,
   sites,
 } from '@/lib/db/schema'
-import { actor, denyGuard, isAdminRole, fail } from '@/lib/server'
+import { actor, denyGuard, guardShift, isAdminRole, fail, normalizeShift, patrolSlots } from '@/lib/server'
 import { newGuardAppCode } from '@/lib/guard-access'
 import { cachedJsonResponse, invalidate } from '@/lib/cache'
 
@@ -80,6 +80,8 @@ export async function GET() {
           site: guards.site,
           status: guards.status,
           phone: guards.phone,
+          shiftStartHour: guards.shiftStartHour,
+          shiftEndHour: guards.shiftEndHour,
         })
         .from(guards)
         .where(eq(guards.organizationId, orgId)),
@@ -119,7 +121,7 @@ export async function GET() {
           patrolId: patrolCheckpoints.patrolId,
         })
         .from(patrolCheckpoints)
-        .where(gte(patrolCheckpoints.signedAt, todayStart)),
+        .where(and(eq(patrolCheckpoints.organizationId, orgId), gte(patrolCheckpoints.signedAt, todayStart))),
 
       db
         .select({
@@ -182,7 +184,8 @@ export async function GET() {
       : 100
 
     // 3. Patrol SLA Compliance
-    const expectedCheckpointsCount = Math.max(1, (org.patrolEndHour - org.patrolStartHour) * activeSites.length)
+    const companyShift = normalizeShift(org.patrolStartHour, org.patrolEndHour)
+    const expectedCheckpointsCount = Math.max(1, activeGuards.reduce((total, guard) => total + patrolSlots(guardShift(guard, companyShift)).length, 0))
     const completedPatrolsCount = todayCheckpoints.length
     const patrolSla = Math.min(100, Math.round((completedPatrolsCount / expectedCheckpointsCount) * 100))
 

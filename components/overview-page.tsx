@@ -115,10 +115,9 @@ export function OverviewPage() {
       get('alerts'),
       get('activity'),
       api<{ summary: Record<string, number> }>('/api/patrols'),
-      api<AdminData>('/api/admin'),
     ])
 
-    const labels = ['guards', 'sites', 'attendance', 'incidents', 'alerts', 'activity', 'patrols', 'admin']
+    const labels = ['guards', 'sites', 'attendance', 'incidents', 'alerts', 'activity', 'patrols']
     const failed = results.flatMap((r, i) => (r.status === 'rejected' ? [labels[i]] : []))
     const pick = <T,>(idx: number, fallback: T): T =>
       results[idx].status === 'fulfilled' ? (results[idx] as PromiseFulfilledResult<T>).value : fallback
@@ -132,15 +131,12 @@ export function OverviewPage() {
       activity: pick<Row[]>(5, []),
       patrols: pick<{ summary: Record<string, number> }>(6, { summary: {} }),
     })
-
-    const adminResult = pick<AdminData | null>(7, null)
-    if (adminResult) setAdmin(adminResult)
-
-    setError(
-      failed.length ? `Some operational feeds could not load (${failed.join(', ')}). The rest of the dashboard remains active.` : '',
-    )
+    setError(failed.length ? `Some operational feeds could not load (${failed.join(', ')}). The rest of the dashboard remains active.` : '')
     setLoading(false)
     setLastUpdated(new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }))
+
+    // The command-centre aggregate is slower and must not hold the whole dashboard back.
+    api<AdminData>('/api/admin').then(setAdmin).catch(() => undefined)
   }, [])
 
   useEffect(() => {
@@ -258,7 +254,7 @@ export function OverviewPage() {
             </div>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#F0F3EE] text-[#526552]"><Clock className="size-4" strokeWidth={1.75} /></span>
           </div>
-          <p className="mt-1 text-[10.5px] text-[#8A938B]">{admin ? `${admin.sla.completedPatrols}/${admin.sla.expectedPatrols} scans today` : 'Completed today'}</p>
+          <p className="mt-1 text-[10.5px] text-[#8A938B]">{admin ? `${admin.sla.completedPatrols}/${admin.sla.expectedPatrols} checkpoints signed today` : 'Completed today'}</p>
           <div className="mt-3 h-1.5 rounded-full bg-[#EFEFF1]"><div className="h-1.5 rounded-full bg-[#16794A] transition-[width] duration-500" style={{ width: `${Math.min(100, admin?.sla.patrolSlaPercent ?? 50)}%` }} /></div>
         </article>
 
@@ -297,7 +293,7 @@ export function OverviewPage() {
       </section>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <section className={`${card} order-2 overflow-hidden xl:order-1`}>
+        <section className={`${card} order-2 flex min-h-0 flex-col overflow-hidden xl:order-1`}>
           <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2.5">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#F0F3EE] text-[#526552]"><MapPin className="size-4" strokeWidth={1.75} /></span>
@@ -315,7 +311,9 @@ export function OverviewPage() {
           </div>
           {d && d.sites.length > 0 ? (
             <WidgetBoundary title="Live map">
-              <LiveMap sites={d.sites as never} guards={d.guards as never} selectedSiteId={siteId || undefined} height="h-[280px] sm:h-[300px]" />
+              <div className="min-h-[280px] flex-1">
+                <LiveMap sites={d.sites as never} guards={d.guards as never} selectedSiteId={siteId || undefined} height="h-full" />
+              </div>
             </WidgetBoundary>
           ) : (
             <div className="flex h-[280px] flex-col items-center justify-center gap-3 border-t border-[#E4E4E7] text-xs text-[#6B6B72]">
@@ -334,7 +332,7 @@ export function OverviewPage() {
               </div>
               <Link href="/attendance" className="group inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-[#2F6B49] hover:underline">Attendance <ArrowUpRight className="size-3 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" /></Link>
             </div>
-            <ul className="mt-3 divide-y divide-[#F1EFEA]">
+            <ul className="mt-3 max-h-[276px] divide-y divide-[#F1EFEA] overflow-y-auto pr-1">
               {bySite.map((x) => {
                 const pct = x.total ? Math.round((x.present / x.total) * 100) : 0
                 return <li key={x.name} className="py-2.5 first:pt-1 last:pb-0">

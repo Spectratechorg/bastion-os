@@ -2,8 +2,8 @@ import { and, eq, gte, lt, sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 
 import { db } from '@/lib/db'
-import { alerts, attendance, clients, finances, guards, incidents, organizations, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
-import { actor, can, denyGuard, fail, normalizeShift, patrolSlots } from '@/lib/server'
+import { alerts, attendance, clients, finances, guards, incidents, patrols, payrollRecords, sites } from '@/lib/db/schema'
+import { actor, can, denyGuard, fail } from '@/lib/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,9 +25,6 @@ export async function GET(request: Request) {
   const showFinance = await can(current, 'viewFinance')
   const yearStart = new Date(new Date().getFullYear(), 0, 1)
   const financeStart = from ? start : yearStart
-  const [organization] = await db.select({ startHour: organizations.patrolStartHour, endHour: organizations.patrolEndHour }).from(organizations).where(eq(organizations.id, organizationId)).limit(1)
-  const slotCount = patrolSlots(normalizeShift(organization?.startHour, organization?.endHour)).length
-
   const [guardCounts, siteCounts, incidentCounts, clientCounts, attendanceCounts, alertCounts, patrolCounts, payrollCounts, financeRows, rangeGuards, rangeSites] = await Promise.all([
     db.select({ total: sql<number>`count(*)::int`, active: sql<number>`(count(*) filter (where ${guards.status} = 'active'))::int` }).from(guards).where(eq(guards.organizationId, organizationId)),
     db.select({ total: sql<number>`count(*)::int` }).from(sites).where(eq(sites.organizationId, organizationId)),
@@ -40,7 +37,7 @@ export async function GET(request: Request) {
       .from(alerts).where(and(eq(alerts.organizationId, organizationId), gte(alerts.createdAt, start), lt(alerts.createdAt, end))),
     db.select({
       total: sql<number>`count(*)::int`,
-      completed: sql<number>`(count(*) filter (where (select count(*) from ${patrolCheckpoints} c where c.patrol_id = ${patrols.id}) >= ${slotCount}))::int`,
+      completed: sql<number>`(count(*) filter (where ${patrols.status} = 'completed'))::int`,
     }).from(patrols).where(and(eq(patrols.organizationId, organizationId), gte(patrols.loggedAt, start), lt(patrols.loggedAt, end))),
     showFinance
       ? db.select({ total: sql<number>`count(*)::int`, net: sql<number>`coalesce(sum(${payrollRecords.netPay}),0)::bigint` }).from(payrollRecords).where(and(eq(payrollRecords.organizationId, organizationId), gte(payrollRecords.createdAt, start), lt(payrollRecords.createdAt, end)))

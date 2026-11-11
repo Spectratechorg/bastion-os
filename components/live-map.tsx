@@ -21,15 +21,19 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
 
   useEffect(() => {
     let cancelled = false
+    let observer: ResizeObserver | null = null
     void import('leaflet').then((L) => {
       if (cancelled || !box.current) return
       const map = L.map(box.current, { zoomControl: true, attributionControl: true, worldCopyJump: false }).setView([6.5244, 3.3792], 11)
       L.tileLayer(TILES, { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
       state.current = { map, layer: L.layerGroup().addTo(map), fitted: false, opened: new Set(), positions: new Map() }
-      window.requestAnimationFrame(() => map.invalidateSize())
+      const resize = () => map.invalidateSize()
+      window.requestAnimationFrame(resize)
+      observer = new ResizeObserver(resize)
+      observer.observe(box.current)
       draw(L)
     })
-    return () => { cancelled = true; state.current?.map.remove(); state.current = null }
+    return () => { cancelled = true; observer?.disconnect(); state.current?.map.remove(); state.current = null }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
