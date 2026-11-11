@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
 import {
   Activity,
@@ -89,84 +90,44 @@ type AdminData = {
 }
 
 export function OverviewPage() {
-  const [d, setD] = useState<{
-    guards: Row[]
-    sites: Row[]
-    attendance: Row[]
-    incidents: Row[]
-    alerts: Row[]
-    activity: Row[]
-    patrols: { summary: Record<string, number> }
-  } | null>(null)
-  const [admin, setAdmin] = useState<AdminData | null>(null)
-  const [error, setError] = useState('')
   const [siteId, setSiteId] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [lastUpdated, setLastUpdated] = useState('')
-
-  const loadAll = useCallback(async () => {
-    setLoading(true)
-    const get = (s: string) => api<Row[]>(`/api/operations?section=${s}`)
-    const results = await Promise.allSettled([
-      get('guards'),
-      get('sites'),
-      get('attendance'),
-      get('incidents'),
-      get('alerts'),
-      get('activity'),
-      api<{ summary: Record<string, number> }>('/api/patrols'),
-    ])
-
-    const labels = ['guards', 'sites', 'attendance', 'incidents', 'alerts', 'activity', 'patrols']
-    const failed = results.flatMap((r, i) => (r.status === 'rejected' ? [labels[i]] : []))
-    const pick = <T,>(idx: number, fallback: T): T =>
-      results[idx].status === 'fulfilled' ? (results[idx] as PromiseFulfilledResult<T>).value : fallback
-
-    setD({
-      guards: pick<Row[]>(0, []),
-      sites: pick<Row[]>(1, []),
-      attendance: pick<Row[]>(2, []),
-      incidents: pick<Row[]>(3, []),
-      alerts: pick<Row[]>(4, []),
-      activity: pick<Row[]>(5, []),
-      patrols: pick<{ summary: Record<string, number> }>(6, { summary: {} }),
-    })
-    setError(failed.length ? `Some operational feeds could not load (${failed.join(', ')}). The rest of the dashboard remains active.` : '')
-    setLoading(false)
-    setLastUpdated(new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }))
-
-    // The command-centre aggregate is slower and must not hold the whole dashboard back.
-    api<AdminData>('/api/admin').then(setAdmin).catch(() => undefined)
-  }, [])
-
-  useEffect(() => {
-    void loadAll()
-    const t = window.setInterval(() => {
-      if (!document.hidden) void loadAll()
-    }, 45000)
-    return () => window.clearInterval(t)
-  }, [loadAll])
+  const [mutationError, setMutationError] = useState('')
+  const overviewQuery = useQuery({
+    queryKey: ['overview'],
+    queryFn: async () => {
+      const get = (s: string) => api<Row[]>(`/api/operations?section=${s}`)
+      const results = await Promise.allSettled([
+        get('guards'), get('sites'), get('attendance'), get('incidents'), get('alerts'), get('activity'), api<{ summary: Record<string, number> }>('/api/patrols'),
+      ])
+      const labels = ['guards', 'sites', 'attendance', 'incidents', 'alerts', 'activity', 'patrols']
+      const failed = results.flatMap((r, i) => (r.status === 'rejected' ? [labels[i]] : []))
+      const pick = <T,>(idx: number, fallback: T): T => results[idx].status === 'fulfilled' ? (results[idx] as PromiseFulfilledResult<T>).value : fallback
+      return {
+        d: {
+          guards: pick<Row[]>(0, []), sites: pick<Row[]>(1, []), attendance: pick<Row[]>(2, []), incidents: pick<Row[]>(3, []),
+          alerts: pick<Row[]>(4, []), activity: pick<Row[]>(5, []), patrols: pick<{ summary: Record<string, number> }>(6, { summary: {} }),
+        },
+        failed,
+        lastUpdated: new Date().toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' }),
+      }
+    },
+    refetchInterval: 45_000,
+  })
+  const adminQuery = useQuery({ queryKey: ['overview-admin'], queryFn: () => api<AdminData>('/api/admin'), refetchInterval: 45_000 })
+  const d = overviewQuery.data?.d ?? null
+  const admin = adminQuery.data ?? null
+  const loading = overviewQuery.isFetching || adminQuery.isFetching
+  const lastUpdated = overviewQuery.data?.lastUpdated ?? ''
+  const error = mutationError || (overviewQuery.error instanceof Error ? overviewQuery.error.message : '') || (overviewQuery.data?.failed.length ? `Some operational feeds could not load (${overviewQuery.data.failed.join(', ')}). The rest of the dashboard remains active.` : '')
+  async function loadAll() { await Promise.all([overviewQuery.refetch(), adminQuery.refetch()]) }
 
   async function handleAcknowledgeAlert(id: string) {
     try {
-      await api('/api/admin', {
-        method: 'POST',
-        json: { action: 'acknowledge-alert', id },
-      })
-      if (admin) {
-        setAdmin({
-          ...admin,
-          exceptions: admin.exceptions.filter((ex) => ex.id !== id),
-        })
-      }
-      if (d) {
-        setD({
-          ...d,
-          alerts: d.alerts.map((a) => (a.id === id ? { ...a, acknowledged: true } : a)),
-        })
-      }
+      await api('/api/admin', { method: 'POST', json: { action: 'acknowledge-alert', id } })
+      setMutationError('')
+      await Promise.all([overviewQuery.refetch(), adminQuery.refetch()])
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to acknowledge alert.')
+      setMutationError(e instanceof Error ? e.message : 'Unable to acknowledge alert.')
     }
   }
 

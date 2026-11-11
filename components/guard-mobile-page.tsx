@@ -686,10 +686,10 @@ export function GuardMobilePage() {
             <section className="ws-card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2.5"><span className="flex size-8 items-center justify-center rounded-[9px] bg-[#F0F2EC] text-[#3F3F46]"><Clock3 className="size-4" /></span><div><h2 className="text-[13px] font-semibold">Morning sign-in</h2><p className="mt-0.5 text-[10.5px] text-[#8A938B]">Attendance deadline 08:00</p></div></div>
-                <Badge value={morning?.signedAt ? (morning.late ? 'Late' : 'Signed') : morning?.missed ? 'Missed' : 'Pending'} />
+                <Badge value={morning?.signedAt ? (morning.late ? 'Missed' : 'Signed') : morning?.missed ? 'Missed' : 'Pending'} />
               </div>
               <p className={`mt-3 rounded-[10px] p-3 text-[11px] leading-5 font-medium ${morning?.late ? 'bg-amber-50 text-amber-900' : morning?.missed ? 'bg-red-50 text-red-900' : 'bg-[#F5F5F6] text-[#52525B]'}`}>
-                {morning?.signedAt ? `Signed at ${clock(morning.signedAt)}${morning.late ? ' · after the 08:00 deadline' : ' · on time'}` : morning?.missed ? 'Not signed by 08:00. An alert has been raised — sign now.' : 'You are on time. Sign before 08:00.'}
+                {morning?.signedAt ? `Signed at ${clock(morning.signedAt)}${morning.late ? ' · missed the 08:00 deadline (late sign-in accepted)' : ' · on time'}` : morning?.missed ? 'Not signed by 08:00. An alert has been raised — sign now.' : 'You are on time. Sign before 08:00.'}
               </p>
               {!checkedIn ? <div className="mt-3 grid gap-2">
                 {identity ? <button className={`${big} bg-[#16794A] text-white hover:bg-emerald-700`} disabled={busy || scanning !== null || locationBlocked} onClick={() => void submit('attendance', '', { guardId: identity.id })}><Navigation className="size-5" />{locationBlocked ? 'Move on site to sign in' : checkedOut ? 'Check in again' : 'Sign morning attendance'}</button> : <p className="rounded-[10px] bg-[#F5F5F6] p-3 text-center text-[11px] text-[#52525B]">Identify yourself above to unlock morning sign-in.</p>}

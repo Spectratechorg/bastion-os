@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Public_Sans, Spline_Sans_Mono } from 'next/font/google'
 import { OfflineBanner } from '@/components/offline-banner'
+import { Providers } from '@/app/providers'
 import './globals.css'
 
 const sans = Public_Sans({ subsets: ['latin'], variable: '--font-public-sans', display: 'swap' })
@@ -41,8 +42,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="antialiased font-sans">
-        <OfflineBanner />
-        {children}
+        <Providers>
+          <OfflineBanner />
+          {children}
+        </Providers>
         {process.env.VERCEL ? <Analytics /> : null}
       </body>
     </html>

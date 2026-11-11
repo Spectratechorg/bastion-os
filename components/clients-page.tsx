@@ -1,6 +1,7 @@
 'use client'
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Download, Plus, RefreshCw, Search, Trash2, UserPlus } from 'lucide-react'
 import { PageHeader, StatStrip } from '@/components/workspace-shell'
 import { Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
@@ -18,16 +19,10 @@ type ClientPage = { rows: ClientRecord[]; page: number; pageSize: number; total:
 const emptyForm = { name: '', contactName: '', email: '', phone: '', contractValue: '', slaScore: '', renewalDate: '', status: 'active' }
 
 export function ClientsPage() {
-  const [clients, setClients] = useState<ClientRecord[]>([])
-  const [sites, setSites] = useState<SiteRow[]>([])
-  const [guards, setGuards] = useState<GuardRow[]>([])
   const [search, setSearch] = useState('')
   const [term, setTerm] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(25)
-  const [total, setTotal] = useState(0)
-  const [stats, setStats] = useState<{ total: number; active: number; contractValue: number }>({ total: 0, active: 0, contractValue: 0 })
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const [editing, setEditing] = useState<ClientRecord | null>(null)
@@ -36,26 +31,26 @@ export function ClientsPage() {
   const [saving, setSaving] = useState(false)
   const [assigning, setAssigning] = useState<ClientRecord | null>(null)
 
-  const load = useCallback(async () => {
-    try {
+  const clientsQuery = useQuery({
+    queryKey: ['clients', page, pageSize, term],
+    queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), q: term })
       const [clientPage, siteRows, guardRows] = await Promise.all([
         api<ClientPage>(`/api/clients?${params}`),
         api<SiteRow[]>('/api/operations?section=sites'),
         api<GuardRow[]>('/api/operations?section=guards'),
       ])
-      setClients(clientPage.rows)
-      setTotal(clientPage.total)
-      setStats(clientPage.stats ?? { total: clientPage.total, active: clientPage.rows.filter((client) => client.status === 'active').length, contractValue: 0 })
-      setSites(siteRows)
-      setGuards(guardRows)
-      setError('')
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to load clients.')
-    } finally { setLoading(false) }
-  }, [page, pageSize, term])
-
-  useEffect(() => { setLoading(true); void load() }, [load])
+      return { clientPage, siteRows, guardRows }
+    },
+    refetchInterval: 60_000,
+  })
+  const clients = clientsQuery.data?.clientPage.rows ?? []
+  const sites = clientsQuery.data?.siteRows ?? []
+  const guards = clientsQuery.data?.guardRows ?? []
+  const total = clientsQuery.data?.clientPage.total ?? 0
+  const stats = clientsQuery.data?.clientPage.stats ?? { total, active: clients.filter((client) => client.status === 'active').length, contractValue: 0 }
+  const loading = clientsQuery.isLoading || clientsQuery.isFetching
+  const load = async () => { await clientsQuery.refetch() }
   useEffect(() => { const timer = window.setTimeout(() => { setTerm(search.trim()); setPage(1) }, 300); return () => window.clearTimeout(timer) }, [search])
 
   const sitesOf = (client: ClientRecord) => sites.filter((site) => site.clientId === client.id)
@@ -124,7 +119,7 @@ export function ClientsPage() {
     <StatStrip stats={[[String(stats.total ?? total), 'Clients'], [String(stats.active), 'Active'], [naira(contractTotal), 'Total contract size'], [String(unassignedSites.length), 'Unassigned sites']]} />
 
     {unassignedSites.length > 0 && <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900">{unassignedSites.length} site{unassignedSites.length === 1 ? ' is' : 's are'} not linked to a client yet: {unassignedSites.map((site) => site.name).join(', ')}. Use <b>Assign sites</b> on a client to link them.</p>}
-    <ErrorBanner message={error} retry={() => void load()} />
+    <ErrorBanner message={error || (clientsQuery.error instanceof Error ? clientsQuery.error.message : '')} retry={() => void load()} />
 
     <div className="mb-3 flex items-center gap-2">
       <label className="flex h-10 max-w-sm flex-1 items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3"><Search className="size-4 text-[#9A9AA1]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients…" className="w-full text-xs outline-none" /></label>

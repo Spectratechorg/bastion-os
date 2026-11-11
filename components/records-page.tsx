@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -91,6 +92,15 @@ function SiteCard({ row, c }: { row: Row; c: Ctx }) {
   </article>
 }
 
+function SignInLight({ at, late }: { at?: string | null; late?: boolean | null }) {
+  if (!at) return <span className="inline-flex items-center gap-1.5 text-[10.5px] text-[#8A938B]" title="Not signed in today"><span className="size-2 rounded-full bg-[#D4D4D8]" />Not signed</span>
+  return <span className={`inline-flex items-center gap-1.5 text-[10.5px] font-medium ${late ? 'text-[#B42318]' : 'text-[#16794A]'}`} title={`Signed ${late ? 'after' : 'before'} 08:00`}>
+    <span className={`size-2 rounded-full ${late ? 'bg-[#D14343]' : 'bg-[#16794A]'}`} />
+    <span>{late ? 'After 08:00' : 'Before 08:00'}</span>
+    <span className="text-[9.5px] text-[#8A938B]">{when(at)}</span>
+  </span>
+}
+
 const meta: Record<Section, { title: string; subtitle: string; search: string; columns: Column[]; stats: (rows: Row[]) => [string, string][]; addLabel?: string }> = {
   guards: {
     title: 'Guards', subtitle: 'Your security team, their guard IDs, assigned sites and NFC tags.', search: 'Search name, phone, site…', addLabel: 'Register guard',
@@ -100,6 +110,7 @@ const meta: Record<Section, { title: string; subtitle: string; search: string; c
       { head: 'Guard ID', cell: (r) => <span className="inline-flex rounded-[6px] bg-[#F0F2EC] px-2 py-1 font-mono text-[11px] font-semibold text-[#3F3F46]">{r.guardCode ?? '—'}</span> },
       { head: 'Site', cell: (r) => <span className="line-clamp-2 block max-w-[200px] leading-snug">{r.site ?? 'Unassigned'}</span> },
       { head: 'Status', cell: (r) => <Badge value={r.status} /> },
+      { head: 'Morning sign-in', cell: (r) => <SignInLight at={r.todayCheckInAt} late={r.todayCheckInLate} /> },
       { head: 'NFC tag', cell: (r) => <TagCell value={r.nfcToken} /> },
       { head: '', cell: (r, c) => <span className="flex flex-wrap justify-end gap-1"><button className={smallBtn} onClick={() => c.open(r)}>View</button><button className={smallBtn} onClick={() => c.edit(r)}>Edit</button><button className={`${smallBtn} text-[#B42318]`} onClick={() => c.remove(r)}>Delete</button></span> },
     ],
@@ -288,6 +299,8 @@ function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void })
     ['Monthly salary', naira(Number(row.monthlySalary ?? 0))],
     ['NFC tag', row.nfcToken ?? '—', 'font-mono text-[12px] break-all'],
     ['Last check-in', row.lastCheckIn ? when(row.lastCheckIn) : 'No check-in yet'],
+    ['Latitude', row.lastLatitude != null ? Number(row.lastLatitude).toFixed(6) : 'No location fix', 'font-mono text-[12px]'],
+    ['Longitude', row.lastLongitude != null ? Number(row.lastLongitude).toFixed(6) : 'No location fix', 'font-mono text-[12px]'],
     ['Added', row.createdAt ? when(row.createdAt) : '—'],
     ['Guard login', row.loginUserId ? 'Linked to a user account' : 'Not linked'],
   ]
@@ -312,7 +325,7 @@ function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void })
   return <Sheet title={row.name} kicker="GUARD PROFILE" onClose={close} footer={
     <>
       <button className={btn} onClick={() => { close(); c.metrics(row) }}>Performance</button>
-      <button className={btn} onClick={() => { close(); c.openMap(row.id) }}>Location</button>
+      <button className={btn} onClick={() => { close(); c.openMap(row.id) }}>Live location</button>
       <button className={btn} onClick={() => { close(); c.reissue(row) }}>Replace tag</button>
       <button className={btn} onClick={() => { close(); c.edit(row) }}>Edit</button>
       <button className={btnPrimary} onClick={async () => { await c.act(row, suspended ? 'reactivate' : 'suspend'); close() }}>{suspended ? 'Reactivate' : 'Suspend'}</button>
@@ -360,21 +373,20 @@ function GuardDetail({ row, c, close }: { row: Row; c: Ctx; close: () => void })
 export function RecordsPage({ section }: { section: Section }) {
   const page = meta[section]
   const searchParams = useSearchParams()
-  const [records, setRecords] = useState<Row[]>([]); const [guards, setGuards] = useState<Row[]>([]); const [sites, setSites] = useState<Row[]>([])
+  const queryClient = useQueryClient()
   const [query, setQuery] = useState(''); const [term, setTerm] = useState('')
-  const [filter, setFilter] = useState('all'); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
+  const [filter, setFilter] = useState('all'); const [error, setError] = useState('')
   const [currentPage, setCurrentPage] = useState(1); const [pageSize, setPageSize] = useState(25)
-  const [total, setTotal] = useState(0); const [serverStats, setServerStats] = useState<Record<string, number> | null>(null)
-  const [mapGuards, setMapGuards] = useState<Row[]>([])
   const [mapOpen, setMapOpen] = useState(false); const [mapGuardId, setMapGuardId] = useState('')
   const [mapMode, setMapMode] = useState<'guards' | 'sites'>('guards')
   const [mapSiteId, setMapSiteId] = useState('')
-  const [mapSites, setMapSites] = useState<Row[]>([])
   const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'guard-detail' | 'incident' | 'alert' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
   const [notice, setNotice] = useState('')
+  const [bulkAck, setBulkAck] = useState(false)
 
-  const load = useCallback(async () => {
-    try {
+  const recordsQuery = useQuery({
+    queryKey: ['records', section, currentPage, pageSize, filter, term],
+    queryFn: async () => {
       const params = new URLSearchParams({ section, page: String(currentPage), pageSize: String(pageSize), filter, q: term })
       const need = (name: string) => api<Row[]>(`/api/operations?section=${name}`)
       const [main, g, s] = await Promise.all([
@@ -382,22 +394,24 @@ export function RecordsPage({ section }: { section: Section }) {
         section === 'guards' ? Promise.resolve(null) : need('guards'),
         section === 'sites' ? Promise.resolve(null) : need('sites'),
       ])
-      setRecords(main.rows); setTotal(main.total); setServerStats(main.stats ?? null)
-      setGuards(g ?? main.rows); setSites(s ?? main.rows); setError('')
-    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load records.') } finally { setLoading(false) }
-  }, [section, currentPage, pageSize, filter, term])
+      return { records: main.rows, total: main.total, stats: main.stats ?? null, guards: g ?? main.rows, sites: s ?? main.rows }
+    },
+    refetchInterval: 60_000,
+  })
+  const records = recordsQuery.data?.records ?? []
+  const guards = recordsQuery.data?.guards ?? []
+  const sites = recordsQuery.data?.sites ?? []
+  const total = recordsQuery.data?.total ?? 0
+  const serverStats = recordsQuery.data?.stats ?? null
+  const loading = recordsQuery.isLoading || recordsQuery.isFetching
+  const load = useCallback(async () => { await recordsQuery.refetch() }, [recordsQuery.refetch]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setFilter('all'); setCurrentPage(1) }, [section])
-  useEffect(() => { setLoading(true); void load() }, [load])
-  useEffect(() => { const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
   useEffect(() => { const q = searchParams.get('q'); if (q) { setQuery(q); setCurrentPage(1) } }, [searchParams])
   useEffect(() => { const timer = window.setTimeout(() => { setTerm(query.trim()); setCurrentPage(1) }, 300); return () => window.clearTimeout(timer) }, [query])
-  useEffect(() => {
-    if (!mapOpen) return
-    let live = true
-    if (mapMode === 'guards') api<Row[]>('/api/operations?section=guards').then((rows) => { if (live) setMapGuards(rows) }).catch(() => undefined)
-    else api<Row[]>('/api/operations?section=sites').then((rows) => { if (live) setMapSites(rows) }).catch(() => undefined)
-    return () => { live = false }
-  }, [mapMode, mapOpen])
+  const mapGuardsQuery = useQuery({ queryKey: ['map-guards'], queryFn: () => api<Row[]>('/api/operations?section=guards'), enabled: mapOpen && mapMode === 'guards' })
+  const mapSitesQuery = useQuery({ queryKey: ['map-sites'], queryFn: () => api<Row[]>('/api/operations?section=sites'), enabled: mapOpen && mapMode === 'sites' })
+  const mapGuards = mapGuardsQuery.data ?? []
+  const mapSites = mapSitesQuery.data ?? []
   useEffect(() => {
     if (!mapOpen) return
     const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { setMapOpen(false); setMapGuardId(''); setMapSiteId('') } }
@@ -407,13 +421,13 @@ export function RecordsPage({ section }: { section: Section }) {
 
   const ctx: Ctx = useMemo(() => ({
     guards, sites,
-    act: async (row, action, extra = {}) => { try { const updated = await api<Row>('/api/operations', { method: 'PATCH', json: { section, id: row.id, action, ...extra } }); setRecords((items) => items.map((item) => item.id === row.id ? updated : item)); setDialog((d) => d?.row?.id === row.id ? { ...d, row: updated } : d); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update.') } },
+    act: async (row, action, extra = {}) => { try { const updated = await api<Row>('/api/operations', { method: 'PATCH', json: { section, id: row.id, action, ...extra } }); setDialog((d) => d?.row?.id === row.id ? { ...d, row: updated } : d); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to update.') } },
     edit: (row) => setDialog({ kind: section === 'guards' ? 'guard' : 'site', row }), comment: (row) => setDialog({ kind: 'detail', row }), assign: (row) => setDialog({ kind: 'assign', row }),
     metrics: (row) => setDialog({ kind: 'metrics', row }), reissue: (row) => setDialog({ kind: 'reissue', row }), open: (row) => setDialog({ kind: 'guard-detail', row }), openMap: (guardId = '') => { setMapMode('guards'); setMapGuardId(guardId); setMapOpen(true) }, openSitesMap: (siteId = '') => { setMapMode('sites'); setMapSiteId(siteId); setMapGuardId(''); setMapOpen(true) },
     remove: async (row) => {
       const what = section === 'guards' ? `Delete ${row.name} permanently? Their attendance, patrol and payroll history is deleted with them. To keep the history, suspend the guard instead.` : `Delete ${row.name} permanently? Guards assigned here become unassigned. To keep the record, deactivate the site instead.`
       if (!window.confirm(what)) return
-      try { await api(`/api/operations?section=${section}&id=${row.id}`, { method: 'DELETE' }); setRecords((items) => items.filter((item) => item.id !== row.id)); setTotal((value) => Math.max(0, value - 1)); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to delete.') }
+      try { await api(`/api/operations?section=${section}&id=${row.id}`, { method: 'DELETE' }); setError(''); void load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to delete.') }
     },
   }), [guards, sites, section, load])
 
@@ -425,6 +439,13 @@ export function RecordsPage({ section }: { section: Section }) {
     alerts: [['all', () => true], ['open', (r) => !r.acknowledged], ['high or critical', (r) => r.severity === 'high' || r.severity === 'critical'], ['acknowledged', (r) => r.acknowledged]],
   }
   const rows = records
+  const queryError = recordsQuery.error instanceof Error ? recordsQuery.error.message : ''
+  const openAlerts = serverStats ? Math.max(0, (serverStats.total ?? 0) - (serverStats.acknowledged ?? 0)) : 0
+  async function acknowledgeAll() {
+    if (!window.confirm('Acknowledge every open alert in this workspace?')) return
+    setBulkAck(true)
+    try { const result = await api<{ count: number }>('/api/alerts/acknowledge-all', { method: 'POST' }); setNotice(`${result.count} alert${result.count === 1 ? '' : 's'} acknowledged.`); window.setTimeout(() => setNotice(''), 5000); await load() } catch (e) { setError(e instanceof Error ? e.message : 'Unable to acknowledge alerts.') } finally { setBulkAck(false) }
+  }
   const statPairs: [string, string][] = serverStats ? (
     section === 'guards' ? [[String(serverStats.total), 'Registered'], [String(serverStats.active), 'Active'], [String(serverStats.suspended), 'Suspended'], [String(serverStats.nfc), 'NFC issued']]
       : section === 'sites' ? [[String(serverStats.total), 'Sites'], [String(serverStats.active), 'Active'], [String(serverStats.deployed), 'Guards deployed'], [String(serverStats.highRisk), 'High risk']]
@@ -444,6 +465,7 @@ export function RecordsPage({ section }: { section: Section }) {
       {section === 'sites' && <button className={btn} onClick={() => ctx.openSitesMap()}><MapPin className="size-3.5" />Live map</button>}
       {section === 'sites' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'site' })}><Plus className="size-4" />Add site</button>}
       {section === 'incidents' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'incident' })}><Plus className="size-4" />Report incident</button>}
+      {section === 'alerts' && openAlerts > 0 && <button className={btn} onClick={() => void acknowledgeAll()} disabled={bulkAck}><Check className="size-3.5" />{bulkAck ? 'Acknowledging…' : 'Acknowledge all'}</button>}
       {section === 'alerts' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'alert' })}><Plus className="size-4" />Create alert</button>}
     </PageHeader>
     <StatStrip stats={statPairs} />
@@ -460,9 +482,9 @@ export function RecordsPage({ section }: { section: Section }) {
       <label className="flex h-10 min-w-0 flex-1 basis-full items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3 sm:h-10 sm:max-w-sm sm:basis-[200px]"><Search className="size-4 text-[#9A9AA1]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={page.search} className="w-full bg-transparent text-xs outline-none" /></label>
       <select aria-label="Filter" className="h-10 min-w-[110px] flex-1 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-xs capitalize sm:flex-none" value={filter} onChange={(e) => { setFilter(e.target.value); setCurrentPage(1) }}>{filterOptions[section].map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
       <a href={`/api/export?section=${section}`} className={btn}><Download className="size-3.5" />Export CSV</a>
-      <button onClick={() => { clearClientCache(); setLoading(true); void load() }} className={btn}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+      <button onClick={() => { clearClientCache(); void load() }} className={btn}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
     </div>
-    <ErrorBanner message={error} retry={() => void load()} />
+    <ErrorBanner message={error || queryError} retry={() => void load()} />
     {notice && <div role="status" className="mb-3 rounded-[10px] border border-[#CFE3D3] bg-[#EFF7F0] px-3.5 py-2.5 text-[12px] text-[#2F6B49]">{notice}</div>}
     {loading && records.length === 0 ? <div className="ws-card"><Spinner label="Loading live records…" /></div> : rows.length === 0 ? <div className="ws-card"><Empty title={total ? 'No records match your search' : `No ${page.title.toLowerCase()} yet`} text={total ? undefined : section === 'guards' ? 'Register your first guard to get started.' : section === 'sites' ? 'Add a site to start tracking coverage.' : 'Records appear here as they are created.'} /></div> : section === 'sites' ? (
       <div>
@@ -486,7 +508,7 @@ export function RecordsPage({ section }: { section: Section }) {
     {mapOpen && <div role="dialog" aria-modal="true" aria-label={mapMode === 'guards' ? 'Guard locations' : 'Site locations'} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3 sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setMapOpen(false); setMapGuardId(''); setMapSiteId('') } }}>
       <div className="w-full max-w-5xl overflow-hidden rounded-[12px] border border-[#E4E4E7] bg-white shadow-[0_20px_60px_-20px_rgba(11,18,15,0.45)]">
         <div className="flex items-start justify-between gap-3 border-b border-[#E4E4E7] px-4 py-3">
-          <div><h2 className="text-[14px] font-semibold">{mapMode === 'guards' ? 'Guard locations' : 'Site locations'}</h2><p className="mt-0.5 text-xs text-[#6B6B72]">{mapMode === 'guards' ? 'Solid markers are real scans; dashed markers sit at the assigned site until a guard scans.' : 'Every registered site with its geofence circle.'}</p></div>
+          <div><h2 className="text-[14px] font-semibold">{mapMode === 'guards' ? 'Guard locations' : 'Site locations'}</h2><p className="mt-0.5 text-xs text-[#6B6B72]">{(() => { const focused = mapMode === 'guards' && mapGuardId ? mapGuards.find((guard) => guard.id === mapGuardId) : null; if (focused) return <>{focused.name} · {focused.lastLatitude != null && focused.lastLongitude != null ? `${Number(focused.lastLatitude).toFixed(5)}, ${Number(focused.lastLongitude).toFixed(5)}` : 'waiting for a location fix'}</>; return mapMode === 'guards' ? 'Solid markers are real scans; dashed markers sit at the assigned site until a guard scans.' : 'Every registered site with its geofence circle.' })()}</p></div>
           <button aria-label="Close map" onClick={() => { setMapOpen(false); setMapGuardId('') }} className="flex size-9 shrink-0 items-center justify-center rounded-[7px] text-[#6B6B72] transition-colors hover:bg-[#F0F0F1]"><X className="size-4" /></button>
         </div>
         <LiveMap sites={(mapMode === 'sites' ? mapSites : sites) as never} guards={(mapMode === 'guards' ? mapGuards : []) as never} selectedSiteId={mapMode === 'sites' ? mapSiteId || undefined : undefined} selectedGuardId={mapMode === 'guards' ? mapGuardId || undefined : undefined} height="h-[60vh] sm:h-[68vh]" />

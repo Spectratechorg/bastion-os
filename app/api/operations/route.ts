@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, desc, eq, ilike, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, ilike, inArray, ne, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
@@ -8,7 +8,7 @@ import { raiseAlert } from '@/lib/alerts'
 import { incidentEmail } from '@/lib/email'
 import { notifyOrganization } from '@/lib/notifications'
 import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
-import { actor, can, denyGuard, isModerator } from '@/lib/server'
+import { actor, can, denyGuard, isModerator, lagosParts } from '@/lib/server'
 import { likeTerm, pageResponse, readPage } from '@/lib/pagination'
 import { cachedJsonResponse, invalidate } from '@/lib/cache'
 import type { PermissionKey } from '@/lib/permissions'
@@ -173,7 +173,18 @@ export async function GET(request: Request) {
         }).from(guards).where(eq(guards.organizationId, organizationId)),
         db.select({ n: sql<number>`count(*)` }).from(guards).where(where),
       ])
-      return NextResponse.json(pageResponse(rows, Number(filtered[0].n), page, {
+      const today = lagosParts().date
+      const todayStart = new Date(`${today}T00:00:00+01:00`)
+      const attendanceRows = rows.length ? await db.select({ guardId: attendance.guardId, checkedInAt: attendance.checkedInAt }).from(attendance)
+        .where(and(eq(attendance.organizationId, organizationId), gte(attendance.checkedInAt, todayStart), inArray(attendance.guardId, rows.map((row) => row.id))))
+        .orderBy(attendance.checkedInAt) : []
+      const firstCheckIn = new Map<string, Date>()
+      for (const row of attendanceRows) if (!firstCheckIn.has(row.guardId)) firstCheckIn.set(row.guardId, row.checkedInAt)
+      const enriched = rows.map((row) => {
+        const at = firstCheckIn.get(row.id)
+        return { ...row, todayCheckInAt: at ? at.toISOString() : null, todayCheckInLate: at ? Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', hourCycle: 'h23' }).format(at)) >= 8 : null }
+      })
+      return NextResponse.json(pageResponse(enriched, Number(filtered[0].n), page, {
         total: Number(stats[0].total), active: Number(stats[0].active), suspended: Number(stats[0].suspended), nfc: Number(stats[0].nfc),
       }))
     }
@@ -365,7 +376,7 @@ export async function POST(request: Request) {
       reportedAt: now,
       createdAt: now,
     }).returning()
-    await notifyOrganization(current.organizationId, (email) => incidentEmail({ to: email, title: row.title, description: row.description, site: row.site, severity: row.severity, status: row.status }))
+    await notifyOrganization(current.organizationId, 'incident', (email) => incidentEmail({ to: email, title: row.title, description: row.description, site: row.site, severity: row.severity, status: row.status }))
     if (row.severity === 'high' || row.severity === 'critical') await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'incident', title: `${row.severity === 'critical' ? 'Critical' : 'High'} incident: ${row.title}`, body: `${row.site}: ${row.description.slice(0, 140)}`, severity: row.severity, key: `incident:${row.id}`, notify: false })
     await log(current, 'incident.created', `Incident reported: ${row.title}`, row.site)
     return NextResponse.json(row, { status: 201 })

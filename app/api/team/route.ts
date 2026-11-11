@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { accounts, authSessions, guards, members, organizations, users } from '@/lib/db/schema'
+import { getSettings, setIncidentOnly } from '@/lib/settings'
 import { actor, denyGuard, fail, isAdminRole } from '@/lib/server'
 import { ASSIGNABLE_ROLES } from '@/lib/permissions'
 import { provisioningSignup } from '@/lib/signup-policy'
@@ -25,12 +26,13 @@ export async function GET() {
     .orderBy(members.createdAt)
   const active = await db.select({ userId: authSessions.userId, lastActive: max(authSessions.updatedAt) }).from(authSessions).groupBy(authSessions.userId)
   const lastActive = new Map(active.map((row) => [row.userId, row.lastActive]))
-  return NextResponse.json({ me: current.userId, myRole: current.role, canManage: isAdminRole(current.role), members: rows.map((row) => ({ ...row, lastActive: lastActive.get(row.userId) ?? null })) })
+  const settings = await getSettings(current.organizationId)
+  return NextResponse.json({ me: current.userId, myRole: current.role, canManage: isAdminRole(current.role), members: rows.map((row) => ({ ...row, incidentsOnly: Boolean(settings.notificationPrefs?.[row.userId]), lastActive: lastActive.get(row.userId) ?? null })) })
 }
 
 const roleSchema = z.enum(ASSIGNABLE_ROLES)
 const createSchema = z.object({ name: z.string().trim().min(2).max(120), email: z.string().trim().toLowerCase().email(), password: z.string().min(8).max(128).optional(), role: roleSchema, guardId: z.string().uuid().nullish() })
-const editSchema = z.object({ memberId: z.string().min(1), role: roleSchema.optional(), name: z.string().trim().min(2).max(120).optional(), email: z.string().trim().toLowerCase().email().optional(), password: z.string().min(8).max(128).optional(), guardId: z.string().uuid().nullish() })
+const editSchema = z.object({ memberId: z.string().min(1), role: roleSchema.optional(), name: z.string().trim().min(2).max(120).optional(), email: z.string().trim().toLowerCase().email().optional(), password: z.string().min(8).max(128).optional(), guardId: z.string().uuid().nullish(), incidentsOnly: z.boolean().optional() })
 
 async function target(organizationId: string, memberId: string) {
   const [row] = await db.select({ id: members.id, userId: members.userId, role: members.role }).from(members).where(and(eq(members.id, memberId), eq(members.organizationId, organizationId))).limit(1)
@@ -81,11 +83,12 @@ export async function PATCH(request: Request) {
   const current = await actor(); if (!current) return fail('Sign in first.', 401)
   if (!isAdminRole(current.role)) return fail('Only the owner or an administrator can edit users.', 403)
   const parsed = editSchema.safeParse(await request.json().catch(() => null)); if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Check the details and try again.')
-  const { memberId, role, name, email, password, guardId } = parsed.data
+  const { memberId, role, name, email, password, guardId, incidentsOnly } = parsed.data
   const row = await target(current.organizationId, memberId); if (!row) return fail('Person not found.', 404)
   const isSelf = row.userId === current.userId
-  if (row.role === 'owner' && current.role !== 'owner') return fail('Only the owner can edit the owner account.', 403)
-  if (row.role === 'admin' && current.role !== 'owner' && !isSelf) return fail('Only the owner can edit other administrators.', 403)
+  const notificationOnly = incidentsOnly !== undefined && role === undefined && name === undefined && email === undefined && password === undefined && guardId === undefined
+  if (!notificationOnly && row.role === 'owner' && current.role !== 'owner') return fail('Only the owner can edit the owner account.', 403)
+  if (!notificationOnly && row.role === 'admin' && current.role !== 'owner' && !isSelf) return fail('Only the owner can edit other administrators.', 403)
   if (role !== undefined && role !== row.role) {
     if (row.role === 'owner') return fail('The owner role cannot be changed here.', 400)
     if (isSelf) return fail('You cannot change your own role.', 400)
@@ -103,6 +106,7 @@ export async function PATCH(request: Request) {
     if (clash && clash.id !== row.userId) return fail('Another account already uses that email.', 409)
     await db.update(users).set({ email, updatedAt: new Date() }).where(eq(users.id, row.userId))
   }
+  if (incidentsOnly !== undefined) await setIncidentOnly(current.organizationId, row.userId, incidentsOnly)
   if (password !== undefined) {
     const context = await auth.$context
     const hash = await context.password.hash(password)

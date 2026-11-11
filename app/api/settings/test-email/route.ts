@@ -19,5 +19,5 @@ export async function POST() {
     subject: 'BastionOS email delivery test',
     text: `Hello ${user.name},\n\nThis is a test from BastionOS. Alert, incident and attendance notifications are configured for this address.\n\nIf you received this, email delivery is working.\n\n— BastionOS`,
   })
-  return NextResponse.json(result, { status: result.sent ? 200 : 503 })
+  return NextResponse.json({ ...result, ...(result.sent ? {} : { error: result.reason ?? 'Email delivery failed.' }) }, { status: result.sent ? 200 : 503 })
 }

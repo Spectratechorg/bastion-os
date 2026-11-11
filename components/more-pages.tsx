@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Activity, Bell, BriefcaseBusiness, Clock3, Download, FileText, Mail, MapPin, Plus, Route, ShieldAlert, Users, Wallet,
 } from 'lucide-react'
@@ -100,15 +101,16 @@ function Breakdown({ section, title, total, leftLabel, left, rightLabel, right, 
 
 export function ReportsPage() {
   const monthStart = lagosDay().slice(0, 8) + '01'
-  const [from, setFrom] = useState(monthStart); const [to, setTo] = useState(lagosDay()); const [sum, setSum] = useState<Summary | null>(null); const [problem, setProblem] = useState('')
-  const loadSummary = useCallback(async () => {
-    setSum(null)
-    try {
-      const q = new URLSearchParams(); if (from) q.set('from', from); if (to) q.set('to', to)
-      setSum(await api<Summary>(`/api/reports?${q}`)); setProblem('')
-    } catch (issue) { setProblem(issue instanceof Error ? issue.message : 'Unable to load the summary.') }
-  }, [from, to])
-  useEffect(() => { void loadSummary() }, [loadSummary])
+  const [from, setFrom] = useState(monthStart); const [to, setTo] = useState(lagosDay())
+  const reportsQuery = useQuery({
+    queryKey: ['reports', from, to],
+    queryFn: () => { const q = new URLSearchParams(); if (from) q.set('from', from); if (to) q.set('to', to); return api<Summary>(`/api/reports?${q}`) },
+    refetchInterval: 60_000,
+  })
+  const sum = reportsQuery.data ?? null
+  const problem = reportsQuery.error instanceof Error ? reportsQuery.error.message : ''
+  const loadSummary = async () => { await reportsQuery.refetch() }
+  useEffect(() => { void loadSummary() }, [from, to]) // eslint-disable-line react-hooks/exhaustive-deps
   const presets: [string, () => void][] = [['Today', () => { setFrom(lagosDay()); setTo(lagosDay()) }], ['Last 7 days', () => { setFrom(lagosDay(-6)); setTo(lagosDay()) }], ['This month', () => { setFrom(monthStart); setTo(lagosDay()) }], ['Last month', () => { const d = new Date(`${monthStart}T00:00:00Z`); const prevEnd = new Date(d.getTime() - 86400000); setFrom(prevEnd.toISOString().slice(0, 8) + '01'); setTo(prevEnd.toISOString().slice(0, 10)) }], ['All time', () => { setFrom(''); setTo('') }]]
   const qs = `${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`
   const cards: [string, string, string, string][] = [
@@ -219,9 +221,12 @@ function OrgSettings() {
   const [d, setD] = useState<{ name: string; settings: { phone: string; address: string; defaultGeofence: number; defaultSalary: number }; canEdit: boolean } | null>(null)
   const [v, setV] = useState({ name: '', phone: '', address: '', defaultGeofence: '100', defaultSalary: '150000' }); const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
   const [testingEmail, setTestingEmail] = useState(false); const [emailNote, setEmailNote] = useState(''); const [emailError, setEmailError] = useState('')
-  useEffect(() => { api<NonNullable<typeof d>>('/api/settings').then((r) => { setD(r); setV({ name: r.name, phone: r.settings.phone, address: r.settings.address, defaultGeofence: String(r.settings.defaultGeofence), defaultSalary: String(r.settings.defaultSalary) }) }).catch((e) => setErr(e instanceof Error ? e.message : 'Unable to load settings.')) }, [])
+  const [prefs, setPrefs] = useState<{ canManage: boolean; members: { id: string; name: string; email: string; role: string; incidentsOnly: boolean }[] } | null>(null)
+  const [prefBusy, setPrefBusy] = useState(''); const [prefError, setPrefError] = useState('')
+  useEffect(() => { api<NonNullable<typeof d>>('/api/settings').then((r) => { setD(r); setV({ name: r.name, phone: r.settings.phone, address: r.settings.address, defaultGeofence: String(r.settings.defaultGeofence), defaultSalary: String(r.settings.defaultSalary) }) }).catch((e) => setErr(e instanceof Error ? e.message : 'Unable to load settings.')); api<NonNullable<typeof prefs>>('/api/team').then((r) => setPrefs({ canManage: r.canManage, members: r.members.filter((m) => m.role !== 'guard') })).catch(() => undefined) }, [])
   async function save(e: FormEvent) { e.preventDefault(); setBusy(true); setErr(''); setMsg(''); try { await api('/api/settings', { method: 'PATCH', json: v }); setMsg('Saved. The company name updates in the sidebar the next time the page loads.') } catch (x) { setErr(x instanceof Error ? x.message : 'Unable to save.') } finally { setBusy(false) } }
   async function testEmail() { setTestingEmail(true); setEmailNote(''); setEmailError(''); try { const result = await api<{ sent: boolean; transport: string; reason?: string }>('/api/settings/test-email', { method: 'POST' }); if (!result.sent) throw new Error(result.reason ?? 'Email was not delivered.'); setEmailNote(`Test email sent by ${result.transport}. Check the administrator inbox.`) } catch (issue) { setEmailError(issue instanceof Error ? issue.message : 'Could not send the test email.') } finally { setTestingEmail(false) } }
+  async function toggleIncidentsOnly(memberId: string, next: boolean) { setPrefBusy(memberId); setPrefError(''); try { await api('/api/team', { method: 'PATCH', json: { memberId, incidentsOnly: next } }); setPrefs((current) => current ? { ...current, members: current.members.map((member) => member.id === memberId ? { ...member, incidentsOnly: next } : member) } : current) } catch (issue) { setPrefError(issue instanceof Error ? issue.message : 'Unable to save this preference.') } finally { setPrefBusy('') } }
   if (!d && !err) return <section className="ws-card"><Spinner /></section>
   const off = !d?.canEdit
 
@@ -257,6 +262,16 @@ function OrgSettings() {
         <p className="max-w-[52ch] text-[11px] leading-5 text-[#6B6B72]">Delivery uses Resend when <span className="font-mono text-[10.5px]">RESEND_API_KEY</span> and <span className="font-mono text-[10.5px]">MAIL_FROM</span> are configured. Send a test to your own account to verify the setup.</p>
         <button type="button" onClick={() => void testEmail()} disabled={testingEmail || off} className={btn}><Mail className="size-3.5" />{testingEmail ? 'Sending…' : 'Send test email'}</button>
       </div>
+      {prefs && <div className="border-t border-[#EFEFF1]">
+        <div className="px-5 pt-3"><p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[#8A938B]">Who receives what</p><p className="mt-1 text-[10.5px] leading-4 text-[#6B6B72]">Turn on “Incidents only” for the person who should receive incident mail but not alert or attendance mail. Everyone can still see every alert inside BastionOS.</p></div>
+        <ul className="divide-y divide-[#EFEFF1] px-5">
+          {prefs.members.map((member) => <li key={member.id} className="flex items-center justify-between gap-3 py-3">
+            <span className="min-w-0"><b className="block truncate text-[11.5px] font-semibold">{member.name}</b><span className="block truncate text-[10.5px] text-[#6B6B72]">{member.email}</span></span>
+            <label className="flex shrink-0 items-center gap-2 text-[10.5px] font-medium text-[#52525B]">Incidents only<Switch on={member.incidentsOnly} label={`${member.name}: incidents only emails`} disabled={!prefs.canManage || prefBusy === member.id} onChange={() => void toggleIncidentsOnly(member.id, !member.incidentsOnly)} /></label>
+          </li>)}
+        </ul>
+      </div>}
+      {prefError && <p role="alert" className="border-t border-[#EFEFF1] px-5 py-3 text-[11px] text-[#B42318]">{prefError}</p>}
       {emailNote && <p role="status" className="border-t border-[#EFEFF1] px-5 py-3 text-[11px] text-[#16794A]">{emailNote}</p>}
       {emailError && <p role="alert" className="border-t border-[#EFEFF1] px-5 py-3 text-[11px] text-[#B42318]">{emailError}</p>}
     </section>

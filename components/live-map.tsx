@@ -65,7 +65,7 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
       // Every registered guard is placed: at their real last scan, or around their site until they scan.
       let at: [number, number] | null = null
       let approximate = false
-      if (hasGps && guard.lastCheckIn) {
+      if (hasGps) {
         at = [latitude, longitude]
       } else if (site) {
         const index = spread.get(site.id) ?? 0
@@ -77,7 +77,7 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
       }
       if (!at) continue
 
-      const fresh = guard.lastCheckIn ? new Date(guard.lastCheckIn).getTime() > cutoff : false
+      const fresh = guard.lastCheckIn ? new Date(guard.lastCheckIn).getTime() > cutoff : hasGps
       if (!approximate) points.push(at)
       s.positions.set(guard.id, at)
       const when = guard.lastCheckIn ? new Date(guard.lastCheckIn).toLocaleString('en-NG', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null
@@ -89,8 +89,8 @@ export function LiveMap({ sites, guards, selectedSiteId, selectedGuardId, height
       const icon = L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], html: `<div style="width:34px;height:34px;border-radius:50%;background:${background};color:#fff;border:${border};box-shadow:0 1px 4px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font:600 11px system-ui">${photo}</div>` })
       const statusLine = approximate
         ? `<span style="color:#71717A">No scan yet — shown at ${esc(site?.name ?? 'their site')}</span>`
-        : `<span style="color:#71717A">${fresh ? 'On the map as of their last scan' : 'Last scan older than 12 hours'}</span>`
-      const marker = L.marker(at, { icon, title: guard.name, opacity: guard.status === 'suspended' ? 0.55 : 1 }).bindPopup(`<b>${esc(guard.name)}</b><br>${esc(guard.site ?? 'Unassigned')}${guard.status === 'suspended' ? ' · suspended' : ''}<br>${when ? `Last checked in ${when}` : 'Registered, no check-in yet'}<br>${statusLine}`).addTo(s.layer)
+        : `<span style="color:#71717A">${guard.lastCheckIn ? (fresh ? 'On the map as of their last scan' : 'Last scan older than 12 hours') : 'Live location from the guard app'}</span>`
+      const marker = L.marker(at, { icon, title: guard.name, opacity: guard.status === 'suspended' ? 0.55 : 1 }).bindPopup(`<b>${esc(guard.name)}</b><br>${esc(guard.site ?? 'Unassigned')}${guard.status === 'suspended' ? ' · suspended' : ''}<br>${when ? `Last checked in ${when}` : hasGps ? 'Live device location received' : 'Registered, no location yet'}<br>${statusLine}`).addTo(s.layer)
       if (chosen && !s.opened.has(guard.id)) { s.opened.add(guard.id); marker.openPopup() }
     }
 

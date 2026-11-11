@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Download, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/workspace-shell'
 import { Avatar, Badge, Empty, ErrorBanner, Spinner, btn, smallBtn } from '@/components/ui-bits'
@@ -53,11 +54,12 @@ function overall(status: string) {
 }
 
 export function PatrolsPage() {
-  const [date, setDate] = useState(''); const [data, setData] = useState<Data | null>(null); const [error, setError] = useState(''); const [loading, setLoading] = useState(true)
-  const load = useCallback(async () => {
-    try { const patrolData = await api<Data>(`/api/patrols${date ? `?date=${date}` : ''}`); setData(patrolData); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load patrols.') } finally { setLoading(false) }
-  }, [date])
-  useEffect(() => { setLoading(true); void load(); const timer = window.setInterval(() => { if (!document.hidden) void load() }, 60000); return () => window.clearInterval(timer) }, [load])
+  const [date, setDate] = useState('')
+  const patrolsQuery = useQuery({ queryKey: ['patrols', date], queryFn: () => api<Data>(`/api/patrols${date ? `?date=${date}` : ''}`), refetchInterval: 60_000 })
+  const data = patrolsQuery.data ?? null
+  const error = patrolsQuery.error instanceof Error ? patrolsQuery.error.message : ''
+  const loading = patrolsQuery.isLoading || patrolsQuery.isFetching
+  const load = async () => { await patrolsQuery.refetch() }
   function shiftDate(days: number) {
     const base = new Date(`${date || data?.today || new Date().toISOString().slice(0, 10)}T00:00:00Z`)
     base.setUTCDate(base.getUTCDate() + days)
@@ -75,7 +77,7 @@ export function PatrolsPage() {
           <input type="date" aria-label="Patrol date" value={shownDate} max={data?.today} onChange={(e) => setDate(e.target.value)} className="h-8 w-[128px] border-0 bg-transparent px-1 text-xs text-[#3F3F46] outline-none" />
           <button type="button" aria-label="Next day" className={smallBtn} onClick={() => shiftDate(1)} disabled={shownDate >= (data?.today ?? '')}><ChevronRight className="size-4" /></button>
         </div>
-        <button className={`${btn} flex-1 justify-center sm:flex-none`} onClick={() => { clearClientCache(); setLoading(true); void load() }}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
+        <button className={`${btn} flex-1 justify-center sm:flex-none`} onClick={() => { clearClientCache(); void load() }}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
         <a href="/api/export?section=patrols" className={`${btn} flex-1 justify-center sm:flex-none`}><Download className="size-3.5" />Export CSV</a>
       </div>}
     />

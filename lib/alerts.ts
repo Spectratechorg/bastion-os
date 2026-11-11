@@ -14,7 +14,7 @@ export async function raiseAlert(a: { userId: string; organizationId: string; ty
   // Operational alerts are also emailed to the people who can act on them; low-priority chatter stays in-app.
   if (a.notify === false || a.severity === 'low') return inserted.id
   try {
-    await notifyOrganization(a.organizationId, (email) => alertEmail({ to: email, severity: a.severity, title: a.title, body: a.body }))
+    await notifyOrganization(a.organizationId, a.type === 'attendance' ? 'attendance' : 'alert', (email) => alertEmail({ to: email, severity: a.severity, title: a.title, body: a.body }))
   } catch (error) {
     console.warn('[Alerts] Could not deliver alert email:', error)
   }

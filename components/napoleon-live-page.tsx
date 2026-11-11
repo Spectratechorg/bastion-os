@@ -95,13 +95,8 @@ export function NapoleonLivePage() {
 
   return (
     <>
-      <PageHeader title="Napoleon AI" subtitle="Operational intelligence from the configured Napoleon service." action={<span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusTone}`}>{statusLabel}</span>} />
-      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <section className="flex min-h-[610px] flex-col rounded-[12px] border border-[#E4E4E7] bg-white">
-          <header className="flex items-center gap-2 border-b border-[#EBEFE7] px-4 py-3">
-            <Logo size={32} />
-            <span className="flex-1"><b className="block text-xs">Napoleon</b><small className="text-[10px] text-[#6B6B72]">Deterministic operational analysis</small></span>
-          </header>
+      <PageHeader title="Napoleon AI" action={<span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusTone}`}>{statusLabel}</span>} />
+      <section className="flex min-h-[610px] flex-col rounded-[12px] border border-[#E4E4E7] bg-white">
           <div className="flex flex-1 flex-col items-center justify-center px-5 py-8 text-center">
             <Logo size={56} />
             <h2 className="mt-4 text-[22px] font-normal">How can I help your operation?</h2>
@@ -127,14 +122,7 @@ export function NapoleonLivePage() {
             <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask Napoleon anything about your operation…" className="min-w-0 flex-1 px-2 text-xs outline-none" />
             <button disabled={loading || !input.trim()} aria-label="Send message" className="flex size-10 items-center justify-center rounded-lg bg-[#2A2B2E] text-white disabled:opacity-50"><Send className="size-4" /></button>
           </form>
-          <p className="pb-3 text-center text-[9px] text-[#9A9AA1]">Napoleon's output is deterministic operational analysis. Review findings before acting.</p>
-        </section>
-        <aside className="rounded-[12px] border border-[#E4E4E7] bg-white p-4">
-          <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#18181B]">Before you ask</h2>
-          <p className="mt-2 text-xs leading-5 text-[#52525B]">Napoleon analyzes live telemetry and operational records directly from Lakebase / Supabase database context.</p>
-          <p className="mt-3 text-xs leading-5 text-[#52525B]">The service API key stays securely on the server and is never sent to the browser.</p>
-        </aside>
-      </div>
+      </section>
     </>
   )
 }
