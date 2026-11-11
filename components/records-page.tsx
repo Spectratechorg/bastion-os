@@ -92,6 +92,15 @@ function SiteCard({ row, c }: { row: Row; c: Ctx }) {
   </article>
 }
 
+function CheckInTiming({ at }: { at?: string | null }) {
+  if (!at) return <span className="text-[#9A9AA1]">—</span>
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', hourCycle: 'h23' }).format(new Date(at)))
+  const late = hour >= 8
+  return <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[10.5px] font-semibold ${late ? 'text-[#B42318]' : 'text-[#16794A]'}`} title={late ? 'Checked in after the 08:00 deadline' : 'Checked in before the 08:00 deadline'}>
+    <span className={`size-2 rounded-full ${late ? 'bg-[#D14343]' : 'bg-[#16794A]'}`} />{late ? 'Late' : 'Early'}
+  </span>
+}
+
 function SignInLight({ at, late }: { at?: string | null; late?: boolean | null }) {
   if (!at) return <span className="inline-flex items-center gap-1.5 text-[10.5px] text-[#8A938B]" title="Not signed in today"><span className="size-2 rounded-full bg-[#D4D4D8]" />Not signed</span>
   return <span className={`inline-flex items-center gap-1.5 text-[10.5px] font-medium ${late ? 'text-[#B42318]' : 'text-[#16794A]'}`} title={`Signed ${late ? 'after' : 'before'} 08:00`}>
@@ -135,6 +144,7 @@ const meta: Record<Section, { title: string; subtitle: string; search: string; c
       { head: 'Guard', cell: (r, c) => <b className="font-semibold">{guardName(c, r.guardId)}</b> },
       { head: 'Site', cell: (r, c) => siteName(c, r.siteId) },
       { head: 'Check-in', cell: (r) => when(r.checkedInAt) },
+      { head: '08:00 check-in', cell: (r) => <CheckInTiming at={r.checkedInAt} /> },
       { head: 'Geofence status', cell: (r) => <Badge value={r.withinGeofence ? 'Inside geofence' : 'Outside geofence'} /> },
     ],
   },
