@@ -2,10 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react'
 import {
-  Activity, Bell, BriefcaseBusiness, Clock3, Download, FileText, MapPin, Plus, Route, ShieldAlert, Users, Wallet,
+  Activity, Bell, BriefcaseBusiness, Clock3, Download, FileText, Mail, MapPin, Plus, Route, ShieldAlert, Users, Wallet,
 } from 'lucide-react'
 import { PageHeader } from '@/components/workspace-shell'
-import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
+import { Avatar, Badge, Empty, ErrorBanner, Field, Sheet, Skeleton, Spinner, btn, btnPrimary, inputClass, smallBtn } from '@/components/ui-bits'
 import { ASSIGNABLE_ROLES, EDITABLE_ROLES, PERMISSIONS, ROLE_LABELS } from '@/lib/permissions'
 import { api, when } from '@/lib/client'
 import { GuardAppSettings } from '@/components/guard-app-settings'
@@ -82,14 +82,14 @@ function VolumeChart({ summary }: { summary: Summary | null }) {
   </section>
 }
 
-function Breakdown({ section, title, total, leftLabel, left, rightLabel, right, rightTone = 'bg-[#B42318]', note }: {
-  section: string; title: string; total: number; leftLabel: string; left: number; rightLabel: string; right: number; rightTone?: string; note?: string
+function Breakdown({ section, title, total, leftLabel, left, rightLabel, right, rightTone = 'bg-[#B42318]', note, loading }: {
+  section: string; title: string; total: number; leftLabel: string; left: number; rightLabel: string; right: number; rightTone?: string; note?: string; loading?: boolean
 }) {
   const leftPct = total ? Math.round((left / total) * 100) : 0
   return <section className="ws-card p-4">
-    <div className="flex items-start justify-between gap-3"><ReportGlyph section={section} /><span className="text-[18px] font-semibold tabular-nums text-[#18181B]">{total}</span></div>
+    <div className="flex items-start justify-between gap-3"><ReportGlyph section={section} />{loading ? <Skeleton className="h-5 w-8" /> : <span className="text-[18px] font-semibold tabular-nums text-[#18181B]">{total}</span>}</div>
     <h2 className="mt-3 text-[12.5px] font-semibold text-[#18181B]">{title}</h2>
-    <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-[#F0F0F0]"><div className="bg-[#16794A]" style={{ width: `${leftPct}%` }} /><div className={`flex-1 ${rightTone}`} /></div>
+    <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-[#F0F0F0]">{loading ? <div className="h-full w-full animate-pulse bg-[#E4E4E7]" /> : <><div className="bg-[#16794A]" style={{ width: `${leftPct}%` }} /><div className={`flex-1 ${rightTone}`} /></>}</div>
     <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#6B6B72]">
       <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-[#16794A]" />{leftLabel} <b className="font-semibold tabular-nums text-[#3F3F46]">{left}</b></span>
       <span className="flex items-center gap-1.5"><span className={`size-1.5 rounded-full ${rightTone}`} />{rightLabel} <b className="font-semibold tabular-nums text-[#3F3F46]">{right}</b></span>
@@ -148,10 +148,10 @@ export function ReportsPage() {
 
     <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
       <div className="col-span-2 xl:col-span-4"><VolumeChart summary={sum} /></div>
-      <Breakdown section="attendance" title="Attendance" total={sum?.attendance.total ?? 0} leftLabel="Inside geofence" left={sum ? sum.attendance.total - sum.attendance.outside : 0} rightLabel="Outside" right={sum?.attendance.outside ?? 0} />
-      <Breakdown section="patrols" title="Patrol completion" total={sum?.patrols.total ?? 0} leftLabel="Completed" left={sum?.patrols.completed ?? 0} rightLabel="Not completed" right={sum ? sum.patrols.total - sum.patrols.completed : 0} rightTone="bg-[#B7791F]" />
-      <Breakdown section="incidents" title="Incidents" total={sum?.incidents.total ?? 0} leftLabel="Resolved" left={sum?.incidents.resolved ?? 0} rightLabel="Open" right={sum ? sum.incidents.total - sum.incidents.resolved : 0} rightTone="bg-[#B7791F]" note={sum ? `${sum.incidents.serious} high or critical` : undefined} />
-      <Breakdown section="alerts" title="Alerts" total={sum?.alerts.total ?? 0} leftLabel="Acknowledged" left={sum?.alerts.acknowledged ?? 0} rightLabel="Open" right={sum ? sum.alerts.total - sum.alerts.acknowledged : 0} />
+      <Breakdown loading={!sum} section="attendance" title="Attendance" total={sum?.attendance.total ?? 0} leftLabel="Inside geofence" left={sum ? sum.attendance.total - sum.attendance.outside : 0} rightLabel="Outside" right={sum?.attendance.outside ?? 0} />
+      <Breakdown loading={!sum} section="patrols" title="Patrol completion" total={sum?.patrols.total ?? 0} leftLabel="Completed" left={sum?.patrols.completed ?? 0} rightLabel="Not completed" right={sum ? sum.patrols.total - sum.patrols.completed : 0} rightTone="bg-[#B7791F]" />
+      <Breakdown loading={!sum} section="incidents" title="Incidents" total={sum?.incidents.total ?? 0} leftLabel="Resolved" left={sum?.incidents.resolved ?? 0} rightLabel="Open" right={sum ? sum.incidents.total - sum.incidents.resolved : 0} rightTone="bg-[#B7791F]" note={sum ? `${sum.incidents.serious} high or critical` : undefined} />
+      <Breakdown loading={!sum} section="alerts" title="Alerts" total={sum?.alerts.total ?? 0} leftLabel="Acknowledged" left={sum?.alerts.acknowledged ?? 0} rightLabel="Open" right={sum ? sum.alerts.total - sum.alerts.acknowledged : 0} />
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{cards.map(([key, title, text, count]) => <section key={key} className="flex flex-col ws-card p-4">
@@ -218,8 +218,10 @@ function SettingRow({ label, hint, children }: { label: string; hint?: string; c
 function OrgSettings() {
   const [d, setD] = useState<{ name: string; settings: { phone: string; address: string; defaultGeofence: number; defaultSalary: number }; canEdit: boolean } | null>(null)
   const [v, setV] = useState({ name: '', phone: '', address: '', defaultGeofence: '100', defaultSalary: '150000' }); const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false)
+  const [testingEmail, setTestingEmail] = useState(false); const [emailNote, setEmailNote] = useState(''); const [emailError, setEmailError] = useState('')
   useEffect(() => { api<NonNullable<typeof d>>('/api/settings').then((r) => { setD(r); setV({ name: r.name, phone: r.settings.phone, address: r.settings.address, defaultGeofence: String(r.settings.defaultGeofence), defaultSalary: String(r.settings.defaultSalary) }) }).catch((e) => setErr(e instanceof Error ? e.message : 'Unable to load settings.')) }, [])
   async function save(e: FormEvent) { e.preventDefault(); setBusy(true); setErr(''); setMsg(''); try { await api('/api/settings', { method: 'PATCH', json: v }); setMsg('Saved. The company name updates in the sidebar the next time the page loads.') } catch (x) { setErr(x instanceof Error ? x.message : 'Unable to save.') } finally { setBusy(false) } }
+  async function testEmail() { setTestingEmail(true); setEmailNote(''); setEmailError(''); try { const result = await api<{ sent: boolean; transport: string; reason?: string }>('/api/settings/test-email', { method: 'POST' }); if (!result.sent) throw new Error(result.reason ?? 'Email was not delivered.'); setEmailNote(`Test email sent by ${result.transport}. Check the administrator inbox.`) } catch (issue) { setEmailError(issue instanceof Error ? issue.message : 'Could not send the test email.') } finally { setTestingEmail(false) } }
   if (!d && !err) return <section className="ws-card"><Spinner /></section>
   const off = !d?.canEdit
 
@@ -248,6 +250,16 @@ function OrgSettings() {
       {off && <span className="text-[11px] text-[#6B6B72]">Only the owner or an administrator can change these.</span>}
       {msg && <span role="status" className="text-xs text-[#16794A]">{msg}</span>}
     </div>
+
+    <section className="ws-card">
+      <header className="border-b border-[#E4E4E7] px-5 py-4"><h2 className="text-[14px] font-semibold tracking-[-0.01em]">Email notifications</h2><p className="mt-0.5 text-xs text-[#6B6B72]">Alerts, new incidents and attendance exceptions are emailed to owners, administrators and moderators.</p></header>
+      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+        <p className="max-w-[52ch] text-[11px] leading-5 text-[#6B6B72]">Delivery uses Resend when <span className="font-mono text-[10.5px]">RESEND_API_KEY</span> and <span className="font-mono text-[10.5px]">MAIL_FROM</span> are configured. Send a test to your own account to verify the setup.</p>
+        <button type="button" onClick={() => void testEmail()} disabled={testingEmail || off} className={btn}><Mail className="size-3.5" />{testingEmail ? 'Sending…' : 'Send test email'}</button>
+      </div>
+      {emailNote && <p role="status" className="border-t border-[#EFEFF1] px-5 py-3 text-[11px] text-[#16794A]">{emailNote}</p>}
+      {emailError && <p role="alert" className="border-t border-[#EFEFF1] px-5 py-3 text-[11px] text-[#B42318]">{emailError}</p>}
+    </section>
   </form>
 }
 

@@ -19,11 +19,13 @@ async function organizationFor(request: Request, body?: { code?: unknown }) {
 }
 
 async function scheduleFor(organizationId: string, guard: typeof guards.$inferSelect) {
-  const [assignedSite] = guard.site
-    ? await db.select({ id: sites.id, name: sites.name, latitude: sites.latitude, longitude: sites.longitude, geofenceRadius: sites.geofenceRadius })
-      .from(sites).where(and(eq(sites.organizationId, organizationId), eq(sites.name, guard.site), eq(sites.status, 'active'))).limit(1)
-    : []
-  const status = await todayStatus(organizationId, guard.id)
+  const [assignedSite, status] = await Promise.all([
+    guard.site
+      ? db.select({ id: sites.id, name: sites.name, latitude: sites.latitude, longitude: sites.longitude, geofenceRadius: sites.geofenceRadius })
+        .from(sites).where(and(eq(sites.organizationId, organizationId), eq(sites.name, guard.site), eq(sites.status, 'active'))).limit(1).then((rows) => rows[0] ?? null)
+      : Promise.resolve(null),
+    todayStatus(organizationId, guard.id),
+  ])
   if (status.morning?.missed) {
     await raiseAlert({
       userId: guard.userId,

@@ -14,7 +14,7 @@ import {
   Users,
 } from 'lucide-react'
 import { PageHeader } from '@/components/workspace-shell'
-import { Badge, ErrorBanner, btn, smallBtn } from '@/components/ui-bits'
+import { Badge, ErrorBanner, LoadingBlock, Skeleton, btn, smallBtn } from '@/components/ui-bits'
 import { WidgetBoundary } from '@/components/widget-boundary'
 import { api, clearClientCache, when } from '@/lib/client'
 
@@ -226,11 +226,11 @@ export function OverviewPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-[#6B6B72]">Active guards</p>
-              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{activeGuards.length}</p>
+              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{d ? activeGuards.length : <Skeleton className="h-7 w-12" />}</p>
             </div>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#F0F3EE] text-[#526552]"><Users className="size-4" strokeWidth={1.75} /></span>
           </div>
-          <p className="mt-1 text-[10.5px] text-[#8A938B]">{totalGuards} registered</p>
+          <p className="mt-1 text-[10.5px] text-[#8A938B]">{d ? `${totalGuards} registered` : <Skeleton className="h-3 w-20" />}</p>
           <div className="mt-3 flex items-center gap-2 text-[10.5px] text-[#6B6B72]"><span className={`size-1.5 rounded-full ${suspendedGuards > 0 ? 'bg-[#B7791F]' : 'bg-[#16794A]'}`} />{suspendedGuards > 0 ? `${suspendedGuards} suspended` : 'All active'}</div>
         </article>
 
@@ -238,11 +238,11 @@ export function OverviewPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-[#6B6B72]">Attendance today</p>
-              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{attendanceToday}</p>
+              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{d ? attendanceToday : <Skeleton className="h-7 w-10" />}</p>
             </div>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#F0F3EE] text-[#526552]"><Activity className="size-4" strokeWidth={1.75} /></span>
           </div>
-          <div className="mt-3 flex items-center justify-between text-[10.5px] text-[#6B6B72]"><span>{checkedToday.size}/{activeGuards.length || '—'} guards</span><span className="font-semibold text-[#52525B]">{rate}%</span></div>
+          <div className="mt-3 flex items-center justify-between text-[10.5px] text-[#6B6B72]"><span>{d ? `${checkedToday.size}/${activeGuards.length || '—'} guards` : <Skeleton className="h-3 w-20" />}</span><span className="font-semibold text-[#52525B]">{d ? `${rate}%` : ''}</span></div>
           <div className="mt-1.5 h-1.5 rounded-full bg-[#EFEFF1]"><div className="h-1.5 rounded-full bg-[#16794A] transition-[width] duration-500" style={{ width: `${Math.min(100, rate)}%` }} /></div>
         </article>
 
@@ -250,11 +250,11 @@ export function OverviewPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-[#6B6B72]">Patrol SLA</p>
-              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{admin ? `${admin.sla.patrolSlaPercent}%` : `${d?.patrols.summary.completedToday ?? 0}`}</p>
+              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{admin || d ? (admin ? `${admin.sla.patrolSlaPercent}%` : `${d?.patrols.summary.completedToday ?? 0}`) : <Skeleton className="h-7 w-16" />}</p>
             </div>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#F0F3EE] text-[#526552]"><Clock className="size-4" strokeWidth={1.75} /></span>
           </div>
-          <p className="mt-1 text-[10.5px] text-[#8A938B]">{admin ? `${admin.sla.completedPatrols}/${admin.sla.expectedPatrols} checkpoints signed today` : 'Completed today'}</p>
+          <p className="mt-1 text-[10.5px] text-[#8A938B]">{admin ? `${admin.sla.completedPatrols}/${admin.sla.expectedPatrols} checkpoints signed today` : d ? 'Completed today' : <Skeleton className="h-3 w-24" />}</p>
           <div className="mt-3 h-1.5 rounded-full bg-[#EFEFF1]"><div className="h-1.5 rounded-full bg-[#16794A] transition-[width] duration-500" style={{ width: `${Math.min(100, admin?.sla.patrolSlaPercent ?? 50)}%` }} /></div>
         </article>
 
@@ -262,11 +262,11 @@ export function OverviewPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-medium text-[#6B6B72]">Total sites</p>
-              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{totalSites}</p>
+              <p className="mt-1.5 text-[30px] font-semibold leading-none tracking-[-0.03em] tabular-nums text-[#18181B]">{d ? totalSites : <Skeleton className="h-7 w-10" />}</p>
             </div>
             <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#F0F3EE] text-[#526552]"><MapPin className="size-4" strokeWidth={1.75} /></span>
           </div>
-          <p className="mt-1 text-[10.5px] text-[#8A938B]">{activeSites} active</p>
+          <p className="mt-1 text-[10.5px] text-[#8A938B]">{d ? `${activeSites} active` : <Skeleton className="h-3 w-14" />}</p>
           <div className="mt-3 flex items-center gap-2 text-[10.5px] text-[#6B6B72]"><span className={`size-1.5 rounded-full ${totalSites === 0 ? 'bg-[#9A9AA1]' : 'bg-[#16794A]'}`} />{totalSites === 0 ? 'No sites registered' : `${totalSites} site${totalSites === 1 ? '' : 's'} registered`}</div>
         </article>
       </section>
@@ -315,12 +315,12 @@ export function OverviewPage() {
                 <LiveMap sites={d.sites as never} guards={d.guards as never} selectedSiteId={siteId || undefined} height="h-full" />
               </div>
             </WidgetBoundary>
-          ) : (
+          ) : d ? (
             <div className="flex h-[280px] flex-col items-center justify-center gap-3 border-t border-[#E4E4E7] text-xs text-[#6B6B72]">
               No sites registered yet.
               <Link href="/sites" className={smallBtn}>Add a site</Link>
             </div>
-          )}
+          ) : <div className="h-[280px] border-t border-[#E4E4E7]"><LoadingBlock label="Loading map…" /></div>}
         </section>
 
         <div className="order-1 min-w-0 space-y-4 xl:order-2">
@@ -361,7 +361,7 @@ export function OverviewPage() {
               ] as const).map(([sev, label, tone]) => {
                 const n = openIncidents.filter((i) => i.severity === sev).length
                 return <div key={sev} className={`rounded-[10px] px-1.5 py-2.5 ring-1 ${tone}`}>
-                  <dd className="text-[19px] font-semibold leading-none tabular-nums">{n}</dd>
+                  <dd className="text-[19px] font-semibold leading-none tabular-nums">{d ? n : <Skeleton className="h-5 w-6" />}</dd>
                   <dt className="mt-1 text-[9px] font-semibold uppercase tracking-[0.07em] opacity-80">{label}</dt>
                 </div>
               })}

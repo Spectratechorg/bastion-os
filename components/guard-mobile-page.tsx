@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   Circle,
+  Clock3,
   Compass,
   KeyRound,
   LogOut,
@@ -16,6 +17,7 @@ import {
   Navigation,
   Radio,
   RefreshCw,
+  Route,
   ShieldAlert,
   X,
 } from 'lucide-react'
@@ -61,6 +63,9 @@ type Schedule = Today & {
 type Identity = {
   id: string
   name: string
+  guardCode?: string | null
+  nin?: string
+  status?: string
   site: string | null
   photoUrl: string | null
 }
@@ -173,8 +178,6 @@ export function GuardMobilePage() {
   const [scheduleId, setScheduleId] = useState('')
   const [scheduleBusy, setScheduleBusy] = useState(false)
   const [scheduleError, setScheduleError] = useState('')
-  const [selectedSlot, setSelectedSlot] = useState('')
-  const [morningId, setMorningId] = useState('')
   const [receipt, setReceipt] = useState<{
     action: Action
     guardName: string
@@ -207,6 +210,9 @@ export function GuardMobilePage() {
           setSignedIn(true)
           const data = (await r.json()) as Me
           setMe(data)
+          if (data.linked && data.guard && data.slots) {
+            setSchedule({ ...(data as unknown as Schedule), guard: { ...data.guard, guardCode: data.guard.guardCode ?? null, nin: data.guard.nin ?? '', status: data.guard.status ?? 'active' } })
+          }
         })
         .catch(() => setSignedIn(false)),
     [],
@@ -221,19 +227,14 @@ export function GuardMobilePage() {
   }, [loadMe])
 
   useEffect(() => {
-    if (signedIn && me?.linked) void loadSchedule()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signedIn, me?.linked])
-
-  useEffect(() => {
     setNfc(Boolean(window.NDEFReader && window.isSecureContext))
     setCode(window.localStorage.getItem(CODE_KEY) ?? '')
     return () => controller.current?.abort()
   }, [])
 
   useEffect(() => {
-    if (error) alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [error])
+    if (error || message || stage) alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [error, message, stage])
 
   // Continuous geolocation watcher for phone coordinates
   useEffect(() => {
@@ -289,7 +290,7 @@ export function GuardMobilePage() {
   }, [me?.assignedSite, currentFix])
 
   const isGuard = me?.role === 'guard'
-  const identity: Identity | null = me?.guard ?? local?.who ?? (schedule ? { id: schedule.guard.id, name: schedule.guard.name, site: schedule.guard.site, photoUrl: schedule.guard.photoUrl } : null)
+  const identity: Identity | null = me?.guard ?? local?.who ?? (schedule ? { id: schedule.guard.id, name: schedule.guard.name, guardCode: schedule.guard.guardCode, status: schedule.guard.status, site: schedule.guard.site, photoUrl: schedule.guard.photoUrl } : null)
   const today: Today | null = schedule ?? (me?.slots ? (me as Today) : local?.today ?? null)
   const ready = signedIn === true || Boolean(code)
   const checkedIn = Boolean(today?.checkedInAt) && !today?.checkedOutAt
@@ -402,11 +403,6 @@ export function GuardMobilePage() {
       const body = await response.json()
       if (!response.ok || body.error) throw new Error(body.error ?? 'Unable to load the patrol schedule.')
       setSchedule(body as Schedule)
-      setMorningId((current) => current || body.guard?.id || '')
-      const currentSlot = body.slots?.find((slot: string) => Number(slot.slice(0, 2)) === body.hour)
-      const currentIndex = currentSlot ? body.slots.indexOf(currentSlot) : -1
-      const next = currentIndex >= 0 ? (body.slots as string[]).find((slot, index) => !body.signed?.[slot] && index <= currentIndex) : undefined
-      setSelectedSlot(next ?? '')
     } catch (cause) {
       setScheduleError(cause instanceof Error ? cause.message : 'Unable to load the patrol schedule.')
     } finally { setScheduleBusy(false) }
@@ -580,524 +576,178 @@ export function GuardMobilePage() {
     </li>
   )
 
-  return (
-    <main className="min-h-screen bg-[#F5F5F6] pb-12 text-[#18181B]">
-      {/* Sticky Top Header */}
-      <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-zinc-800 bg-[#1E1F22] px-4 text-white shadow-sm">
-        <div className="flex items-center gap-2.5">
-          {isGuard || (!signedIn && signedIn !== null) ? (
-            <span className="size-1" />
-          ) : (
-            <Link
-              href="/overview"
-              aria-label="Back to dashboard"
-              className="flex size-10 items-center justify-center rounded-lg hover:bg-white/10"
-            >
-              <ChevronLeft className="size-5" />
-            </Link>
-          )}
-          <Logo size={28} />
-          <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-tight">BastionOS</span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-[#9A9AA1]">Guard Mobile</span>
-          </div>
-        </div>
+  const scheduleCurrentSlot = schedule ? schedule.slots.find((slot) => Number(slot.slice(0, 2)) === schedule.hour) ?? null : null
+  const scheduleCurrentIndex = schedule && scheduleCurrentSlot ? schedule.slots.indexOf(scheduleCurrentSlot) : -1
+  const scheduleCanSign = Boolean(schedule && !schedule.closed && scheduleCurrentSlot && !schedule.signed[scheduleCurrentSlot])
+  const greeting = (today?.hour ?? 12) < 12 ? 'Good morning' : (today?.hour ?? 12) < 17 ? 'Good afternoon' : 'Good evening'
+  const shiftText = today?.shift ? `${hourLabel(today.shift.startHour)}–${hourLabel(today.shift.endHour)}` : null
+  const dayLabel = new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Africa/Lagos' })
+  const heroDay = new Date().toLocaleDateString('en-NG', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Africa/Lagos' })
+  const locationBlocked = isInsideSite === false
 
-        {isGuard && (
-          <button
-            onClick={() =>
-              void authClient.signOut().then(() => {
-                window.location.href = '/sign-in'
-              })
-            }
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 text-xs font-medium hover:bg-white/15"
-          >
-            <LogOut className="size-3.5" />
-            Sign out
-          </button>
-        )}
+  return (
+    <main className="min-h-screen bg-[#F5F5F6] pb-16 text-[#18181B]">
+      <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-zinc-800 bg-[#1E1F22] px-4 text-white shadow-sm">
+        <div className="flex items-center gap-2.5">
+          {isGuard || (!signedIn && signedIn !== null) ? <span className="size-1" /> : <Link href="/overview" aria-label="Back to dashboard" className="flex size-10 items-center justify-center rounded-lg hover:bg-white/10"><ChevronLeft className="size-5" /></Link>}
+          <Logo size={28} />
+          <div className="flex flex-col"><span className="text-sm font-bold tracking-tight">BastionOS</span><span className="text-[10px] font-medium uppercase tracking-wider text-[#9A9AA1]">Guard mobile</span></div>
+        </div>
+        {isGuard ? <button onClick={() => void authClient.signOut().then(() => { window.location.href = '/sign-in' })} className="flex h-9 items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 text-xs font-medium hover:bg-white/15"><LogOut className="size-3.5" />Sign out</button> : <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-medium text-[#D4D4D8]">Preview</span>}
       </header>
 
-      <div className="mx-auto max-w-[480px] px-4 pt-4">
+      <div ref={alertRef} className="mx-auto max-w-[460px] space-y-2 px-4 pt-4">
+        {scanning && <button onClick={stop} className={`${big} border border-zinc-300 bg-white`}><X className="size-4" />Cancel scan</button>}
+        {stage && <p role="status" className="flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-900"><RefreshCw className="size-4 animate-spin" />{stage}</p>}
+        {busy && !stage && <p className="text-center text-xs text-[#6B6B72]">Connecting to server…</p>}
+        {message && !busy && <div role="status" className="flex items-start gap-2.5 rounded-xl border border-[#16794A]/30 bg-[#E3F4EA] p-3.5 text-sm text-[#16794A]"><CheckCircle2 className="size-5 shrink-0" /><span>{message}</span></div>}
+        {error && <div role="alert" className="rounded-[12px] border border-red-200 bg-[#FDECEA] p-4 text-sm text-[#B42318] shadow-sm"><div className="flex items-start gap-2.5"><AlertCircle className="size-5 shrink-0" /><div><p className="font-semibold">Action rejected</p><p className="mt-0.5 text-xs leading-relaxed text-red-900">{error}</p>{lastCode && <p className="mt-2 border-t border-red-200 pt-2 font-mono text-[10px] text-red-800">Tag: {lastCode}</p>}</div></div></div>}
+      </div>
+
+      <div className="mx-auto max-w-[460px] px-4 pt-4">
         {signedIn === null ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center text-xs text-[#6B6B72]">
-            <RefreshCw className="mb-2 size-6 animate-spin text-[#16794A]" />
-            Loading guard profile…
-          </div>
+          <div className="flex flex-col items-center justify-center py-16 text-center text-xs text-[#6B6B72]"><RefreshCw className="mb-2 size-6 animate-spin text-[#16794A]" />Loading guard profile…</div>
         ) : !ready ? (
-          <form onSubmit={saveCode} className="grid gap-3 ws-card p-5 shadow-sm">
-            <h1 className="text-lg font-semibold">Set up this phone</h1>
-            <p className="text-xs leading-5 text-[#52525B]">
-              Enter the company guard app code your supervisor provided. You only do this once. Or{' '}
-              <Link href="/sign-in" className="font-semibold text-emerald-700 underline">
-                sign in
-              </Link>{' '}
-              with your guard login.
-            </p>
-            <input
-              required
-              value={codeDraft}
-              onChange={(e) => setCodeDraft(e.target.value.toUpperCase())}
-              placeholder="GRD-XXXX-XXXX"
-              autoCapitalize="characters"
-              className="h-12 rounded-xl border border-zinc-300 px-3 font-mono text-base tracking-wider"
-            />
-            {codeError && <p role="alert" className="text-xs font-medium text-[#B42318]">{codeError}</p>}
-            <button disabled={codeBusy} className={`${big} bg-[#1E1F22] text-white hover:bg-zinc-800`}>
-              {codeBusy ? 'Checking code…' : 'Use this code'}
-            </button>
-          </form>
+          <section className="ws-card overflow-hidden">
+            <div className="bg-[#1E1F22] px-5 py-6 text-white">
+              <span className="flex size-11 items-center justify-center rounded-[12px] bg-white/10"><KeyRound className="size-5" /></span>
+              <h1 className="mt-4 text-[24px] font-semibold leading-tight tracking-[-0.02em]">Start your shift</h1>
+              <p className="mt-1.5 text-xs leading-5 text-[#C4C7CC]">Enter the company code from your supervisor, or sign in with your guard account.</p>
+            </div>
+            <form onSubmit={saveCode} className="grid gap-4 p-5">
+              <label className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B6B72]">Company code
+                <input required value={codeDraft} onChange={(e) => setCodeDraft(e.target.value.toUpperCase())} placeholder="GRD-XXXX-XXXX" autoCapitalize="characters" className="mt-2 h-12 w-full rounded-[10px] border border-[#E4E4E7] px-3 font-mono text-base tracking-wider outline-none focus:border-[#2A2B2E] focus:ring-2 focus:ring-[#2A2B2E]/10" />
+              </label>
+              {codeError && <p role="alert" className="text-xs font-medium text-[#B42318]">{codeError}</p>}
+              <button disabled={codeBusy} className={`${big} bg-[#1E1F22] text-white hover:bg-zinc-800`}>{codeBusy ? 'Checking code…' : 'Use this code'}</button>
+              <Link href="/sign-in" className="text-center text-xs font-semibold text-[#16794A] underline underline-offset-4">Sign in with my guard account</Link>
+            </form>
+          </section>
         ) : (
-          <>
-            {/* Shared Guard App Code Banner */}
-            {!signedIn && code && (
-              <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[#E4E4E7] bg-white px-3 py-2 text-[11px] text-[#52525B]">
-                <span>
-                  Company code <b className="font-mono text-[#18181B]">{code}</b>
-                  {company ? ` · ${company}` : ''}
-                </span>
-                <button onClick={forgetCode} className="font-semibold text-emerald-700 underline">
-                  Change
-                </button>
-              </div>
-            )}
+          <div className="space-y-4">
+            {!signedIn && code && <div className="flex items-center justify-between gap-2 rounded-[10px] border border-[#E4E4E7] bg-white px-3 py-2 text-[11px] text-[#52525B]"><span>Company code <b className="font-mono text-[#18181B]">{code}</b>{company ? ` · ${company}` : ''}</span><button onClick={forgetCode} className="font-semibold text-[#16794A] underline">Change</button></div>}
 
-            {/* Guard Identity Profile Card */}
             {identity ? (
-              <section className="mb-4 flex items-center gap-3 ws-card p-3.5 shadow-sm">
-                <Avatar name={identity.name} src={identity.photoUrl} size={54} />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-medium text-[#6B6B72]">On Duty Guard</p>
-                  <p className="truncate text-lg font-semibold leading-tight text-[#18181B]">{identity.name}</p>
-                  <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-[#52525B]">
-                    <MapPin className="size-3.5 shrink-0 text-emerald-700" />
-                    <span className="truncate">{assignedSite ? assignedSite.name : identity.site ?? 'No site assigned yet'}</span>
-                  </p>
-                </div>
-              </section>
-            ) : signedIn && me ? (
-              <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                {isGuard
-                  ? 'Your login is not linked to a guard profile yet. Ask your supervisor to link it in BastionOS.'
-                  : 'You are previewing the guard app as administrative staff.'}
-              </p>
-            ) : (
-              <p className="mb-4 text-xs text-[#6B6B72]">
-                Your site and name will appear as soon as your account is identified.
-              </p>
-            )}
-
-            {/* LIVE GPS SITE PROXIMITY CARD */}
-            {assignedSite && (
-              <section className="mb-4 ws-card p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                      <Compass className="size-4" />
-                    </span>
-                    <div>
-                      <h2 className="text-xs font-semibold tracking-wide text-[#6B6B72] uppercase">Assigned Site</h2>
-                      <p className="text-sm font-bold text-[#18181B]">{assignedSite.name}</p>
+              <section className="ws-card overflow-hidden">
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
+                    <Avatar name={identity.name} src={identity.photoUrl} size={58} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#9A9AA1]">{greeting}</p>
+                      <h1 className="truncate text-[20px] font-semibold leading-tight tracking-[-0.02em]">{identity.name}</h1>
+                      <p className="mt-1 flex items-center gap-1.5 truncate text-xs text-[#52525B]"><MapPin className="size-3.5 shrink-0 text-[#16794A]" />{assignedSite?.name ?? identity.site ?? 'No site assigned'}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      {identity.guardCode && <span className="rounded-[6px] bg-[#F0F2EC] px-2 py-1 font-mono text-[11px] font-semibold text-[#3F3F46]">{identity.guardCode}</span>}
+                      {identity.status && <Badge value={identity.status} />}
                     </div>
                   </div>
-                  <button
-                    onClick={() => void refreshGps()}
-                    disabled={isLocatingNow}
-                    title="Refresh GPS"
-                    className="flex size-8 items-center justify-center rounded-lg border border-[#E4E4E7] text-zinc-600 hover:bg-[#F5F5F6]"
-                  >
-                    <RefreshCw className={`size-3.5 ${isLocatingNow ? 'animate-spin text-emerald-700' : ''}`} />
-                  </button>
-                </div>
-
-                <div className="mt-3 grid gap-2 rounded-xl border border-zinc-100 bg-[#F5F5F6]/70 p-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#6B6B72]">Geofence Radius:</span>
-                    <span className="font-medium text-zinc-800">{assignedSite.geofenceRadius} meters perimeter</span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#6B6B72]">Your Distance:</span>
-                    <span className="font-mono font-semibold">
-                      {distanceToSite !== null ? `${distanceToSite} m` : 'Calculating…'}
-                    </span>
-                  </div>
-
-                  {/* Proximity Status Pill */}
-                  <div className="mt-1 flex items-center justify-between border-t border-[#E4E4E7]/80 pt-2">
-                    <span className="text-[11px] font-medium text-[#6B6B72]">Site Location Check:</span>
-                    {isInsideSite === true ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800">
-                        <CheckCircle2 className="size-3.5" />
-                        Within Site Geofence
-                      </span>
-                    ) : isInsideSite === false ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-[11px] font-semibold text-red-800">
-                        <AlertTriangle className="size-3.5" />
-                        Off-Site ({distanceToSite !== null ? `${Math.max(0, distanceToSite - assignedSite.geofenceRadius)}m outside` : 'outside perimeter'})
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-[#6B6B72]">Acquiring GPS fix…</span>
-                    )}
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <div className="rounded-[10px] bg-[#F5F5F6] px-3 py-2.5"><p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#8A938B]">Today</p><p className="mt-1 text-[11.5px] font-medium">{heroDay}</p></div>
+                    <div className="rounded-[10px] bg-[#F5F5F6] px-3 py-2.5"><p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#8A938B]">Shift</p><p className="mt-1 font-mono text-[11.5px] font-medium">{shiftText ?? '—'}</p></div>
                   </div>
                 </div>
+              </section>
+            ) : (
+              <div className="space-y-3">
+                {signedIn && me && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">{isGuard ? 'Your login is not linked to a guard profile yet. Ask your supervisor to link it in BastionOS.' : 'You are previewing the guard app as administrative staff.'}</p>}
+                <section className="ws-card p-5">
+                  <h2 className="text-lg font-semibold tracking-[-0.01em]">Identify yourself</h2>
+                  <p className="mt-1 text-xs leading-5 text-[#52525B]">Enter your 3-digit guard ID to load your site, shift and patrol schedule.</p>
+                  <form onSubmit={(event) => { event.preventDefault(); void loadSchedule(scheduleId.trim()) }} className="mt-4 grid gap-2">
+                    <input value={scheduleId} onChange={(event) => setScheduleId(event.target.value)} placeholder="e.g. 001" inputMode="numeric" aria-label="Guard ID for patrol schedule" className="h-12 w-full rounded-[10px] border border-[#E4E4E7] px-3 font-mono text-base outline-none focus:border-[#2A2B2E] focus:ring-2 focus:ring-[#2A2B2E]/10" />
+                    <button disabled={scheduleBusy || !scheduleId.trim()} className={`${big} bg-[#1E1F22] text-white hover:bg-zinc-800`}>{scheduleBusy ? 'Looking up…' : 'Load my schedule'}</button>
+                  </form>
+                  {scheduleError && <p role="alert" className="mt-2 text-xs font-medium text-[#B42318]">{scheduleError}</p>}
+                </section>
+              </div>
+            )}
 
-                {!checkedIn && isInsideSite === false && (
-                  <p className="mt-2.5 rounded-lg bg-amber-50 p-2 text-center text-[11px] leading-relaxed font-medium text-amber-800">
-                    ⚠️ Strict Check-in: You must be inside the {assignedSite.geofenceRadius}m perimeter of {assignedSite.name} to check in.
-                  </p>
+            {assignedSite && (
+              <section className="ws-card p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5"><span className="flex size-8 items-center justify-center rounded-[9px] bg-emerald-50 text-[#16794A]"><Compass className="size-4" /></span><div><p className="text-[9px] font-semibold uppercase tracking-[0.09em] text-[#8A938B]">Assigned post</p><p className="text-sm font-semibold">{assignedSite.name}</p></div></div>
+                  <button onClick={() => void refreshGps()} disabled={isLocatingNow} title="Refresh GPS" className="flex size-9 items-center justify-center rounded-[8px] border border-[#E4E4E7] text-[#52525B] hover:bg-[#F5F5F6]"><RefreshCw className={`size-3.5 ${isLocatingNow ? 'animate-spin text-[#16794A]' : ''}`} /></button>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-[10px] bg-[#F5F5F6] px-3 py-2.5">
+                  <div><p className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#8A938B]">Geofence</p><p className="mt-0.5 font-mono text-[11.5px] text-[#52525B]">{assignedSite.geofenceRadius} m · {distanceToSite !== null ? `${distanceToSite} m away` : 'locating…'}</p></div>
+                  {isInsideSite === true ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-semibold text-emerald-800"><CheckCircle2 className="size-3" />Inside</span> : isInsideSite === false ? <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-[10px] font-semibold text-red-800"><AlertTriangle className="size-3" />Off-site</span> : <span className="text-[10px] text-[#8A938B]">Locating…</span>}
+                </div>
+                {!checkedIn && isInsideSite === false && <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-[10.5px] leading-4 font-medium text-amber-800">Move inside the {assignedSite.geofenceRadius}m perimeter before signing in.</p>}
+                {checkedIn && (
+                  <div className={`mt-2.5 flex items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-[10.5px] ${telemetryStatus?.withinBounds === false ? 'bg-red-50 text-red-900' : 'bg-emerald-50 text-emerald-900'}`}>
+                    <span className="flex items-center gap-1.5"><span className={`size-1.5 rounded-full ${telemetryStatus?.withinBounds === false ? 'bg-red-600' : 'bg-emerald-600'}`} />{telemetryStatus?.withinBounds === false ? `Outside perimeter by ${telemetryStatus.excessDistance ?? '—'} m` : 'GPS monitoring active'}</span>
+                    {telemetryStatus?.lastSyncedAt && <span className="text-[9px] opacity-70">Synced {telemetryStatus.lastSyncedAt}</span>}
+                  </div>
                 )}
               </section>
             )}
 
-            {/* LIVE SHIFT RADAR & TELEMETRY (WHEN CHECKED IN) */}
-            {checkedIn && (
-              <section
-                className={`mb-4 rounded-[12px] border p-4 shadow-sm transition-all ${
-                  telemetryStatus?.withinBounds === false
-                    ? 'border-red-300 bg-red-50 text-red-950'
-                    : 'border-emerald-200 bg-emerald-50/60 text-emerald-950'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex size-3">
-                      <span
-                        className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
-                          telemetryStatus?.withinBounds === false ? 'bg-red-500' : 'bg-emerald-500'
-                        }`}
-                      />
-                      <span
-                        className={`relative inline-flex size-3 rounded-full ${
-                          telemetryStatus?.withinBounds === false ? 'bg-red-600' : 'bg-emerald-600'
-                        }`}
-                      />
-                    </span>
-                    <span className="text-xs font-bold uppercase tracking-wider">
-                      {telemetryStatus?.withinBounds === false
-                        ? 'Perimeter Breach Detected'
-                        : 'Shift GPS Telemetry Active'}
-                    </span>
-                  </div>
-                  {telemetryStatus?.lastSyncedAt && (
-                    <span className="text-[10px] text-[#6B6B72]">Synced {telemetryStatus.lastSyncedAt}</span>
-                  )}
-                </div>
-
-                {telemetryStatus?.withinBounds === false ? (
-                  <div className="mt-2 text-xs leading-relaxed">
-                    <p className="font-semibold text-red-800">
-                      You are {telemetryStatus.excessDistance ?? '–'}m outside the site boundary.
-                    </p>
-                    <p className="mt-0.5 text-red-700">
-                      Elapsed departure: <b>{telemetryStatus.minutesAway ?? 1} minute(s)</b>. Your supervisor has been alerted with your live location. Please return to your post immediately.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="mt-2 text-xs text-emerald-800">
-                    Continuous monitoring active. You are verified on-post at {assignedSite?.name ?? 'your site'}.
-                  </p>
-                )}
-              </section>
-            )}
-
-            {/* MORNING SIGN-IN */}
-            <section className="ws-card p-4 shadow-sm">
+            <section className="ws-card p-4">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-xs font-semibold uppercase tracking-wide text-[#6B6B72]">Morning Sign-in</h2>
-                  <p className="mt-1 text-sm font-semibold text-[#18181B]">Attendance for today</p>
-                </div>
+                <div className="flex items-center gap-2.5"><span className="flex size-8 items-center justify-center rounded-[9px] bg-[#F0F2EC] text-[#3F3F46]"><Clock3 className="size-4" /></span><div><h2 className="text-[13px] font-semibold">Morning sign-in</h2><p className="mt-0.5 text-[10.5px] text-[#8A938B]">Attendance deadline 08:00</p></div></div>
                 <Badge value={morning?.signedAt ? (morning.late ? 'Late' : 'Signed') : morning?.missed ? 'Missed' : 'Pending'} />
               </div>
-              <p className="mt-2 text-xs leading-5 text-[#52525B]">
-                Sign in by <b>08:00</b> (Lagos time). If you have not signed in by then, supervisors get an alert.
+              <p className={`mt-3 rounded-[10px] p-3 text-[11px] leading-5 font-medium ${morning?.late ? 'bg-amber-50 text-amber-900' : morning?.missed ? 'bg-red-50 text-red-900' : 'bg-[#F5F5F6] text-[#52525B]'}`}>
+                {morning?.signedAt ? `Signed at ${clock(morning.signedAt)}${morning.late ? ' · after the 08:00 deadline' : ' · on time'}` : morning?.missed ? 'Not signed by 08:00. An alert has been raised — sign now.' : 'You are on time. Sign before 08:00.'}
               </p>
-              <p className={`mt-3 rounded-lg p-3 text-xs font-medium ${morning?.late ? 'bg-amber-50 text-amber-900' : morning?.missed ? 'bg-red-50 text-red-900' : 'bg-[#F5F5F6] text-[#52525B]'}`}>
-                {morning?.signedAt
-                  ? `Signed at ${clock(morning.signedAt)}${morning.late ? ' — after the 08:00 deadline (alert raised)' : ' — on time'}`
-                  : morning?.missed
-                    ? 'Not signed by 08:00 — an alert has been raised. Sign now.'
-                    : 'Not signed yet. You are on time before 08:00.'}
-              </p>
-
-              {!checkedIn && (
-                <div className="mt-3 grid gap-2">
-                  {!identity && (
-                    <label className="text-[11px] font-medium text-[#52525B]">
-                      Guard ID number
-                      <input value={morningId} onChange={(event) => setMorningId(event.target.value)} placeholder="e.g. 001" className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm" />
-                    </label>
-                  )}
-                  <button
-                    className={`${big} bg-[#16794A] text-white hover:bg-emerald-700`}
-                    disabled={busy || scanning !== null}
-                    onClick={() => {
-                      const id = identity?.id ?? morningId.trim()
-                      if (!id) return setError('Enter your guard ID number to sign in.')
-                      void submit('attendance', '', { guardId: id })
-                    }}
-                  >
-                    <Navigation className="size-5" />
-                    Sign morning attendance
-                  </button>
-                  <p className="text-center text-[11px] text-[#6B6B72]">GPS confirms you are inside your site geofence.</p>
-                </div>
-              )}
-
-              {checkedIn && (
-                <div className="mt-3 grid gap-2">
-                  <p className="rounded-lg bg-emerald-50 p-3 text-xs font-medium text-emerald-900">On duty since {clock(today?.checkedInAt)}.</p>
-                  <button
-                    className={`${big} border border-zinc-300 bg-white text-zinc-800 hover:bg-[#F5F5F6]`}
-                    disabled={busy || scanning !== null}
-                    onClick={() => void submit('attendance', '', { guardId: identity?.id ?? (morningId.trim() || undefined) })}
-                  >
-                    <LogOut className="size-5 text-[#6B6B72]" />
-                    Check out of shift
-                  </button>
-                </div>
-              )}
+              {!checkedIn ? <div className="mt-3 grid gap-2">
+                {identity ? <button className={`${big} bg-[#16794A] text-white hover:bg-emerald-700`} disabled={busy || scanning !== null || locationBlocked} onClick={() => void submit('attendance', '', { guardId: identity.id })}><Navigation className="size-5" />{locationBlocked ? 'Move on site to sign in' : checkedOut ? 'Check in again' : 'Sign morning attendance'}</button> : <p className="rounded-[10px] bg-[#F5F5F6] p-3 text-center text-[11px] text-[#52525B]">Identify yourself above to unlock morning sign-in.</p>}
+                <p className="text-center text-[10px] text-[#8A938B]">GPS confirms you are inside your site geofence.</p>
+              </div> : <div className="mt-3 grid gap-2">
+                <p className="rounded-[10px] bg-emerald-50 px-3 py-2.5 text-[11px] font-medium text-emerald-900">On duty since {clock(today?.checkedInAt)}.</p>
+                <button className={`${big} border border-[#E4E4E7] bg-white text-[#3F3F46] hover:bg-[#F5F5F6]`} disabled={busy || scanning !== null} onClick={() => void submit('attendance', '', { guardId: identity?.id })}><LogOut className="size-4 text-[#6B6B72]" />Check out of shift</button>
+              </div>}
             </section>
 
-            {/* DAILY PATROL SIGN-IN */}
-            <section className="mt-4 ws-card p-4 shadow-sm">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-[#6B6B72]">Daily Patrol Sign-in</h2>
-              <p className="mt-1 text-sm font-semibold text-[#18181B]">Hourly checkpoints from your shift</p>
-              <p className="mt-2 text-xs leading-5 text-[#52525B]">Enter your guard ID number to load your assigned shift and scheduled patrol check-in times.</p>
+            <section className="ws-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5"><span className="flex size-8 items-center justify-center rounded-[9px] bg-[#F0F2EC] text-[#3F3F46]"><Route className="size-4" /></span><div><h2 className="text-[13px] font-semibold">Daily patrol</h2><p className="mt-0.5 text-[10.5px] text-[#8A938B]">Hourly checkpoints from your shift</p></div></div>
+                {schedule && <span className="font-mono text-[10.5px] tabular-nums text-[#52525B]">{Object.keys(schedule.signed).length}/{schedule.slots.length}</span>}
+              </div>
 
-              <form onSubmit={(event) => { event.preventDefault(); void loadSchedule(scheduleId.trim() || identity?.id || '') }} className="mt-3 flex flex-wrap gap-2">
-                <input value={scheduleId} onChange={(event) => setScheduleId(event.target.value)} placeholder={schedule?.guard.guardCode ? `Guard ID ${schedule.guard.guardCode}` : 'Guard ID e.g. 001'} aria-label="Guard ID for patrol schedule" className="h-11 min-w-0 flex-1 rounded-lg border border-zinc-300 px-3 text-sm" />
-                <button disabled={scheduleBusy} className={`${big} min-h-[44px] w-auto px-4 bg-[#1E1F22] text-white hover:bg-zinc-800`}>{scheduleBusy ? 'Loading…' : 'Load schedule'}</button>
-              </form>
-              {scheduleError && <p role="alert" className="mt-2 text-xs font-medium text-[#B42318]">{scheduleError}</p>}
-
-              {schedule && (() => {
-                const currentSlot = schedule.slots.find((slot) => Number(slot.slice(0, 2)) === schedule.hour)
-                const currentIndex = currentSlot ? schedule.slots.indexOf(currentSlot) : -1
-                const missed = schedule.missedSlots ?? schedule.slots.filter((slot, index) => !schedule.signed[slot] && currentIndex >= 0 && index < currentIndex)
-                const selectable = (slot: string, index: number) => !schedule.closed && !schedule.signed[slot] && currentIndex >= 0 && index <= currentIndex
-                return <div className="mt-4">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
-                    <p><b className="text-sm font-semibold">{schedule.guard.name}</b><span className="ml-2 font-mono text-[#6B6B72]">{schedule.guard.guardCode ?? ''}</span><span className="ml-2 text-[#6B6B72]">{schedule.guard.site ?? 'No site'}</span></p>
-                    <p className="font-mono text-[#52525B]">Shift {hourLabel(schedule.shift.startHour)}–{hourLabel(schedule.shift.endHour)}</p>
-                  </div>
-                  <p className="mt-1 text-[11px] text-[#6B6B72]">{schedule.slots.length} scheduled checkpoint{schedule.slots.length === 1 ? '' : 's'}. {Object.keys(schedule.signed).length} signed.</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                    {schedule.slots.map((slot, index) => {
+              {!schedule ? (
+                <div className="mt-3 rounded-[10px] bg-[#F5F5F6] p-3 text-[11px] leading-5 text-[#52525B]">
+                  {scheduleBusy ? 'Loading your patrol schedule…' : identity ? <button type="button" className="font-semibold text-[#16794A] underline" onClick={() => void loadSchedule(identity.id)}>Load my patrol schedule</button> : 'Load your guard schedule above to see today’s checkpoints.'}
+                  {scheduleError && <p role="alert" className="mt-1 text-[#B42318]">{scheduleError}</p>}
+                </div>
+              ) : (
+                <div className="mt-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[10.5px] text-[#6B6B72]"><span>{schedule.guard.name} · {schedule.guard.site ?? 'No site'}</span><span className="font-mono">Shift {hourLabel(schedule.shift.startHour)}–{hourLabel(schedule.shift.endHour)}</span></div>
+                  <div className="mt-3 grid grid-cols-5 gap-1.5">
+                    {schedule.slots.map((slot) => {
                       const signed = schedule.signed[slot]
-                      const canSelect = selectable(slot, index)
-                      const isMissed = missed.includes(slot)
-                      return <button
-                        type="button"
-                        key={slot}
-                        disabled={!canSelect || busy}
-                        onClick={() => setSelectedSlot(slot)}
-                        className={`flex min-h-[50px] flex-col items-center justify-center rounded-xl border text-xs disabled:cursor-not-allowed ${
-                          signed ? 'border-emerald-600 bg-emerald-600 font-semibold text-white'
-                            : selectedSlot === slot ? 'border-amber-500 bg-amber-50 font-bold text-amber-950 ring-2 ring-amber-400/60'
-                              : isMissed ? 'border-[#F0C7C1] bg-[#FDECEA] text-[#B42318]'
-                                : canSelect ? 'border-amber-400 bg-amber-50 text-amber-950'
-                                  : 'border-[#E4E4E7] bg-[#F5F5F6] text-[#9A9AA1]'
-                        }`}
-                      >
-                        <b className="font-mono text-[11px]">{slot}</b>
-                        <span className="text-[10px]">{signed ? clock(signed) : isMissed ? 'Missed' : index === currentIndex ? 'Due now' : canSelect ? 'Select' : 'Upcoming'}</span>
-                      </button>
+                      const missed = !signed && (schedule.missedSlots ?? []).includes(slot)
+                      const current = slot === scheduleCurrentSlot
+                      return <div key={slot} className={`flex min-h-[46px] flex-col items-center justify-center rounded-[8px] border px-1 text-[9.5px] ${signed ? 'border-[#16794A] bg-[#16794A] font-semibold text-white' : current && !schedule.closed ? 'border-amber-500 bg-amber-50 font-bold text-amber-950 ring-2 ring-amber-400/50' : missed ? 'border-[#F0C7C1] bg-[#FDECEA] text-[#B42318]' : 'border-[#E4E4E7] bg-[#FAFAFA] text-[#8A938B]'}`}><b className="font-mono text-[10px]">{slot}</b><span>{signed ? clock(signed) : missed ? 'Missed' : current && !schedule.closed ? 'Due now' : '—'}</span></div>
                     })}
                   </div>
-                  {missed.length > 0 && <p className="mt-2 text-[11px] font-medium text-[#B42318]">Missed check-in{missed.length === 1 ? '' : 's'}: {missed.join(', ')}</p>}
-                  {schedule.closed
-                    ? <p className="mt-2 rounded-lg bg-[#F5F5F6] p-2.5 text-[11px] text-[#52525B]">This shift has ended. Missed checkpoints stay on record and supervisors have been alerted.</p>
-                    : currentIndex < 0 && <p className="mt-2 rounded-lg bg-[#F5F5F6] p-2.5 text-[11px] text-[#52525B]">Patrol check-ins open during the shift ({hourLabel(schedule.shift.startHour)}–{hourLabel(schedule.shift.endHour)}).</p>}
-                  <button
-                    className={`${big} mt-3 bg-[#16794A] text-white hover:bg-emerald-700`}
-                    disabled={busy || schedule.closed || !selectedSlot || Boolean(schedule.signed[selectedSlot])}
-                    onClick={() => schedule && selectedSlot ? void submit('patrol', '', { guardId: schedule.guard.id, slot: selectedSlot }) : undefined}
-                  >
-                    <CheckCircle2 className="size-5" />
-                    {selectedSlot ? `Sign ${selectedSlot} patrol check-in` : 'Select a scheduled checkpoint'}
-                  </button>
-                  <p className="mt-1.5 text-center text-[11px] text-[#6B6B72]">Only your configured checkpoint times can be signed.</p>
-                  <div className="mt-3 rounded-lg border border-[#E4E4E7] bg-[#FAFAFB] p-3">
-                    <p className="text-[11px] font-semibold text-[#52525B]">Link your guard ID to an NFC tag</p>
-                    <p className="mt-0.5 text-[10.5px] leading-4 text-[#6B6B72]">Write this guard’s ID number onto their tag. From then on, tapping the tag identifies them without typing the ID.</p>
+                  {schedule.closed ? <p className="mt-2 rounded-lg bg-[#F5F5F6] p-2.5 text-[10.5px] text-[#52525B]">This shift has ended. Missed checkpoints remain on record.</p> : scheduleCanSign ? <button className={`${big} mt-3 bg-[#16794A] text-white hover:bg-emerald-700`} disabled={busy || scanning !== null || locationBlocked} onClick={() => void submit('patrol', '', { guardId: schedule.guard.id, slot: scheduleCurrentSlot! })}><CheckCircle2 className="size-5" />{locationBlocked ? 'Move on site to sign patrol' : `Sign ${scheduleCurrentSlot} patrol check-in`}</button> : scheduleCurrentSlot && schedule.signed[scheduleCurrentSlot] ? <p className="mt-2 flex items-center justify-center gap-1.5 rounded-[10px] border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[11px] font-medium text-emerald-900"><CheckCircle2 className="size-4" />{scheduleCurrentSlot} checkpoint signed. Next hour opens at {hourLabel((Number(scheduleCurrentSlot.slice(0, 2)) + 1) % 24)}.</p> : <p className="mt-2 rounded-lg bg-[#F5F5F6] p-2.5 text-[10.5px] text-[#52525B]">Patrol check-ins open during the shift.</p>}
+
+                  <details className="mt-3 rounded-[10px] border border-[#E4E4E7] bg-[#FAFAFB] px-3 py-2.5">
+                    <summary className="cursor-pointer list-none text-[10.5px] font-semibold text-[#52525B]">Link your guard ID to an NFC tag</summary>
+                    <p className="mt-1 text-[10px] leading-4 text-[#6B6B72]">Write this guard’s ID onto their tag so a tap identifies them.</p>
                     <WriteTagButton token={schedule.guard.guardCode || schedule.guard.nin} owner={schedule.guard.name} writeLabel="Write ID to NFC tag" />
-                  </div>
+                  </details>
                 </div>
-              })()}
+              )}
             </section>
 
-            {/* STATUS / STAGE / RECEIPT / ERROR FEEDBACK */}
-            {scanning && (
-              <button onClick={stop} className={`${big} mt-3 border border-zinc-300 bg-white`}>
-                <X className="size-4" /> Cancel Scan
-              </button>
-            )}
+            {receipt && !busy && <div role="status" className="rounded-xl border border-[#E4E4E7] bg-white p-3.5 text-xs shadow-sm"><p className="text-[9.5px] font-semibold uppercase tracking-[0.1em] text-[#6B6B72]">{receipt.action === 'attendance' ? 'Attendance confirmed' : receipt.action === 'patrol' ? 'Patrol checkpoint recorded' : 'SOS transmitted'}</p><dl className="mt-2 grid grid-cols-[70px_1fr] gap-x-3 gap-y-1.5"><dt className="text-[#6B6B72]">Guard</dt><dd className="font-semibold">{receipt.guardName}</dd><dt className="text-[#6B6B72]">Site</dt><dd>{receipt.siteName ?? 'No site assigned'}</dd><dt className="text-[#6B6B72]">Time</dt><dd className="font-mono">{receipt.at}</dd>{receipt.checkpoint && <><dt className="text-[#6B6B72]">Checkpoint</dt><dd className="font-mono font-semibold">{receipt.checkpoint}</dd></>}<dt className="text-[#6B6B72]">Location</dt><dd className={receipt.withinBounds === false ? 'font-semibold text-[#B42318]' : 'font-medium text-[#16794A]'}>{receipt.withinBounds === false ? 'Outside geofence' : 'Verified on site'}</dd></dl></div>}
 
-            {stage && (
-              <p
-                role="status"
-                className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-900"
-              >
-                <RefreshCw className="size-4 animate-spin" />
-                {stage}
-              </p>
-            )}
+            <details className="ws-card px-4 py-3">
+              <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#52525B]">NFC &amp; manual fallback</summary>
+              <div className="mt-3 flex items-center justify-between gap-2 text-[11px] text-[#52525B]"><button type="button" onClick={() => void scan('attendance')} className="flex items-center gap-1.5 font-semibold hover:underline"><Radio className="size-3.5" />{nfc ? 'Scan NFC tag' : 'NFC tag'}</button><button type="button" onClick={() => setManual((m) => !m)} className="flex items-center gap-1.5 font-semibold hover:underline"><KeyRound className="size-3.5" />Type tag code</button></div>
+              {manual && <form onSubmit={(e) => { e.preventDefault(); if (token.trim()) void submit(manualAction, token.trim()) }} className="mt-3 grid gap-2.5 rounded-[10px] border border-[#E4E4E7] bg-[#FAFAFB] p-3"><label className="text-[10px] font-semibold text-[#52525B]">Action<select value={manualAction} onChange={(e) => setManualAction(e.target.value as Action)} className="mt-1 h-10 w-full rounded-lg border border-[#E4E4E7] bg-white px-2 text-sm"><option value="attendance">Check in or out</option><option value="patrol">Patrol checkpoint</option><option value="sos">Emergency SOS</option></select></label><label className="text-[10px] font-semibold text-[#52525B]">Tag code<input value={token} onChange={(e) => setToken(e.target.value)} placeholder="e.g. 9f2b7c41-…" className="mt-1 h-10 w-full rounded-lg border border-[#E4E4E7] bg-white px-3 font-mono text-sm" /></label><button disabled={busy || !token.trim()} className={`${big} min-h-[44px] bg-[#1E1F22] text-white hover:bg-zinc-800`}>Submit code</button></form>}
+              <div className="mt-3"><NfcDiagnostics /></div>
+            </details>
 
-            {busy && !stage && <p className="mt-3 text-center text-xs text-[#6B6B72]">Connecting to server…</p>}
-
-            {message && !busy && (
-              <div
-                role="status"
-                className="mt-3 flex items-start gap-2.5 rounded-xl border border-[#16794A]/30 bg-[#E3F4EA] p-3.5 text-sm text-[#16794A]"
-              >
-                <CheckCircle2 className="size-5 shrink-0" />
-                <span>{message}</span>
-              </div>
-            )}
-
-            {receipt && !busy && (
-              <div role="status" className="mt-2 rounded-xl border border-[#E4E4E7] bg-white p-3.5 text-xs shadow-sm">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6B6B72]">
-                  {receipt.action === 'attendance'
-                    ? 'Shift Attendance Verified'
-                    : receipt.action === 'patrol'
-                      ? 'Patrol Checkpoint Recorded'
-                      : 'Emergency SOS Transmitted'}
-                </p>
-                <dl className="mt-2 grid grid-cols-[80px_1fr] gap-x-3 gap-y-1.5">
-                  <dt className="text-[#6B6B72]">Guard</dt>
-                  <dd className="font-semibold">{receipt.guardName}</dd>
-                  <dt className="text-[#6B6B72]">Site</dt>
-                  <dd>{receipt.siteName ?? 'No site assigned'}</dd>
-                  <dt className="text-[#6B6B72]">Timestamp</dt>
-                  <dd className="font-mono">{receipt.at}</dd>
-                  {receipt.checkpoint && (
-                    <>
-                      <dt className="text-[#6B6B72]">Checkpoint</dt>
-                      <dd className="font-mono font-semibold">{receipt.checkpoint}</dd>
-                    </>
-                  )}
-                  <dt className="text-[#6B6B72]">Location</dt>
-                  <dd
-                    className={
-                      receipt.withinBounds === false ? 'font-semibold text-[#B42318]' : 'font-medium text-[#16794A]'
-                    }
-                  >
-                    {receipt.withinBounds === false
-                      ? 'Outside Geofence Perimeter (Supervisor Alerted)'
-                      : 'Verified Inside Site Geofence'}
-                  </dd>
-                </dl>
-              </div>
-            )}
-
-            {/* ERROR / REJECTION BANNER */}
-            {error && (
-              <div
-                ref={alertRef}
-                role="alert"
-                className="mt-3 rounded-[12px] border border-red-200 bg-[#FDECEA] p-4 text-sm text-[#B42318] shadow-sm"
-              >
-                <div className="flex items-start gap-2.5">
-                  <AlertCircle className="size-5 shrink-0 text-[#B42318]" />
-                  <div className="flex-1">
-                    <p className="font-semibold">Action Rejected</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-red-900">{error}</p>
-                  </div>
-                </div>
-                {lastCode && (
-                  <p className="mt-2 border-t border-red-200 pt-2 font-mono text-[10px] text-red-800">
-                    Tag: {lastCode}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* OPTIONAL NFC & MANUAL FALLBACK ACCORDION */}
-            <div className="mt-6 border-t border-[#E4E4E7] pt-4">
-              <div className="flex items-center justify-between text-xs text-[#52525B]">
-                <button
-                  type="button"
-                  onClick={() => void scan('attendance')}
-                  className="flex items-center gap-1.5 font-semibold hover:underline"
-                >
-                  <Radio className="size-3.5 text-zinc-600" />
-                  {nfc ? 'Scan NFC Tag' : 'NFC Tag'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManual((m) => !m)}
-                  className="flex items-center gap-1.5 font-semibold hover:underline"
-                >
-                  <KeyRound className="size-3.5 text-zinc-600" />
-                  Type Tag Code
-                </button>
-              </div>
-
-              {manual && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    if (token.trim()) void submit(manualAction, token.trim())
-                  }}
-                  className="mt-3 grid gap-2.5 ws-card p-4 shadow-sm"
-                >
-                  <label className="text-xs font-semibold">
-                    Action
-                    <select
-                      value={manualAction}
-                      onChange={(e) => setManualAction(e.target.value as Action)}
-                      className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-2 text-sm"
-                    >
-                      <option value="attendance">Check in or out</option>
-                      <option value="patrol">Patrol checkpoint</option>
-                      <option value="sos">Emergency SOS</option>
-                    </select>
-                  </label>
-                  <label className="text-xs font-semibold">
-                    Tag code
-                    <input
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                      placeholder="e.g. 9f2b7c41-3a5e-4d18-9c6b-2f7e8a1d4b90"
-                      className="mt-1 h-11 w-full rounded-lg border border-zinc-300 px-3 font-mono text-sm"
-                    />
-                  </label>
-                  <button
-                    disabled={busy || !token.trim()}
-                    className={`${big} min-h-[46px] bg-[#1E1F22] text-white hover:bg-zinc-800`}
-                  >
-                    Submit Code
-                  </button>
-                </form>
-              )}
-
-              <div className="mt-3">
-                <NfcDiagnostics />
-              </div>
-            </div>
-
-            {/* EMERGENCY SOS BUTTON */}
-            <div className="mt-6 border-t border-[#E4E4E7] pt-4">
-              <button
-                onClick={() => {
-                  if (window.confirm('Send an emergency SOS alert with your live coordinates to supervisors now?')) {
-                    void submit('sos', '')
-                  }
-                }}
-                disabled={busy || scanning !== null}
-                className={`${big} bg-[#B42318] text-white hover:bg-red-700`}
-              >
-                <ShieldAlert className="size-5" />
-                Emergency SOS
-              </button>
-              <p className="mt-2 text-center text-[11px] leading-relaxed text-[#6B6B72]">
-                Press only in emergencies. Instantly alerts supervisors with your live GPS location.
-              </p>
-            </div>
-          </>
+            <section className="rounded-[12px] border border-[#E9CFC9] bg-[#FDECEA] p-4">
+              <h2 className="text-[12px] font-semibold text-[#8C2B1E]">Emergency</h2>
+              <p className="mt-1 text-[10.5px] leading-4 text-[#8C2B1E]/80">Use only when you or someone else is in immediate danger. Supervisors receive your live location.</p>
+              <button onClick={() => { if (window.confirm('Send an emergency SOS alert with your live coordinates to supervisors now?')) void submit('sos', '') }} disabled={busy || scanning !== null} className={`${big} mt-3 bg-[#B42318] text-white hover:bg-red-700`}><ShieldAlert className="size-5" />Send SOS</button>
+            </section>
+          </div>
         )}
       </div>
     </main>

@@ -320,8 +320,8 @@ export async function POST(request: Request) {
   if (!slots.includes(slot)) {
     return NextResponse.json({ error: `${slot} is not one of this guard's scheduled patrol checkpoints (${slots[0]}–${slots[slots.length - 1]}).` }, { status: 409 })
   }
-  if (slots.indexOf(slot) > slots.indexOf(currentSlot)) {
-    return NextResponse.json({ error: `${slot} has not started yet. The current checkpoint is ${currentSlot}.` }, { status: 409 })
+  if (requestedSlot && requestedSlot !== currentSlot) {
+    return NextResponse.json({ error: `Checkpoints can only be signed at their scheduled hour. The current checkpoint is ${currentSlot}.` }, { status: 409 })
   }
 
   // Active shift date (overnight shifts crossing midnight attach to the shift date)

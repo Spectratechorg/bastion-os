@@ -58,11 +58,11 @@ async function main() {
     await page.waitForTimeout(1000)
     let guardApp = await page.locator('main').innerText()
     assert.match(guardApp, /MORNING SIGN-IN/i)
-    assert.match(guardApp, /DAILY PATROL SIGN-IN/i)
+    assert.match(guardApp, /Daily patrol/i)
     const guardId = page.getByLabel('Guard ID for patrol schedule')
     if (await guardId.count()) {
       await guardId.fill('001')
-      await page.getByRole('button', { name: 'Load schedule' }).click()
+      await page.getByRole('button', { name: /Load (my )?schedule/ }).click()
       await page.getByText(/Shift \d{2}:00/).first().waitFor({ timeout: 8_000 })
       guardApp = await page.locator('main').innerText()
       assert.match(guardApp, /Shift \d{2}:00/)

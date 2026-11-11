@@ -5,6 +5,8 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core'
 
 import { db, pool } from '@/lib/db'
 import { raiseAlert } from '@/lib/alerts'
+import { incidentEmail } from '@/lib/email'
+import { notifyOrganization } from '@/lib/notifications'
 import { activityEvents, alerts, attendance, clients, finances, guards, incidents, patrolCheckpoints, patrols, payrollRecords, sites } from '@/lib/db/schema'
 import { actor, can, denyGuard, isModerator } from '@/lib/server'
 import { likeTerm, pageResponse, readPage } from '@/lib/pagination'
@@ -63,6 +65,11 @@ const incidentCreateSchema = z.object({
   description: z.string().trim().min(2).max(5000),
   severity: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
   site: z.string().trim().min(2).max(200),
+})
+const alertCreateSchema = z.object({
+  title: z.string().trim().min(2).max(200),
+  body: z.string().trim().min(2).max(2000),
+  severity: z.enum(['low', 'medium', 'high', 'critical']).default('medium'),
 })
 const financeCreateSchema = z.object({
   kind: z.string().trim().min(1).max(64).default('revenue'),
@@ -297,6 +304,7 @@ export async function POST(request: Request) {
   const { current, response } = await getCurrentUser()
   if (response) return response
 
+  invalidate(`ops:${current.organizationId}:`); invalidate('clients:'); invalidate('patrols:')
   const body = await readJson(request)
   if (!body || typeof body !== 'object' || !('section' in body)) return fail('Provide a valid request body and section.')
   const section = sectionSchema.safeParse(body.section)
@@ -357,8 +365,26 @@ export async function POST(request: Request) {
       reportedAt: now,
       createdAt: now,
     }).returning()
-    if (row.severity === 'high' || row.severity === 'critical') await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'incident', title: `${row.severity === 'critical' ? 'Critical' : 'High'} incident: ${row.title}`, body: `${row.site}: ${row.description.slice(0, 140)}`, severity: row.severity, key: `incident:${row.id}` })
+    await notifyOrganization(current.organizationId, (email) => incidentEmail({ to: email, title: row.title, description: row.description, site: row.site, severity: row.severity, status: row.status }))
+    if (row.severity === 'high' || row.severity === 'critical') await raiseAlert({ userId: current.userId, organizationId: current.organizationId, type: 'incident', title: `${row.severity === 'critical' ? 'Critical' : 'High'} incident: ${row.title}`, body: `${row.site}: ${row.description.slice(0, 140)}`, severity: row.severity, key: `incident:${row.id}`, notify: false })
     await log(current, 'incident.created', `Incident reported: ${row.title}`, row.site)
+    return NextResponse.json(row, { status: 201 })
+  }
+
+  if (section.data === 'alerts') {
+    const parsed = alertCreateSchema.safeParse(body)
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? 'Invalid alert.')
+    const id = await raiseAlert({
+      userId: current.userId,
+      organizationId: current.organizationId,
+      type: 'manual',
+      title: parsed.data.title,
+      body: parsed.data.body,
+      severity: parsed.data.severity,
+    })
+    const [row] = id ? await db.select().from(alerts).where(eq(alerts.id, id)).limit(1) : []
+    if (!row) return fail('The alert could not be saved.', 500)
+    await log(current, 'alert.created', `Alert created: ${row.title}`, `${parsed.data.severity} severity · shared with the team`)
     return NextResponse.json(row, { status: 201 })
   }
 

@@ -213,6 +213,26 @@ function ReissueDialog({ row, close, done }: { row: Row; close: () => void; done
   </Sheet>
 }
 
+function AlertDialog({ close, done }: { close: () => void; done: () => void }) {
+  const [v, setV] = useState({ title: '', body: '', severity: 'medium' })
+  const [error, setError] = useState(''); const [saving, setSaving] = useState(false)
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setSaving(true); setError('')
+    try {
+      await api('/api/operations', { method: 'POST', json: { section: 'alerts', ...v } })
+      done(); close()
+    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to create the alert.') } finally { setSaving(false) }
+  }
+  return <Sheet title="Create alert" kicker="TEAM ALERT" onClose={close} footer={<><button type="button" className={btn} onClick={close}>Cancel</button><button form="alert-form" className={btnPrimary} disabled={saving}>{saving ? 'Creating…' : 'Create alert'}</button></>}>
+    <form id="alert-form" onSubmit={submit} className="grid gap-4"><ErrorBanner message={error} />
+      <p className="rounded-[10px] bg-[#F5F5F6] p-3 text-[11px] leading-5 text-[#52525B]">This alert is shared with every owner, administrator and moderator in your organization. It appears in their alerts list immediately.</p>
+      <Field label="Alert title"><input required minLength={2} maxLength={200} className={inputClass} value={v.title} onChange={(e) => setV({ ...v, title: e.target.value })} placeholder="e.g. Gate 2 radio outage" /></Field>
+      <Field label="What should the team know?"><textarea required minLength={2} maxLength={2000} rows={5} className={`${inputClass} h-auto py-2`} value={v.body} onChange={(e) => setV({ ...v, body: e.target.value })} placeholder="Describe the issue, location and any action required." /></Field>
+      <Field label="Severity" hint="Medium and above also trigger an email to the team."><select className={inputClass} value={v.severity} onChange={(e) => setV({ ...v, severity: e.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option></select></Field>
+    </form>
+  </Sheet>
+}
+
 function IncidentDialog({ sites, close, done }: { sites: Row[]; close: () => void; done: () => void }) {
   const [v, setV] = useState({ title: '', site: sites[0]?.name ?? '', severity: 'medium', description: '' })
   const [error, setError] = useState(''); const [saving, setSaving] = useState(false)
@@ -350,7 +370,8 @@ export function RecordsPage({ section }: { section: Section }) {
   const [mapMode, setMapMode] = useState<'guards' | 'sites'>('guards')
   const [mapSiteId, setMapSiteId] = useState('')
   const [mapSites, setMapSites] = useState<Row[]>([])
-  const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'guard-detail' | 'incident' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
+  const [dialog, setDialog] = useState<{ kind: 'site' | 'guard' | 'guard-detail' | 'incident' | 'alert' | 'detail' | 'assign' | 'metrics' | 'reissue' | 'tag'; row?: Row; tag?: string } | null>(null)
+  const [notice, setNotice] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -423,6 +444,7 @@ export function RecordsPage({ section }: { section: Section }) {
       {section === 'sites' && <button className={btn} onClick={() => ctx.openSitesMap()}><MapPin className="size-3.5" />Live map</button>}
       {section === 'sites' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'site' })}><Plus className="size-4" />Add site</button>}
       {section === 'incidents' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'incident' })}><Plus className="size-4" />Report incident</button>}
+      {section === 'alerts' && <button className={btnPrimary} onClick={() => setDialog({ kind: 'alert' })}><Plus className="size-4" />Create alert</button>}
     </PageHeader>
     <StatStrip stats={statPairs} />
     {section === 'alerts' && <details className="group mb-3 ws-card p-4">
@@ -438,9 +460,10 @@ export function RecordsPage({ section }: { section: Section }) {
       <label className="flex h-10 min-w-0 flex-1 basis-full items-center gap-2 rounded-[8px] border border-[#E4E4E7] bg-white px-3 sm:h-10 sm:max-w-sm sm:basis-[200px]"><Search className="size-4 text-[#9A9AA1]" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={page.search} className="w-full bg-transparent text-xs outline-none" /></label>
       <select aria-label="Filter" className="h-10 min-w-[110px] flex-1 rounded-[8px] border border-[#E4E4E7] bg-white px-3 text-xs capitalize sm:flex-none" value={filter} onChange={(e) => { setFilter(e.target.value); setCurrentPage(1) }}>{filterOptions[section].map(([name]) => <option key={name} value={name}>{name}</option>)}</select>
       <a href={`/api/export?section=${section}`} className={btn}><Download className="size-3.5" />Export CSV</a>
-      <button onClick={() => { clearClientCache(); setLoading(true); void load() }} className={btn}><RefreshCw className="size-3.5" />Refresh</button>
+      <button onClick={() => { clearClientCache(); setLoading(true); void load() }} className={btn}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh</button>
     </div>
     <ErrorBanner message={error} retry={() => void load()} />
+    {notice && <div role="status" className="mb-3 rounded-[10px] border border-[#CFE3D3] bg-[#EFF7F0] px-3.5 py-2.5 text-[12px] text-[#2F6B49]">{notice}</div>}
     {loading && records.length === 0 ? <div className="ws-card"><Spinner label="Loading live records…" /></div> : rows.length === 0 ? <div className="ws-card"><Empty title={total ? 'No records match your search' : `No ${page.title.toLowerCase()} yet`} text={total ? undefined : section === 'guards' ? 'Register your first guard to get started.' : section === 'sites' ? 'Add a site to start tracking coverage.' : 'Records appear here as they are created.'} /></div> : section === 'sites' ? (
       <div>
         <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">{rows.map((r) => <SiteCard key={r.id} row={r} c={ctx} />)}</div>
@@ -457,6 +480,7 @@ export function RecordsPage({ section }: { section: Section }) {
     {dialog?.kind === 'site' && <SiteDialog row={dialog.row} close={() => setDialog(null)} done={() => void load()} />}
     {dialog?.kind === 'guard' && dialog.row && <GuardDialog row={dialog.row} sites={sites} close={() => setDialog(null)} done={() => void load()} />}
     {dialog?.kind === 'incident' && <IncidentDialog sites={sites} close={() => setDialog(null)} done={() => void load()} />}
+    {dialog?.kind === 'alert' && <AlertDialog close={() => setDialog(null)} done={() => { setNotice('Alert created. Everyone in this workspace can see it.'); window.setTimeout(() => setNotice(''), 7000); void load() }} />}
     {dialog?.kind === 'detail' && dialog.row && <IncidentDetail row={records.find((r) => r.id === dialog.row?.id) ?? dialog.row} close={() => setDialog(null)} act={ctx.act} />}
     {dialog?.kind === 'guard-detail' && dialog.row && <GuardDetail row={dialog.row} c={ctx} close={() => setDialog(null)} />}
     {mapOpen && <div role="dialog" aria-modal="true" aria-label={mapMode === 'guards' ? 'Guard locations' : 'Site locations'} className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3 sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setMapOpen(false); setMapGuardId(''); setMapSiteId('') } }}>

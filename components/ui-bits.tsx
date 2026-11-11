@@ -59,3 +59,13 @@ export function Sheet({ title, kicker, onClose, children, footer }: { title: str
     </div>
   )
 }
+
+/** Quiet placeholder used while a value or card is loading. */
+export function Skeleton({ className = 'h-4 w-24' }: { className?: string }) {
+  return <span aria-hidden className={`inline-block animate-pulse rounded-[6px] bg-[#EAEAE7] ${className}`} />
+}
+
+/** Full-width loading state for list/table/card refreshes. */
+export function LoadingBlock({ label = 'Loading…' }: { label?: string }) {
+  return <div aria-busy="true" className="flex items-center justify-center gap-2 px-4 py-10 text-[11px] text-[#6B6B72]"><LoaderCircle className="size-4 animate-spin" />{label}</div>
+}

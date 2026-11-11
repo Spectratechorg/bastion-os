@@ -99,3 +99,44 @@ export function alertEmail(input: { to: string; severity: string; title: string;
     ].join('\n'),
   }
 }
+
+
+/** Incident notification for the people who triage and respond. */
+export function incidentEmail(input: { to: string; title: string; description: string; site: string; severity: string; status: string }): Mail {
+  const appUrl = (process.env.BETTER_AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  return {
+    to: input.to,
+    subject: `[${input.severity.toUpperCase()} INCIDENT] ${input.title} · BastionOS`,
+    text: [
+      input.title,
+      '',
+      input.description,
+      '',
+      `Site: ${input.site}`,
+      `Severity: ${input.severity}`,
+      `Status: ${input.status}`,
+      `Open in BastionOS: ${appUrl}/incidents`,
+      '',
+      '— BastionOS',
+    ].join('\n'),
+  }
+}
+
+/** Attendance notification for a late or missed morning sign-in. */
+export function attendanceEmail(input: { to: string; guard: string; site: string | null; message: string; deadline?: string }): Mail {
+  const appUrl = (process.env.BETTER_AUTH_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  return {
+    to: input.to,
+    subject: `[ATTENDANCE] ${input.guard} · BastionOS`,
+    text: [
+      input.message,
+      '',
+      `Guard: ${input.guard}`,
+      `Site: ${input.site ?? 'Unassigned'}`,
+      ...(input.deadline ? [`Deadline: ${input.deadline}`] : []),
+      `Open attendance: ${appUrl}/attendance`,
+      '',
+      '— BastionOS',
+    ].join('\n'),
+  }
+}

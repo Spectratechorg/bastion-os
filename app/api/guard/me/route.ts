@@ -13,6 +13,8 @@ export async function GET() {
   const [guard] = await db.select({
     id: guards.id,
     name: guards.name,
+    guardCode: guards.guardCode,
+    nin: guards.nin,
     site: guards.site,
     photoUrl: guards.photoUrl,
     status: guards.status,
@@ -26,19 +28,18 @@ export async function GET() {
     return NextResponse.json({ linked: false, role: current.role, ...status })
   }
 
-  let assignedSite: { id: string; name: string; latitude: number; longitude: number; geofenceRadius: number } | null = null
-  if (guard.site) {
-    const [foundSite] = await db.select({
-      id: sites.id,
-      name: sites.name,
-      latitude: sites.latitude,
-      longitude: sites.longitude,
-      geofenceRadius: sites.geofenceRadius,
-    }).from(sites).where(and(eq(sites.organizationId, current.organizationId), eq(sites.name, guard.site), eq(sites.status, 'active'))).limit(1)
-    assignedSite = foundSite ?? null
-  }
-
-  const status = await todayStatus(current.organizationId, guard.id)
+  const [assignedSite, status] = await Promise.all([
+    guard.site
+      ? db.select({
+        id: sites.id,
+        name: sites.name,
+        latitude: sites.latitude,
+        longitude: sites.longitude,
+        geofenceRadius: sites.geofenceRadius,
+      }).from(sites).where(and(eq(sites.organizationId, current.organizationId), eq(sites.name, guard.site), eq(sites.status, 'active'))).limit(1).then((rows) => rows[0] ?? null)
+      : Promise.resolve(null),
+    todayStatus(current.organizationId, guard.id),
+  ])
 
   return NextResponse.json({
     linked: true,
